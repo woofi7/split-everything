@@ -7,7 +7,7 @@ interface GroupSummaryDto {
   id: string
   name: string
   baseCurrency: string
-  emojiIcon: string | null
+  iconName: string | null
   colorHex: string
   isArchived: boolean
   myNetBalance: number
@@ -122,7 +122,7 @@ export const useGroupsStore = defineStore('groups', () => {
     name: string
     baseCurrency: string
     description?: string | null
-    emojiIcon?: string | null
+    iconName?: string | null
     colorHex?: string | null
     placeholderMemberNames?: string[]
   }): Promise<LocalGroup> {
@@ -139,12 +139,18 @@ export const useGroupsStore = defineStore('groups', () => {
     changes: Partial<{
       name: string
       description: string | null
-      emojiIcon: string | null
+      iconName: string | null
       colorHex: string | null
       baseCurrency: string
     }>,
   ): Promise<LocalGroup> {
-    const dto = await requireApi().patch<GroupSummaryDto>(`/groups/${groupId}`, changes)
+    // The API reads null as "not supplied" and an empty string as an explicit
+    // clear, so removing an icon or a description has to send the empty string.
+    const payload = { ...changes }
+    if ('iconName' in payload && payload.iconName === null) payload.iconName = ''
+    if ('description' in payload && payload.description === null) payload.description = ''
+
+    const dto = await requireApi().patch<GroupSummaryDto>(`/groups/${groupId}`, payload)
     const local = toLocalGroup(dto, groups.value)
 
     await db.groups.put(local)
@@ -224,7 +230,7 @@ function toLocalGroup(dto: GroupSummaryDto, existing: LocalGroup[]): LocalGroup 
     name: dto.name,
     description: dto.description ?? previous?.description ?? null,
     baseCurrency: dto.baseCurrency,
-    emojiIcon: dto.emojiIcon,
+    iconName: dto.iconName,
     colorHex: dto.colorHex,
     isArchived: dto.isArchived,
     lineageId: dto.lineageId ?? previous?.lineageId ?? '',

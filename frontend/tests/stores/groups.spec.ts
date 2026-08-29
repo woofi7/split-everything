@@ -12,7 +12,7 @@ const groupDto = {
   name: 'Roommates',
   description: null,
   baseCurrency: 'CAD',
-  emojiIcon: null,
+  iconName: null,
   colorHex: '#4f46e5',
   isArchived: false,
   sequenceCounter: 3,
@@ -127,6 +127,41 @@ describe('groups store', () => {
     await store.update(groupId, { name: 'Renamed' })
 
     expect(store.groups.find((g) => g.id === groupId)?.name).toBe('Renamed')
+  })
+
+  it('sends an empty string to clear the icon, which is how the api spells removal', async () => {
+    const store = useGroupsStore()
+    const api = fakeApi()
+    store.attachApi(api as never)
+    await store.loadAll()
+
+    await store.update(groupId, { iconName: null })
+
+    // Sending null would mean "leave it alone", so the remove button would appear
+    // to do nothing.
+    expect(api.patch).toHaveBeenCalledWith(`/groups/${groupId}`, { iconName: '' })
+  })
+
+  it('passes an icon name through unchanged', async () => {
+    const store = useGroupsStore()
+    const api = fakeApi()
+    store.attachApi(api as never)
+    await store.loadAll()
+
+    await store.update(groupId, { iconName: 'house' })
+
+    expect(api.patch).toHaveBeenCalledWith(`/groups/${groupId}`, { iconName: 'house' })
+  })
+
+  it('sends an empty string to clear the description too', async () => {
+    const store = useGroupsStore()
+    const api = fakeApi()
+    store.attachApi(api as never)
+    await store.loadAll()
+
+    await store.update(groupId, { description: null })
+
+    expect(api.patch).toHaveBeenCalledWith(`/groups/${groupId}`, { description: '' })
   })
 
   it('archives a group and drops it from the default list', async () => {

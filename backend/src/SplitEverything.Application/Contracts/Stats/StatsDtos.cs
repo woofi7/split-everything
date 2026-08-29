@@ -2,7 +2,7 @@ namespace SplitEverything.Application.Contracts.Stats;
 
 public sealed record SpendPointDto(DateOnly Bucket, decimal Amount, int ExpenseCount);
 
-public sealed record CategorySpendDto(Guid? CategoryId, string CategoryKey, string CategoryName, string Emoji, string ColorHex, decimal Amount, int ExpenseCount, decimal Share);
+public sealed record CategorySpendDto(Guid? CategoryId, string CategoryKey, string CategoryName, string IconName, string ColorHex, decimal Amount, int ExpenseCount, decimal Share);
 
 public sealed record MemberSpendDto(Guid MemberId, string MemberName, decimal Paid, decimal Owed, decimal Net);
 

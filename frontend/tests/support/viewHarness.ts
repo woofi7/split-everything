@@ -41,7 +41,7 @@ export const testGroup = (overrides: Partial<LocalGroup> = {}): LocalGroup => ({
   name: 'Roommates',
   description: null,
   baseCurrency: 'CAD',
-  emojiIcon: null,
+  iconName: null,
   colorHex: '#4f46e5',
   isArchived: false,
   lineageId: 'lineage-1',
@@ -267,7 +267,14 @@ export async function mountView(
   expensesStore.attachSync(new SyncEngine(fakeSyncApi(), () => options.online ?? false))
 
   const wrapper = mount(component, {
-    global: { stubs: { RouterLink: RouterLinkStub } },
+    global: {
+      stubs: {
+        RouterLink: RouterLinkStub,
+        // The icon picker teleports to the body to escape any clipping parent.
+        // Stubbing it renders inline, which is what lets the wrapper query it.
+        teleport: true,
+      },
+    },
   })
 
   await settle()

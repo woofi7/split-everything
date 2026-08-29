@@ -8,7 +8,7 @@ const group = (overrides: Partial<LocalGroup> = {}): LocalGroup => ({
   name: 'Roommates',
   description: null,
   baseCurrency: 'CAD',
-  emojiIcon: null,
+  iconName: null,
   colorHex: '#4f46e5',
   isArchived: false,
   lineageId: 'lineage-1',
@@ -113,10 +113,26 @@ describe('GroupCard', () => {
     expect(wrapper.text()).not.toContain('Bob')
   })
 
-  it('falls back to initials when the group has no icon', () => {
-    const wrapper = mountCard(group({ emojiIcon: null }))
+  it('falls back to a default icon when the group has none', () => {
+    const wrapper = mountCard(group({ iconName: null }))
 
-    expect(wrapper.text()).toContain('RO')
+    // A hole where the icon goes reads as a broken row, so there is always one.
+    expect(wrapper.find('[data-icon]').exists()).toBe(true)
+  })
+
+  it('renders the icon the group was given', () => {
+    const wrapper = mountCard(group({ iconName: 'house' }))
+
+    expect(wrapper.find('[data-icon="house"]').exists()).toBe(true)
+  })
+
+  it('falls back for an icon name it does not know', () => {
+    // A name written by a newer version of the app must not break the list.
+    const wrapper = mountCard(group({ iconName: 'invented-later' }))
+
+    const rendered = wrapper.find('[data-icon]').attributes('data-icon')
+    expect(rendered).toBeTruthy()
+    expect(rendered).not.toBe('invented-later')
   })
 
   it('links to the group', () => {

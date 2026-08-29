@@ -305,7 +305,7 @@ describe('JoinView', () => {
       '/invites/invite-token': () => ({
         groupId: 'group-1',
         groupName: 'Roommates',
-        emojiIcon: null,
+        iconName: null,
         invitedByName: 'Alice',
         memberCount: 2,
         isRedeemable: true,

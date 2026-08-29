@@ -151,7 +151,7 @@ public sealed class GroupLifecycleService(
             Name = name,
             Description = source.Description,
             BaseCurrency = source.BaseCurrency,
-            EmojiIcon = source.EmojiIcon,
+            IconName = source.IconName,
             ColorHex = source.ColorHex,
             CreatedByUserId = userId,
             // A fresh lineage for anything written from here on, while the moved

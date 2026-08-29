@@ -16,7 +16,7 @@ export interface LocalGroup {
   name: string
   description?: string | null
   baseCurrency: string
-  emojiIcon?: string | null
+  iconName?: string | null
   colorHex: string
   isArchived: boolean
   lineageId: string

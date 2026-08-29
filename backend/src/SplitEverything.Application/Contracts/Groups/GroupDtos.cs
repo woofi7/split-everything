@@ -6,12 +6,12 @@ public sealed record CreateGroupRequest(
     string Name,
     string BaseCurrency,
     string? Description,
-    string? EmojiIcon,
+    string? IconName,
     string? ColorHex,
     IReadOnlyList<string>? PlaceholderMemberNames);
 
 public sealed record UpdateGroupRequest(
-    string? Name, string? Description, string? EmojiIcon, string? ColorHex, string? BaseCurrency);
+    string? Name, string? Description, string? IconName, string? ColorHex, string? BaseCurrency);
 
 public sealed record GroupMemberDto(
     Guid Id,
@@ -28,7 +28,7 @@ public sealed record GroupDto(
     string Name,
     string? Description,
     string BaseCurrency,
-    string? EmojiIcon,
+    string? IconName,
     string ColorHex,
     bool IsArchived,
     long SequenceCounter,
@@ -41,7 +41,7 @@ public sealed record GroupDto(
     int ExpenseCount);
 
 public sealed record GroupSummaryDto(
-    Guid Id, string Name, string BaseCurrency, string? EmojiIcon, string ColorHex,
+    Guid Id, string Name, string BaseCurrency, string? IconName, string ColorHex,
     bool IsArchived, decimal MyNetBalance, int MemberCount, DateTimeOffset? LastActivityAt);
 
 public sealed record AddPlaceholderMemberRequest(string DisplayName);
@@ -52,7 +52,7 @@ public sealed record InviteDto(
     Guid Id, Guid GroupId, string GroupName, string Token, string Url,
     string? InvitedEmail, DateTimeOffset ExpiresAt, int MaxUses, int UseCount);
 
-public sealed record InvitePreviewDto(Guid GroupId, string GroupName, string? EmojiIcon, string InvitedByName, int MemberCount, bool IsRedeemable);
+public sealed record InvitePreviewDto(Guid GroupId, string GroupName, string? IconName, string InvitedByName, int MemberCount, bool IsRedeemable);
 
 public sealed record RedeemInviteResult(Guid GroupId, Guid MemberId, bool AlreadyMember);
 

@@ -240,7 +240,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 
         updated.Name.ShouldBe("Renamed");
         updated.Description.ShouldBe("A description");
-        updated.EmojiIcon.ShouldBe("house");
+        updated.IconName.ShouldBe("house");
         updated.ColorHex.ShouldBe("#ff0000");
         updated.BaseCurrency.ShouldBe("EUR");
     }
@@ -253,7 +253,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var group = await Groups.CreateAsync(user.Id, new CreateGroupRequest(
             "Trip", "cad", "Ski week", "mountain", "#00ff00", ["Bob", "bob", "  "]));
 
-        group.EmojiIcon.ShouldBe("mountain");
+        group.IconName.ShouldBe("mountain");
         group.ColorHex.ShouldBe("#00ff00");
         // Duplicate and blank placeholder names are dropped rather than creating junk.
         group.Members.Count.ShouldBe(2);

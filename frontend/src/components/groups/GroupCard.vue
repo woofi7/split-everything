@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
+import { resolveIcon } from '@/domain/icons'
 import type { LocalGroup } from '@/offline/db'
 
 const props = defineProps<{ group: LocalGroup }>()
@@ -12,6 +14,10 @@ const balanceLabel = computed(() => {
   if (isSettled.value) return 'Settled up'
   return props.group.myNetBalance > 0 ? 'You are owed' : 'You owe'
 })
+
+// Falls back rather than showing a hole: a group with no icon, or one saved by a
+// newer version of the app, still renders.
+const icon = computed(() => resolveIcon(props.group.iconName))
 
 const memberSummary = computed(() => {
   const active = props.group.members.filter((member) => member.status === 'Active')
@@ -28,11 +34,12 @@ const memberSummary = computed(() => {
     :data-archived="group.isArchived ? 'true' : 'false'"
   >
     <span
-      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold text-white"
+      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
       :style="{ backgroundColor: group.colorHex }"
+      :data-icon="icon.name"
       aria-hidden="true"
     >
-      {{ group.emojiIcon || group.name.slice(0, 2).toUpperCase() }}
+      <FontAwesomeIcon :icon="icon.definition" class="h-5 w-5" />
     </span>
 
     <span class="min-w-0 flex-1">

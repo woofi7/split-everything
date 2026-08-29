@@ -64,7 +64,7 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Settle up" :subtitle="group?.name" :show-nav="false">
+  <AppShell title="Settle up" :subtitle="group?.name">
     <section v-if="plan.length > 0" class="surface-card mb-5 p-4">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">Suggested transfers</h2>
       <ul class="flex flex-col gap-2 text-sm">
