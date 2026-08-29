@@ -28,6 +28,21 @@ if (!builder.Environment.IsDevelopment())
 {
     builder.Configuration["Auth:AllowDevelopmentSignIn"] = "false";
 }
+else
+{
+    // Invite links and their QR codes are built from this. Left as localhost, a
+    // link scanned by a phone points the phone at itself, so on a development
+    // machine a loopback host is swapped for one the phone can reach. Also has to
+    // run before the registration below, which snapshots the options.
+    var configured = builder.Configuration["Auth:AppBaseUrl"] ?? string.Empty;
+    var reachable = DevelopmentAppBaseUrl.Rewrite(configured, LocalNetworkAddress.Detect());
+
+    if (reachable != configured)
+    {
+        builder.Configuration["Auth:AppBaseUrl"] = reachable;
+        Console.WriteLine($"Invite links will use {reachable}, reachable from other devices on this network.");
+    }
+}
 
 builder.Services.AddSplitEverythingInfrastructure(builder.Configuration);
 

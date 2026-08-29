@@ -82,13 +82,15 @@ same-origin and no CORS setup is involved.
 The `--host` flag lives on the dev script rather than in `vite.config.ts` because
 Vite 8.2.2 ignores `server.host` from the config file.
 
-Invite links are built from `Auth:AppBaseUrl`, which defaults to
-`http://localhost:5173`. That address means the phone itself, so point it at the
-same LAN address the phone uses or every invite link will be a dead end:
+Invite links and their QR codes are built from `Auth:AppBaseUrl`. In Development
+a loopback host there is replaced at startup with an address other devices can
+reach, so a scanned QR code lands on this machine rather than on the phone. The
+API prints the address it chose.
 
-```bash
-Auth__AppBaseUrl=http://192.168.2.48:5173 dotnet run --project src/SplitEverything.Api
-```
+A development box has many addresses, so the choice prefers an interface with a
+gateway, which is what separates a real network from the Docker bridges, and
+wireless first. Set `Auth__AppBaseUrl` to a non-loopback host to override it; a
+host set deliberately is never rewritten.
 
 Two things do not work over a plain LAN address, both because the browser reserves
 them for secure contexts: the service worker, so no PWA install or offline shell,
