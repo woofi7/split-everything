@@ -82,6 +82,14 @@ same-origin and no CORS setup is involved.
 The `--host` flag lives on the dev script rather than in `vite.config.ts` because
 Vite 8.2.2 ignores `server.host` from the config file.
 
+Invite links are built from `Auth:AppBaseUrl`, which defaults to
+`http://localhost:5173`. That address means the phone itself, so point it at the
+same LAN address the phone uses or every invite link will be a dead end:
+
+```bash
+Auth__AppBaseUrl=http://192.168.2.48:5173 dotnet run --project src/SplitEverything.Api
+```
+
 Two things do not work over a plain LAN address, both because the browser reserves
 them for secure contexts: the service worker, so no PWA install or offline shell,
 and Web Push. Sign in with the development form; a Google OAuth client cannot list
