@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
-import { ApiClient } from '@/api/client'
+import { useApi } from '@/api/provider'
 
 const auth = useAuthStore()
 const expenses = useExpensesStore()
@@ -18,13 +18,6 @@ const confirmingDelete = ref(false)
 
 const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
 
-const api = new ApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
-  getAccessToken: () => auth.accessToken,
-  getDeviceId: () => null,
-  refreshAccessToken: () => auth.refresh(),
-  onUnauthorized: () => void auth.signOut(),
-})
 
 const isLight = computed(() => auth.theme === 'light')
 
@@ -47,7 +40,7 @@ async function exportData(): Promise<void> {
   error.value = null
 
   try {
-    const blob = await api.blob('/auth/me/export')
+    const blob = await useApi().blob('/auth/me/export')
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url

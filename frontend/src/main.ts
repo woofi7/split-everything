@@ -3,6 +3,8 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import { router } from './router'
 import { ApiClient } from './api/client'
+import { setApiClient } from './api/provider'
+import { apiBaseUrl } from './api/config'
 import { SyncEngine } from './offline/syncEngine'
 import { HttpSyncApi } from './api/syncApi'
 import { getDeviceId } from './offline/db'
@@ -24,7 +26,7 @@ async function bootstrap(): Promise<void> {
   const deviceId = await getDeviceId()
 
   const api = new ApiClient({
-    baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
+    baseUrl: apiBaseUrl(),
     getAccessToken: () => auth.accessToken,
     getDeviceId: () => deviceId,
     refreshAccessToken: () => auth.refresh(),
@@ -34,6 +36,8 @@ async function bootstrap(): Promise<void> {
     },
   })
 
+  // Views resolve the client through the provider rather than building their own.
+  setApiClient(api)
   auth.attachApi(api)
   useGroupsStore().attachApi(api)
 

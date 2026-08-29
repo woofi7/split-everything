@@ -1,19 +1,31 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import BottomNav from './BottomNav.vue'
 import SyncIndicator from '@/components/ui/SyncIndicator.vue'
 
-const props = defineProps<{
-  title: string
-  subtitle?: string
-  pendingCount?: number
-  rejectedCount?: number
-  isOffline?: boolean
-  isSyncing?: boolean
-  showNav?: boolean
-}>()
-
-const showNav = computed(() => props.showNav !== false)
+/**
+ * Defaults are declared rather than inferred: Vue casts an absent Boolean prop to
+ * false, so treating "not passed" as "on" by comparing against false hid the tab
+ * bar on every screen that did not spell it out.
+ */
+const props = withDefaults(
+  defineProps<{
+    title: string
+    subtitle?: string
+    pendingCount?: number
+    rejectedCount?: number
+    isOffline?: boolean
+    isSyncing?: boolean
+    showNav?: boolean
+  }>(),
+  {
+    subtitle: undefined,
+    pendingCount: 0,
+    rejectedCount: 0,
+    isOffline: false,
+    isSyncing: false,
+    showNav: true,
+  },
+)
 </script>
 
 <template>
@@ -32,18 +44,18 @@ const showNav = computed(() => props.showNav !== false)
 
       <SyncIndicator
         class="pb-2"
-        :pending-count="pendingCount ?? 0"
-        :rejected-count="rejectedCount ?? 0"
-        :is-offline="isOffline ?? false"
-        :is-syncing="isSyncing ?? false"
+        :pending-count="props.pendingCount"
+        :rejected-count="props.rejectedCount"
+        :is-offline="props.isOffline"
+        :is-syncing="props.isSyncing"
       />
     </header>
 
     <!-- Padded so the bottom nav never covers the last row of a list. -->
-    <main class="flex-1 px-4 py-4" :class="showNav ? 'pb-28' : 'pb-8'">
+    <main class="flex-1 px-4 py-4" :class="props.showNav ? 'pb-28' : 'pb-8'">
       <slot />
     </main>
 
-    <BottomNav v-if="showNav" />
+    <BottomNav v-if="props.showNav" />
   </div>
 </template>

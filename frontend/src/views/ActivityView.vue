@@ -3,8 +3,7 @@ import { onMounted, ref } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
-import { ApiClient } from '@/api/client'
-import { useAuthStore } from '@/stores/auth'
+import { useApi } from '@/api/provider'
 
 interface ActivityEntry {
   id: number
@@ -18,23 +17,15 @@ interface ActivityEntry {
 
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
-const auth = useAuthStore()
 
 const entries = ref<ActivityEntry[]>([])
 const isLoading = ref(true)
 const isOffline = ref(false)
 
-const api = new ApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
-  getAccessToken: () => auth.accessToken,
-  getDeviceId: () => null,
-  refreshAccessToken: () => auth.refresh(),
-  onUnauthorized: () => void auth.signOut(),
-})
 
 onMounted(async () => {
   try {
-    const page = await api.get<{ items: ActivityEntry[] }>('/activity', { pageSize: 100 })
+    const page = await useApi().get<{ items: ActivityEntry[] }>('/activity', { pageSize: 100 })
     entries.value = page.items
     isOffline.value = false
   } catch {

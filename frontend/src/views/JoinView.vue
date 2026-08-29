@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
-import { ApiClient } from '@/api/client'
+import { useApi } from '@/api/provider'
 
 interface InvitePreview {
   groupId: string
@@ -30,16 +30,10 @@ const isJoining = ref(false)
  * see which group they were invited to before deciding to sign in. Joining still
  * requires Google, so the link alone grants nothing.
  */
-const anonymousApi = new ApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
-  getAccessToken: () => auth.accessToken,
-  getDeviceId: () => null,
-  onUnauthorized: () => {},
-})
 
 onMounted(async () => {
   try {
-    preview.value = await anonymousApi.get<InvitePreview>(`/invites/${token.value}`)
+    preview.value = await useApi().get<InvitePreview>(`/invites/${token.value}`)
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'That invite could not be found.'
   }
@@ -55,7 +49,7 @@ async function join(): Promise<void> {
   error.value = null
 
   try {
-    const result = await anonymousApi.post<{ groupId: string }>(`/invites/${token.value}/redeem`)
+    const result = await useApi().post<{ groupId: string }>(`/invites/${token.value}/redeem`)
     await groups.loadAll()
     await router.replace({ name: 'group', params: { groupId: result.groupId } })
   } catch (caught) {
@@ -98,6 +92,10 @@ async function join(): Promise<void> {
       <p v-else class="text-sm text-owing">
         This invite is no longer valid. Ask for a new link.
       </p>
+
+      <!-- Rendered here too: a join can fail after the preview loaded, and the
+           only other error slot below is unreachable once there is a preview. -->
+      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
     </div>
 
     <p v-else-if="error" class="py-8 text-center text-sm text-owing" role="alert">{{ error }}</p>

@@ -2,24 +2,15 @@
 import { onMounted, ref } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import { db, type LocalConflict, type OutboxOperation } from '@/offline/db'
-import { ApiClient } from '@/api/client'
-import { useAuthStore } from '@/stores/auth'
+import { useApi } from '@/api/provider'
 import { useExpensesStore } from '@/stores/expenses'
 
-const auth = useAuthStore()
 const expenses = useExpensesStore()
 
 const conflicts = ref<LocalConflict[]>([])
 const rejected = ref<OutboxOperation[]>([])
 const error = ref<string | null>(null)
 
-const api = new ApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
-  getAccessToken: () => auth.accessToken,
-  getDeviceId: () => null,
-  refreshAccessToken: () => auth.refresh(),
-  onUnauthorized: () => void auth.signOut(),
-})
 
 onMounted(load)
 
@@ -43,7 +34,7 @@ async function resolve(conflict: LocalConflict, resolution: 'KeepLocal' | 'KeepR
   error.value = null
 
   try {
-    await api.post('/sync/conflicts/resolve', {
+    await useApi().post('/sync/conflicts/resolve', {
       conflictId: conflict.conflictId,
       resolution,
       mergedPayloadJson: null,

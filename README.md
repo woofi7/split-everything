@@ -81,15 +81,18 @@ dotnet test --settings coverlet.runsettings \
 python3 ../scripts/check-coverage.py 'TestResults/*/coverage.cobertura.xml'
 
 cd frontend
-npm test                                       # 387 tests
+npm test                                       # 557 tests
 npm run test:coverage                          # enforces per-layer thresholds
 ```
 
 Coverage floors are enforced in CI: 95% of lines on the backend (100% on the
-application layer), and per-layer thresholds on the frontend with 95% on the
-domain logic. What is left uncovered is code whose only untested path needs a live
-third party: signing a real Google token, completing a real Web Push handshake,
-exchanging a real Firebase service account.
+application layer), and per-layer thresholds on the frontend, with 95% on the
+domain logic, 90% on the views and 95% on the components.
+
+What is left uncovered is code whose only untested path needs something a test
+cannot provide: signing a real Google token, completing a real Web Push
+handshake, exchanging a real Firebase service account, or a worker scope jsdom
+does not implement. The logic those wrappers call is tested directly.
 
 ### The contracts worth knowing about
 
