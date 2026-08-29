@@ -3,8 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useGroupsStore } from '@/stores/groups'
-import { useAuthStore } from '@/stores/auth'
-import { ApiClient } from '@/api/client'
+import { useApi } from '@/api/provider'
 
 interface InviteDto {
   id: string
@@ -19,7 +18,6 @@ interface InviteDto {
 const route = useRoute()
 const router = useRouter()
 const groups = useGroupsStore()
-const auth = useAuthStore()
 
 const groupId = computed(() => String(route.params.groupId))
 const name = ref('')
@@ -30,13 +28,6 @@ const memberDraft = ref('')
 const error = ref<string | null>(null)
 const message = ref<string | null>(null)
 
-const api = new ApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
-  getAccessToken: () => auth.accessToken,
-  getDeviceId: () => null,
-  refreshAccessToken: () => auth.refresh(),
-  onUnauthorized: () => void auth.signOut(),
-})
 
 onMounted(async () => {
   const group = await groups.get(groupId.value)
@@ -79,7 +70,7 @@ async function createInvite(): Promise<void> {
   qrUrl.value = null
 
   try {
-    newInvite.value = await api.post<InviteDto>(`/groups/${groupId.value}/invites`, {
+    newInvite.value = await useApi().post<InviteDto>(`/groups/${groupId.value}/invites`, {
       email: inviteEmail.value.trim() || null,
       claimsMemberId: null,
       maxUses: 1,
@@ -88,7 +79,7 @@ async function createInvite(): Promise<void> {
 
     // The QR encodes the same invite; it is the alternate presentation, not a
     // second credential.
-    const png = await api.blob(`/groups/invites/${newInvite.value.id}/qr`, { size: 8 })
+    const png = await useApi().blob(`/groups/invites/${newInvite.value.id}/qr`, { size: 8 })
     qrUrl.value = URL.createObjectURL(png)
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not create an invite.'

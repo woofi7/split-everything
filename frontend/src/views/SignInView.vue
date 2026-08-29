@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, useTemplateRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
+import { googleClientId } from '@/api/config'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -11,7 +12,12 @@ const router = useRouter()
 const error = ref<string | null>(null)
 const isSigningIn = ref(false)
 
-const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+// A template ref rather than a document lookup: two mounted instances would fight
+// over the same element id, and a detached component would silently render no
+// button at all.
+const buttonHost = useTemplateRef<HTMLElement>('buttonHost')
+
+
 
 onMounted(() => {
   if (auth.isSignedIn) {
@@ -34,6 +40,8 @@ function redirectTarget(): string {
  */
 function mountGoogleButton(): void {
   const google = (window as unknown as { google?: any }).google
+  const clientId = googleClientId()
+
   if (!google?.accounts?.id || !clientId) {
     error.value = 'Google sign-in is unavailable. Check your connection and try again.'
     return
@@ -44,9 +52,8 @@ function mountGoogleButton(): void {
     callback: (response: { credential?: string }) => void handleCredential(response.credential),
   })
 
-  const target = document.getElementById('google-button')
-  if (target) {
-    google.accounts.id.renderButton(target, {
+  if (buttonHost.value) {
+    google.accounts.id.renderButton(buttonHost.value, {
       theme: 'filled_black',
       size: 'large',
       shape: 'pill',
@@ -93,7 +100,7 @@ async function handleCredential(credential?: string): Promise<void> {
         </p>
       </div>
 
-      <div id="google-button" class="min-h-[44px]" />
+      <div ref="buttonHost" class="min-h-[44px]" />
 
       <p v-if="isSigningIn" class="text-sm text-[var(--text-muted)]">Signing you in</p>
 

@@ -6,7 +6,7 @@ import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
-import { ApiClient } from '@/api/client'
+import { useApi } from '@/api/provider'
 import { StatementWorkerClient } from '@/import/statementWorkerClient'
 import { StatementReviewSession, type RowAction } from '@/import/reviewSession'
 import { computeFingerprint, normalizeMerchant } from '@/domain/fingerprint'
@@ -26,19 +26,12 @@ const message = ref<string | null>(null)
 const isCommitting = ref(false)
 const rules = ref<CategoryRule[]>([])
 
-const api = new ApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
-  getAccessToken: () => auth.accessToken,
-  getDeviceId: () => null,
-  refreshAccessToken: () => auth.refresh(),
-  onUnauthorized: () => void auth.signOut(),
-})
 
 onMounted(async () => {
   await groups.loadAll()
 
   try {
-    rules.value = await api.get<CategoryRule[]>('/import/category-rules')
+    rules.value = await useApi().get<CategoryRule[]>('/import/category-rules')
   } catch {
     // The ruleset only improves the guesses; the wizard works without it.
     rules.value = []
@@ -118,7 +111,7 @@ async function checkDuplicates(fingerprints: string[]) {
   if (fingerprints.length === 0) return []
 
   try {
-    const result = await api.post<{ matches: Array<Record<string, never>> }>('/import/duplicates', {
+    const result = await useApi().post<{ matches: Array<Record<string, never>> }>('/import/duplicates', {
       fingerprints,
       groupId: null,
     })
@@ -133,7 +126,7 @@ async function fetchSuggestions(descriptions: string[]) {
   if (merchants.length === 0) return []
 
   try {
-    const result = await api.post<{ suggestions: never[] }>('/import/split-suggestions', {
+    const result = await useApi().post<{ suggestions: never[] }>('/import/split-suggestions', {
       merchants,
     })
     return result.suggestions
@@ -177,14 +170,14 @@ async function commit(): Promise<void> {
       return
     }
 
-    const result = await api.post<{ createdExpenses: number; skippedRows: number }>(
+    const result = await useApi().post<{ createdExpenses: number; skippedRows: number }>(
       '/import/statement/commit',
       payload,
     )
 
     // Corrections are worth keeping: the next statement gets them right.
     for (const rule of session.value.learnedRules) {
-      await api
+      await useApi()
         .put('/import/category-rules', {
           id: null,
           keyword: rule.keyword,

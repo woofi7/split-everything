@@ -2,8 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
-import { ApiClient } from '@/api/client'
-import { useAuthStore } from '@/stores/auth'
+import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 
@@ -42,7 +41,6 @@ interface Dashboard {
   byMember: MemberSpend[]
 }
 
-const auth = useAuthStore()
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
 
@@ -52,13 +50,6 @@ const granularity = ref<'day' | 'week' | 'month'>('month')
 const isLoading = ref(true)
 const isOffline = ref(false)
 
-const api = new ApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
-  getAccessToken: () => auth.accessToken,
-  getDeviceId: () => null,
-  refreshAccessToken: () => auth.refresh(),
-  onUnauthorized: () => void auth.signOut(),
-})
 
 onMounted(async () => {
   await groups.loadAll()
@@ -68,7 +59,7 @@ onMounted(async () => {
 async function load(): Promise<void> {
   isLoading.value = true
   try {
-    dashboard.value = await api.get<Dashboard>('/stats', {
+    dashboard.value = await useApi().get<Dashboard>('/stats', {
       groupId: groupId.value || undefined,
       granularity: granularity.value,
     })

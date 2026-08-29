@@ -9,6 +9,9 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Vite inlines import.meta.env.VITE_* at transform time, so a value has to be
+    // present here for the configured branch of src/api/config.ts to be reachable.
+    env: { VITE_API_BASE_URL: '/api' },
     globals: true,
     setupFiles: ['tests/setup.ts'],
     include: ['tests/**/*.spec.ts'],
@@ -18,37 +21,21 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       include: ['src/**/*.{ts,vue}'],
       exclude: [
-        // Wiring, not logic: main.ts constructs the app and can only be covered by
-        // booting the whole thing, which the API integration tests already do
-        // end to end on the server side.
+        // Wiring, not logic: main.ts constructs the app and App.vue only mounts the
+        // router and reacts to connectivity events. Both are covered end to end by
+        // the API integration tests on the server side.
         'src/main.ts',
         'src/App.vue',
-        // The service worker and the parsing worker run in worker scopes that jsdom
-        // does not provide. The logic they call is tested directly: the statement
-        // parsers, the review session and the categoriser all have their own suites.
+        // Worker scopes jsdom does not provide. The logic they call is tested
+        // directly: the statement parsers, the review session and the categoriser
+        // all have their own suites, and the worker message protocol is covered
+        // through the client.
         'src/service-worker.ts',
         'src/workers/**',
-        // Presentational screens with no branching of their own. The two that do
-        // carry logic - the add-expense form and the group card - are tested.
-        'src/views/ActivityView.vue',
-        'src/views/StatsView.vue',
-        'src/views/ProfileView.vue',
-        'src/views/ExpenseView.vue',
-        'src/views/SettleView.vue',
-        'src/views/GroupSettingsView.vue',
-        'src/views/ImportView.vue',
-        'src/views/ConflictsView.vue',
-        'src/views/JoinView.vue',
-        'src/views/SignInView.vue',
-        'src/views/NewGroupView.vue',
-        'src/views/NotFoundView.vue',
-        'src/views/GroupsView.vue',
-        'src/views/GroupView.vue',
-        'src/components/layout/**',
-        'src/**/*.d.ts',
         // Registration paths that only exist inside a Capacitor shell or a real
         // service worker; the pure part, VAPID key decoding, is tested.
         'src/native/push.ts',
+        'src/**/*.d.ts',
       ],
       thresholds: {
         // Everything that decides anything - money, splits, clocks, balances, the
@@ -63,6 +50,8 @@ export default defineConfig({
         'src/import/**': { lines: 85, functions: 85, branches: 75, statements: 85 },
         'src/stores/**': { lines: 88, functions: 85, branches: 78, statements: 88 },
         'src/api/**': { lines: 85, functions: 60, branches: 75, statements: 85 },
+        'src/views/**': { lines: 90, functions: 85, branches: 80, statements: 90 },
+        'src/components/**': { lines: 95, functions: 95, branches: 90, statements: 95 },
       },
     },
   },
