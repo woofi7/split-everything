@@ -10,7 +10,8 @@ public class Group : SyncableEntity
     /// <summary>Base currency. Expenses in other currencies are converted to it for balances.</summary>
     public string BaseCurrency { get; set; } = "CAD";
 
-    public string? EmojiIcon { get; set; }
+    /// <summary>Font Awesome solid icon name, such as "house". Null for none.</summary>
+    public string? IconName { get; set; }
     public string ColorHex { get; set; } = "#4f46e5";
 
     /// <summary>Frozen: readable, no new writes accepted.</summary>

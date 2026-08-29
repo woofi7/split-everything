@@ -9,7 +9,7 @@ import { useApi } from '@/api/provider'
 interface InvitePreview {
   groupId: string
   groupName: string
-  emojiIcon: string | null
+  iconName: string | null
   invitedByName: string
   memberCount: number
   isRedeemable: boolean
@@ -67,7 +67,7 @@ async function join(): Promise<void> {
         class="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-600 text-2xl text-white"
         aria-hidden="true"
       >
-        {{ preview.emojiIcon || preview.groupName.slice(0, 2).toUpperCase() }}
+        {{ preview.iconName || preview.groupName.slice(0, 2).toUpperCase() }}
       </span>
 
       <div>

@@ -8,24 +8,24 @@ namespace SplitEverything.Infrastructure.Persistence.Seed;
 /// </summary>
 public static class CategorySeed
 {
-    public sealed record SeedCategory(string Key, string Name, string Emoji, string ColorHex, int SortOrder);
+    public sealed record SeedCategory(string Key, string Name, string IconName, string ColorHex, int SortOrder);
 
     public static readonly IReadOnlyList<SeedCategory> Categories =
     [
-        new("groceries", "Groceries", "cart", "#16a34a", 10),
-        new("dining", "Dining out", "fork", "#f97316", 20),
+        new("groceries", "Groceries", "cart-shopping", "#16a34a", 10),
+        new("dining", "Dining out", "utensils", "#f97316", 20),
         new("transport", "Transport", "car", "#0ea5e9", 30),
         new("housing", "Rent and housing", "house", "#8b5cf6", 40),
-        new("utilities", "Utilities", "bulb", "#eab308", 50),
-        new("entertainment", "Entertainment", "ticket", "#ec4899", 60),
+        new("utilities", "Utilities", "bolt", "#eab308", 50),
+        new("entertainment", "Entertainment", "ticket-simple", "#ec4899", 60),
         new("travel", "Travel", "plane", "#06b6d4", 70),
-        new("health", "Health", "cross", "#ef4444", 80),
-        new("shopping", "Shopping", "bag", "#a855f7", 90),
-        new("subscriptions", "Subscriptions", "repeat", "#6366f1", 100),
+        new("health", "Health", "kit-medical", "#ef4444", 80),
+        new("shopping", "Shopping", "bag-shopping", "#a855f7", 90),
+        new("subscriptions", "Subscriptions", "calendar-days", "#6366f1", 100),
         new("pets", "Pets", "paw", "#84cc16", 110),
         new("gifts", "Gifts", "gift", "#f43f5e", 120),
-        new("fees", "Fees and interest", "bank", "#64748b", 130),
-        new("other", "Other", "dot", "#94a3b8", 999)
+        new("fees", "Fees and interest", "building-columns", "#64748b", 130),
+        new("other", "Other", "ellipsis", "#94a3b8", 999)
     ];
 
     /// <summary>Keyword to category key. Matched as an upper-cased substring.</summary>
@@ -90,7 +90,7 @@ public static class CategorySeed
             Id = DeterministicId(c.Key),
             Key = c.Key,
             Name = c.Name,
-            Emoji = c.Emoji,
+            IconName = c.IconName,
             ColorHex = c.ColorHex,
             SortOrder = c.SortOrder,
             OwnerUserId = null

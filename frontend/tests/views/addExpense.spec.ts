@@ -49,7 +49,7 @@ const group = {
   name: 'Roommates',
   description: null,
   baseCurrency: 'CAD',
-  emojiIcon: null,
+  iconName: null,
   colorHex: '#4f46e5',
   isArchived: false,
   lineageId: 'lineage-1',

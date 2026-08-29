@@ -30,7 +30,7 @@ public sealed class GroupService(
             Name = name,
             Description = request.Description?.Trim(),
             BaseCurrency = currency,
-            EmojiIcon = request.EmojiIcon,
+            IconName = Clearable(request.IconName ?? string.Empty, "Icon name", 48),
             ColorHex = string.IsNullOrWhiteSpace(request.ColorHex) ? "#4f46e5" : request.ColorHex.Trim(),
             CreatedByUserId = userId,
             CreatedAt = clock.UtcNow,
@@ -98,7 +98,7 @@ public sealed class GroupService(
 
         return new GroupDto(
             group.Id, group.Name, group.Description, group.BaseCurrency,
-            group.EmojiIcon, group.ColorHex, group.IsArchived,
+            group.IconName, group.ColorHex, group.IsArchived,
             group.SequenceCounter, group.LineageId, group.CreatedAt, group.UpdatedAt,
             members
                 .OrderByDescending(m => m.Member.Role)
@@ -124,7 +124,7 @@ public sealed class GroupService(
                 MemberId = m.Id,
                 m.Group!.Name,
                 m.Group.BaseCurrency,
-                m.Group.EmojiIcon,
+                m.Group.IconName,
                 m.Group.ColorHex,
                 m.Group.IsArchived,
                 MemberCount = m.Group.Members.Count(x => !x.IsDeleted && x.Status == MembershipStatus.Active),
@@ -146,7 +146,7 @@ public sealed class GroupService(
             var balances = await ComputeBalancesAsync(row.GroupId, memberIds, row.BaseCurrency, ct);
 
             summaries.Add(new GroupSummaryDto(
-                row.GroupId, row.Name, row.BaseCurrency, row.EmojiIcon, row.ColorHex,
+                row.GroupId, row.Name, row.BaseCurrency, row.IconName, row.ColorHex,
                 row.IsArchived, balances.GetValueOrDefault(row.MemberId),
                 row.MemberCount, row.LastActivityAt));
         }
@@ -166,12 +166,16 @@ public sealed class GroupService(
 
         if (request.Name is not null)
             group.Name = GroupAccess.RequireText(request.Name, "Group name", 120);
+
+        // For the optional text fields, null means "not supplied" in a patch, so it
+        // cannot also mean "clear". An empty string is the explicit clear -
+        // otherwise the remove button in the icon picker would silently do nothing.
         if (request.Description is not null)
-            group.Description = request.Description.Trim();
-        if (request.EmojiIcon is not null)
-            group.EmojiIcon = request.EmojiIcon.Trim();
+            group.Description = Clearable(request.Description, "Description", 2000);
+        if (request.IconName is not null)
+            group.IconName = Clearable(request.IconName, "Icon name", 48);
         if (request.ColorHex is not null)
-            group.ColorHex = request.ColorHex.Trim();
+            group.ColorHex = Clearable(request.ColorHex, "Colour", 9) ?? "#4f46e5";
         if (request.BaseCurrency is not null)
             group.BaseCurrency = GroupAccess.NormalizeCurrency(request.BaseCurrency, "Base currency");
 
@@ -182,6 +186,22 @@ public sealed class GroupService(
         db.ChangeTracker.Clear();
 
         return await GetAsync(userId, groupId, ct);
+    }
+
+    /// <summary>
+    /// Reads an optional text field from a patch: trimmed, or null when the caller
+    /// sent an empty string to clear it. Rejects anything too long for the column
+    /// rather than letting the database truncate it into something meaningless.
+    /// </summary>
+    private static string? Clearable(string value, string field, int maxLength)
+    {
+        var trimmed = value.Trim();
+
+        if (trimmed.Length == 0) return null;
+        if (trimmed.Length > maxLength)
+            throw new ValidationException($"{field} must be at most {maxLength} characters.");
+
+        return trimmed;
     }
 
     public Task<GroupDto> ArchiveAsync(Guid userId, Guid groupId, CancellationToken ct = default)
@@ -368,7 +388,7 @@ public sealed class GroupService(
     internal static object GroupPayload(Group group) => new
     {
         group.Id, group.Name, group.Description, group.BaseCurrency,
-        group.EmojiIcon, group.ColorHex, group.IsArchived, group.LineageId,
+        group.IconName, group.ColorHex, group.IsArchived, group.LineageId,
         group.IsDeleted
     };
 

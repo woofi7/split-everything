@@ -172,6 +172,87 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
     }
 
     [Fact]
+    public async Task An_icon_can_be_set_and_changed()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+
+        var withIcon = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, "house", null, null));
+        withIcon.IconName.ShouldBe("house");
+
+        var changed = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, "mountain-sun", null, null));
+        changed.IconName.ShouldBe("mountain-sun");
+    }
+
+    [Fact]
+    public async Task An_icon_can_be_removed_with_an_empty_string()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+        await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, "house", null, null));
+
+        // Null means "not supplied" in a patch, so it cannot also mean "clear".
+        // An empty string is the explicit clear, or the remove button in the icon
+        // picker would silently do nothing.
+        var cleared = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, string.Empty, null, null));
+
+        cleared.IconName.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Omitting_the_icon_leaves_it_alone()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+        await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, "house", null, null));
+
+        var renamed = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest("Renamed", null, null, null, null));
+
+        renamed.IconName.ShouldBe("house");
+    }
+
+    [Fact]
+    public async Task A_description_can_be_removed_the_same_way()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id,
+            new CreateGroupRequest("Roommates", "CAD", "A description", null, null, null));
+
+        var cleared = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, string.Empty, null, null, null));
+
+        cleared.Description.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task An_icon_name_longer_than_the_column_is_refused_rather_than_truncated()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+
+        // Truncating would store a name that resolves to no icon at all.
+        await Should.ThrowAsync<ValidationException>(() => Groups.UpdateAsync(
+            user.Id, group.Id, new UpdateGroupRequest(null, null, new string('a', 49), null, null)));
+    }
+
+    [Fact]
+    public async Task A_group_can_be_created_with_an_icon()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+
+        var group = await Groups.CreateAsync(user.Id,
+            new CreateGroupRequest("Trip", "CAD", null, "person-skiing", null, null));
+
+        group.IconName.ShouldBe("person-skiing");
+    }
+
+    [Fact]
     public async Task Updating_advances_the_clock_and_the_cursor()
     {
         var user = await TestData.SeedUserAsync(Db);

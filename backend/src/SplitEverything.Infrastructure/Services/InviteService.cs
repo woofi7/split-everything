@@ -124,7 +124,7 @@ public sealed class InviteService(
         var memberCount = await db.GroupMembers.CountAsync(m =>
             m.GroupId == invite.GroupId && !m.IsDeleted && m.Status == MembershipStatus.Active, ct);
 
-        return new InvitePreviewDto(group.Id, group.Name, group.EmojiIcon,
+        return new InvitePreviewDto(group.Id, group.Name, group.IconName,
             invitedBy ?? "Someone", memberCount, invite.IsRedeemable && !group.IsArchived);
     }
 

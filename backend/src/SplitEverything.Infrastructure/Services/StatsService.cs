@@ -57,7 +57,7 @@ public sealed class StatsService(
                 e.CategoryId,
                 CategoryKey = e.Category == null ? null : e.Category.Key,
                 CategoryName = e.Category == null ? null : e.Category.Name,
-                CategoryEmoji = e.Category == null ? null : e.Category.Emoji,
+                CategoryIcon = e.Category == null ? null : e.Category.IconName,
                 CategoryColor = e.Category == null ? null : e.Category.ColorHex,
                 e.PaidByMemberId,
                 Splits = e.Splits.Where(s => !s.IsDeleted)
@@ -102,7 +102,7 @@ public sealed class StatsService(
             .ToList();
 
         var byCategory = expenses
-            .GroupBy(e => new { e.CategoryId, e.CategoryKey, e.CategoryName, e.CategoryEmoji, e.CategoryColor })
+            .GroupBy(e => new { e.CategoryId, e.CategoryKey, e.CategoryName, e.CategoryIcon, e.CategoryColor })
             .Select(g =>
             {
                 var amount = CurrencyPrecision.Round(
@@ -111,7 +111,7 @@ public sealed class StatsService(
                     g.Key.CategoryId,
                     g.Key.CategoryKey ?? "uncategorised",
                     g.Key.CategoryName ?? "Uncategorised",
-                    g.Key.CategoryEmoji ?? "dot",
+                    g.Key.CategoryIcon ?? "dot",
                     g.Key.CategoryColor ?? "#94a3b8",
                     amount,
                     g.Count(),

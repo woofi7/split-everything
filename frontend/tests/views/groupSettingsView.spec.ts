@@ -40,8 +40,51 @@ describe('GroupSettingsView', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    expect(client.patch).toHaveBeenCalledWith(`/groups/${GROUP_ID}`, { name: 'Flatmates' })
+    expect(client.patch).toHaveBeenCalledWith(
+      `/groups/${GROUP_ID}`,
+      expect.objectContaining({ name: 'Flatmates' }),
+    )
     expect(textOf(wrapper)).toContain('Saved')
+  })
+
+  it('shows the group icon and opens the picker', async () => {
+    const { wrapper } = await mountView(GroupSettingsView, {
+      api: fakeApi({ '/groups': () => testGroup({ iconName: 'house' }) }),
+      groups: [testGroup({ iconName: 'house' })],
+    })
+
+    expect(wrapper.find('button[data-icon="house"]').exists()).toBe(true)
+
+    await wrapper.find('button[data-icon="house"]').trigger('click')
+    await settle(1)
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+  })
+
+  it('saves as soon as an icon is chosen', async () => {
+    const client = api()
+    const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+    await wrapper.find('button[data-icon]').trigger('click')
+    await settle(1)
+    await wrapper.find('[data-icon="car"]').trigger('click')
+    await settle()
+
+    // There is no other reason to be on this screen, so an extra Save press
+    // would just be a step to forget.
+    expect(client.patch).toHaveBeenCalledWith(
+      `/groups/${GROUP_ID}`,
+      expect.objectContaining({ iconName: 'car' }),
+    )
+  })
+
+  it('describes the icon button for a screen reader', async () => {
+    const { wrapper } = await mountView(GroupSettingsView, {
+      api: fakeApi({ '/groups': () => testGroup({ iconName: 'house' }) }),
+      groups: [testGroup({ iconName: 'house' })],
+    })
+
+    expect(wrapper.find('button[data-icon="house"]').attributes('aria-label')).toContain('House')
   })
 
   it('lists the people, marking who has not signed in', async () => {
@@ -69,8 +112,7 @@ describe('GroupSettingsView', () => {
     const client = api()
     const { wrapper } = await mountView(GroupSettingsView, { api: client })
 
-    const inputs = wrapper.findAll('input[type="text"]')
-    await inputs[inputs.length - 1].setValue('Carol')
+    await wrapper.find('input[placeholder="Add someone by name"]').setValue('Carol')
     await wrapper.findAll('button').find((b) => b.text() === 'Add')!.trigger('click')
     await settle()
 

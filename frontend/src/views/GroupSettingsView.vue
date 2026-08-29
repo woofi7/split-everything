@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import AppShell from '@/components/layout/AppShell.vue'
+import IconPicker from '@/components/ui/IconPicker.vue'
+import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
 import { useApi } from '@/api/provider'
 
@@ -21,6 +24,8 @@ const groups = useGroupsStore()
 
 const groupId = computed(() => String(route.params.groupId))
 const name = ref('')
+const iconName = ref<string | null>(null)
+const isPickingIcon = ref(false)
 const inviteEmail = ref('')
 const newInvite = ref<InviteDto | null>(null)
 const qrUrl = ref<string | null>(null)
@@ -32,18 +37,27 @@ const message = ref<string | null>(null)
 onMounted(async () => {
   const group = await groups.get(groupId.value)
   name.value = group?.name ?? ''
+  iconName.value = group?.iconName ?? null
 })
+
+const icon = computed(() => resolveIcon(iconName.value))
 
 const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
 
-async function rename(): Promise<void> {
+async function save(): Promise<void> {
   error.value = null
   try {
-    await groups.update(groupId.value, { name: name.value })
+    await groups.update(groupId.value, { name: name.value, iconName: iconName.value })
     message.value = 'Saved.'
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not rename the group.'
+    error.value = caught instanceof Error ? caught.message : 'Could not save the group.'
   }
+}
+
+/** Choosing an icon saves straight away: there is no other reason to be here. */
+async function chooseIcon(next: string | null): Promise<void> {
+  iconName.value = next
+  await save()
 }
 
 async function addMember(): Promise<void> {
@@ -113,18 +127,35 @@ async function unarchive(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Group settings" :subtitle="group?.name" :show-nav="false">
-    <form class="surface-card mb-4 flex flex-col gap-3 p-4" @submit.prevent="rename">
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Name</span>
-        <input
-          v-model="name"
-          type="text"
-          maxlength="120"
-          class="tap-target rounded-lg border bg-[var(--surface)] px-3"
-          style="border-color: var(--border)"
-        />
-      </label>
+  <AppShell title="Group settings" :subtitle="group?.name">
+    <form class="surface-card mb-4 flex flex-col gap-3 p-4" @submit.prevent="save">
+      <div class="flex items-end gap-3">
+        <div class="flex flex-col gap-1">
+          <span class="text-sm text-[var(--text-muted)]">Icon</span>
+          <button
+            type="button"
+            class="tap-target flex h-11 w-11 items-center justify-center rounded-lg text-white"
+            :style="{ backgroundColor: group?.colorHex ?? '#4f46e5' }"
+            :data-icon="icon.name"
+            :aria-label="`Group icon: ${icon.label}. Choose a different one`"
+            @click="isPickingIcon = true"
+          >
+            <FontAwesomeIcon :icon="icon.definition" class="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <label class="flex flex-1 flex-col gap-1">
+          <span class="text-sm text-[var(--text-muted)]">Name</span>
+          <input
+            v-model="name"
+            type="text"
+            maxlength="120"
+            class="tap-target rounded-lg border bg-[var(--surface)] px-3"
+            style="border-color: var(--border)"
+          />
+        </label>
+      </div>
+
       <button type="submit" class="tap-target rounded-lg bg-brand-600 text-sm font-medium text-white">
         Save
       </button>
@@ -230,6 +261,14 @@ async function unarchive(): Promise<void> {
         Archiving freezes a group without deleting anything. Balances and history stay readable.
       </p>
     </section>
+
+    <IconPicker
+      :open="isPickingIcon"
+      :model-value="iconName"
+      title="Group icon"
+      @update:model-value="chooseIcon"
+      @close="isPickingIcon = false"
+    />
 
     <p v-if="message" class="mt-4 text-sm text-owed" role="status">{{ message }}</p>
     <p v-if="error" class="mt-4 text-sm text-owing" role="alert">{{ error }}</p>

@@ -14,7 +14,7 @@ public class GroupConfiguration : IEntityTypeConfiguration<Group>
         builder.Property(g => g.Name).HasMaxLength(120).IsRequired();
         builder.Property(g => g.Description).HasMaxLength(2000);
         builder.Property(g => g.BaseCurrency).HasMaxLength(3).IsRequired();
-        builder.Property(g => g.EmojiIcon).HasMaxLength(16);
+        builder.Property(g => g.IconName).HasMaxLength(48);
         builder.Property(g => g.ColorHex).HasMaxLength(9).IsRequired();
         builder.Property(g => g.VectorClockJson).HasColumnType("jsonb").IsRequired();
         builder.Property(g => g.LastWriterDeviceId).HasMaxLength(64);
@@ -107,7 +107,7 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
 
         builder.Property(c => c.Key).HasMaxLength(48).IsRequired();
         builder.Property(c => c.Name).HasMaxLength(80).IsRequired();
-        builder.Property(c => c.Emoji).HasMaxLength(16).IsRequired();
+        builder.Property(c => c.IconName).HasMaxLength(48).IsRequired();
         builder.Property(c => c.ColorHex).HasMaxLength(9).IsRequired();
 
         builder.HasIndex(c => new { c.OwnerUserId, c.Key }).IsUnique();

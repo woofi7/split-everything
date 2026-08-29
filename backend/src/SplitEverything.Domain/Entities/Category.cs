@@ -8,7 +8,7 @@ public class Category
     public Guid Id { get; set; } = Guid.CreateVersion7();
     public string Key { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public string Emoji { get; set; } = "*";
+    public string IconName { get; set; } = "*";
     public string ColorHex { get; set; } = "#64748b";
     public int SortOrder { get; set; }
     public Guid? OwnerUserId { get; set; }

@@ -63,7 +63,7 @@ async function remove(): Promise<void> {
 </script>
 
 <template>
-  <AppShell :title="expense?.description ?? 'Expense'" :show-nav="false">
+  <AppShell :title="expense?.description ?? 'Expense'">
     <div v-if="expense" class="flex flex-col gap-5">
       <section class="surface-card p-4">
         <div class="flex items-baseline justify-between gap-3">

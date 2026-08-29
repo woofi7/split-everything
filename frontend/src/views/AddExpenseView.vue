@@ -156,7 +156,7 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Add expense" :show-nav="false">
+  <AppShell title="Add expense">
     <form class="flex flex-col gap-5" @submit.prevent="save">
       <label class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">Group</span>

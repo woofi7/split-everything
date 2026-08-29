@@ -4,7 +4,7 @@ import AppShell from '@/components/layout/AppShell.vue'
 </script>
 
 <template>
-  <AppShell title="Not found" :show-nav="false">
+  <AppShell title="Not found">
     <div class="py-12 text-center">
       <p class="font-medium">That page does not exist</p>
       <RouterLink

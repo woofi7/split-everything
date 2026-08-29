@@ -17,13 +17,31 @@ public static class SeedRunner
             .ToListAsync(ct);
         var have = existing.ToHashSet();
 
-        var missing = CategorySeed.BuildSystemCategories()
-            .Where(c => !have.Contains(c.Id))
-            .ToList();
+        var wanted = CategorySeed.BuildSystemCategories().ToList();
 
-        if (missing.Count == 0) return;
+        var missing = wanted.Where(c => !have.Contains(c.Id)).ToList();
+        if (missing.Count > 0) db.Categories.AddRange(missing);
 
-        db.Categories.AddRange(missing);
+        // Bring the shipped presentation of an existing category forward. The key
+        // and id are the identity; the icon, colour and order are ours to update,
+        // and a release that changes them should not leave old rows behind.
+        var byId = wanted.ToDictionary(c => c.Id);
+        var stale = await db.Categories
+            .Where(c => c.OwnerUserId == null && have.Contains(c.Id))
+            .ToListAsync(ct);
+
+        foreach (var stored in stale)
+        {
+            if (!byId.TryGetValue(stored.Id, out var shipped)) continue;
+
+            stored.Name = shipped.Name;
+            stored.IconName = shipped.IconName;
+            stored.ColorHex = shipped.ColorHex;
+            stored.SortOrder = shipped.SortOrder;
+        }
+
+        if (missing.Count == 0 && !db.ChangeTracker.HasChanges()) return;
+
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
     }

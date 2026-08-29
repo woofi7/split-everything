@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import AppShell from '@/components/layout/AppShell.vue'
+import IconPicker from '@/components/ui/IconPicker.vue'
+import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
 
 const groups = useGroupsStore()
@@ -9,7 +12,10 @@ const router = useRouter()
 
 const name = ref('')
 const baseCurrency = ref('CAD')
-const emojiIcon = ref('')
+const iconName = ref<string | null>(null)
+const isPickingIcon = ref(false)
+
+const icon = computed(() => resolveIcon(iconName.value))
 const memberDraft = ref('')
 const memberNames = ref<string[]>([])
 const error = ref<string | null>(null)
@@ -48,7 +54,7 @@ async function save(): Promise<void> {
     const group = await groups.create({
       name: name.value.trim(),
       baseCurrency: baseCurrency.value,
-      emojiIcon: emojiIcon.value.trim() || null,
+      iconName: iconName.value,
       placeholderMemberNames: memberNames.value,
     })
 
@@ -62,7 +68,7 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="New group" :show-nav="false">
+  <AppShell title="New group">
     <form class="flex flex-col gap-5" @submit.prevent="save">
       <label class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">Name</span>
@@ -89,17 +95,24 @@ async function save(): Promise<void> {
           </select>
         </label>
 
-        <label class="flex flex-col gap-1">
+        <div class="flex flex-col gap-1">
           <span class="text-sm text-[var(--text-muted)]">Icon</span>
-          <input
-            v-model="emojiIcon"
-            type="text"
-            maxlength="4"
-            placeholder="house"
-            class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
+          <button
+            type="button"
+            class="tap-target flex items-center gap-2 rounded-lg border px-3 text-sm"
             style="border-color: var(--border)"
-          />
-        </label>
+            @click="isPickingIcon = true"
+          >
+            <span
+              class="flex h-6 w-6 items-center justify-center rounded-md text-white"
+              :style="{ backgroundColor: '#4f46e5' }"
+              aria-hidden="true"
+            >
+              <FontAwesomeIcon :icon="icon.definition" class="h-3.5 w-3.5" />
+            </span>
+            {{ iconName ? icon.label : 'Choose' }}
+          </button>
+        </div>
       </div>
 
       <div class="flex flex-col gap-2">
@@ -126,7 +139,11 @@ async function save(): Promise<void> {
           </button>
         </div>
 
-        <ul v-if="memberNames.length > 0" class="flex flex-wrap gap-2">
+        <ul
+          v-if="memberNames.length > 0"
+          class="flex flex-wrap gap-2"
+          aria-label="People added so far"
+        >
           <li
             v-for="(member, index) in memberNames"
             :key="member"
@@ -156,5 +173,12 @@ async function save(): Promise<void> {
         {{ isSaving ? 'Creating' : 'Create group' }}
       </button>
     </form>
+
+    <IconPicker
+      v-model="iconName"
+      :open="isPickingIcon"
+      title="Group icon"
+      @close="isPickingIcon = false"
+    />
   </AppShell>
 </template>

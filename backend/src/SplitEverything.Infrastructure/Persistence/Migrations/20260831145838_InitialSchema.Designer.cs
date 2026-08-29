@@ -813,7 +813,7 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("description");
 
-                    b.Property<string>("EmojiIcon")
+                    b.Property<string>("IconName")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("emoji_icon");

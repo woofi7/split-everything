@@ -5,7 +5,7 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Api.Controllers;
 
-public sealed record CategoryDto(Guid Id, string Key, string Name, string Emoji, string ColorHex, int SortOrder);
+public sealed record CategoryDto(Guid Id, string Key, string Name, string IconName, string ColorHex, int SortOrder);
 
 public sealed class CategoriesController(
     ICurrentUser currentUser,
@@ -18,6 +18,6 @@ public sealed class CategoriesController(
             .Where(c => c.OwnerUserId == null || c.OwnerUserId == UserId)
             .OrderBy(c => c.SortOrder)
             .ThenBy(c => c.Name)
-            .Select(c => new CategoryDto(c.Id, c.Key, c.Name, c.Emoji, c.ColorHex, c.SortOrder))
+            .Select(c => new CategoryDto(c.Id, c.Key, c.Name, c.IconName, c.ColorHex, c.SortOrder))
             .ToListAsync(ct));
 }
