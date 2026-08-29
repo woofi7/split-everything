@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { ApiClient } from '@/api/client'
+import { ApiError, type ApiClient } from '@/api/client'
+import { resetDatabase, rotateDeviceId } from '@/offline/db'
 
 export interface AuthenticatedUser {
   id: string
@@ -113,11 +114,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function signInWithGoogle(credential: string, deviceLabel?: string): Promise<SignInResult> {
-    const result = await requireApi().post<SignInResult>('/auth/google', {
-      idToken: credential,
-      deviceLabel: deviceLabel ?? null,
-      platform: detectPlatform(),
-    })
+    const result = await withDeviceHandover(() =>
+      requireApi().post<SignInResult>('/auth/google', {
+        idToken: credential,
+        deviceLabel: deviceLabel ?? null,
+        platform: detectPlatform(),
+      }),
+    )
 
     user.value = result.user
     tokens.value = result.tokens
@@ -127,15 +130,42 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * Signs in, and makes room first if this install already belongs to someone.
+   *
+   * A device id keys every vector clock, so the server refuses to move one between
+   * accounts rather than interleaving two histories under one id. That is right,
+   * but it left a phone able to hold only one account for the life of the install.
+   * A different account here is a new install: it gets a new device id, and the
+   * replica the previous account left behind goes with the old one, or the new
+   * account would open the app looking at someone else's groups.
+   *
+   * Once only. A second refusal is a real failure and is reported.
+   */
+  async function withDeviceHandover<T>(attempt: () => Promise<T>): Promise<T> {
+    try {
+      return await attempt()
+    } catch (error) {
+      if (!isDeviceTakenError(error)) throw error
+
+      await resetDatabase()
+      await rotateDeviceId()
+
+      return attempt()
+    }
+  }
+
+  /**
    * Signs in without Google. The server refuses this unless it was deliberately
    * enabled outside production, so the store simply asks and reports the answer.
    */
   async function signInAsDeveloper(email: string, displayName?: string): Promise<SignInResult> {
-    const result = await requireApi().post<SignInResult>('/auth/dev', {
-      email,
-      displayName: displayName?.trim() || null,
-      deviceId: null,
-    })
+    const result = await withDeviceHandover(() =>
+      requireApi().post<SignInResult>('/auth/dev', {
+        email,
+        displayName: displayName?.trim() || null,
+        deviceId: null,
+      }),
+    )
 
     user.value = result.user
     tokens.value = result.tokens
@@ -248,6 +278,16 @@ export const useAuthStore = defineStore('auth', () => {
   async function deleteAccount(): Promise<void> {
     await requireApi().delete('/auth/me')
     clear()
+  }
+
+  /**
+   * The server's answer when this install already belongs to another account. The
+   * wording is pinned by a test on both sides, since it is the only thing that
+   * separates this from any other refusal.
+   */
+  function isDeviceTakenError(error: unknown): boolean {
+    if (!(error instanceof ApiError) || error.status !== 403) return false
+    return error.message.includes('registered to another account')
   }
 
   function clear(): void {

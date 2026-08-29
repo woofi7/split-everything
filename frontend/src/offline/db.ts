@@ -197,12 +197,44 @@ const CURSOR_PREFIX = 'cursor:'
  * per session would make the same install look like a new peer each launch and
  * conflict with its own earlier writes.
  */
+/**
+ * Held in memory as well as stored, so every request can read it without waiting.
+ * The API client needs it synchronously on each call.
+ */
+let cachedDeviceId: string | null = null
+
 export async function getDeviceId(): Promise<string> {
+  if (cachedDeviceId) return cachedDeviceId
+
   const existing = await db.meta.get(DEVICE_ID_KEY)
-  if (existing) return existing.value
+  if (existing) {
+    cachedDeviceId = existing.value
+    return cachedDeviceId
+  }
 
   const deviceId = newId()
   await db.meta.put({ key: DEVICE_ID_KEY, value: deviceId })
+  cachedDeviceId = deviceId
+  return deviceId
+}
+
+/** The id as it stands, for callers that cannot await. Null before the first read. */
+export function deviceIdNow(): string | null {
+  return cachedDeviceId
+}
+
+/**
+ * Mints a new device id, abandoning the old one.
+ *
+ * A device id keys every vector clock, so the server never moves one between
+ * accounts: two accounts writing under one id would interleave their histories.
+ * A different account on the same install is therefore a new install, and this is
+ * what makes it one.
+ */
+export async function rotateDeviceId(): Promise<string> {
+  const deviceId = newId()
+  await db.meta.put({ key: DEVICE_ID_KEY, value: deviceId })
+  cachedDeviceId = deviceId
   return deviceId
 }
 
@@ -228,6 +260,9 @@ export async function getAllCursors(): Promise<Record<string, number>> {
 }
 
 export async function resetDatabase(): Promise<void> {
+  // The cache mirrors a row that is about to go, so it goes too.
+  cachedDeviceId = null
+
   await Promise.all([
     db.groups.clear(),
     db.expenses.clear(),
