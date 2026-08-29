@@ -8,6 +8,18 @@ public class ExpenseFingerprintTests
     private static readonly DateTimeOffset Day = new(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void A_known_transaction_hashes_to_a_pinned_value()
+    {
+        // Pinned as a wire contract. The browser computes this same fingerprint to
+        // ask "do I already have this transaction?", because the statement itself
+        // never leaves the device. The identical constant is asserted in
+        // frontend/tests/domain/fingerprint.spec.ts, so a drift on either side
+        // fails a test instead of silently disabling duplicate detection.
+        ExpenseFingerprint.Compute(Day, 42.50m, "CAD", "Uber Eats")
+            .ShouldBe("c47875b9384c326c74638e1329dc036e");
+    }
+
+    [Fact]
     public void The_same_transaction_fingerprints_identically()
         => ExpenseFingerprint.Compute(Day, 42.50m, "CAD", "Uber Eats")
             .ShouldBe(ExpenseFingerprint.Compute(Day, 42.50m, "CAD", "Uber Eats"));
