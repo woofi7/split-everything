@@ -218,7 +218,7 @@ public class SyncWriterTests(PostgresFixture fixture) : DatabaseTestBase(fixture
         Db.ChangeTracker.Clear();
         var tracked = await Db.Expenses.FirstAsync(e => e.Id == expense.Id);
 
-        await Should.ThrowAsync<Application.Common.GroupArchivedException>(() =>
+        await Should.ThrowAsync<SplitEverything.Application.Common.GroupArchivedException>(() =>
             CreateWriter().RecordAsync(tracked, SyncEntityType.Expense, group.Id,
                 SyncOperation.Update, TestData.DeviceA, null, new { }));
     }
@@ -251,9 +251,4 @@ public class SyncWriterTests(PostgresFixture fixture) : DatabaseTestBase(fixture
         await Db.SaveChangesAsync();
         return (group, expense);
     }
-}
-
-public sealed class FixedClock(DateTimeOffset now) : IClock
-{
-    public DateTimeOffset UtcNow { get; set; } = now;
 }
