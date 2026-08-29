@@ -103,7 +103,7 @@ public sealed class InviteService(
         // The token itself is only ever known to the creator, so the QR encodes the
         // stored id and the reader resolves it. Anything else would need the
         // plaintext token, which we deliberately do not keep.
-        var url = BuildUrl(invite.Id.ToString("N"), qr: true);
+        var url = BuildUrl(invite.Id.ToString("N"));
 
         using var generator = new QRCodeGenerator();
         using var data = generator.CreateQrCode(url, QRCodeGenerator.ECCLevel.Q);
@@ -257,7 +257,7 @@ public sealed class InviteService(
         return invites
             .Where(i => i.UseCount < i.MaxUses)
             .Select(i => new InviteDto(i.Id, groupId, group.Name, string.Empty,
-                BuildUrl(i.Id.ToString("N"), qr: true), i.InvitedEmail,
+                BuildUrl(i.Id.ToString("N")), i.InvitedEmail,
                 i.ExpiresAt, i.MaxUses, i.UseCount))
             .ToList();
     }
@@ -296,8 +296,13 @@ public sealed class InviteService(
     private static string Hash(string token)
         => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
-    private string BuildUrl(string token, bool qr = false)
-        => $"{options.AppBaseUrl.TrimEnd('/')}/join/{token}";
+    /// <summary>
+    /// The landing URL for an invite. The segment is the plaintext token when we
+    /// have it, and the invite id for a QR code, where we do not: FindAsync
+    /// resolves either.
+    /// </summary>
+    private string BuildUrl(string tokenOrInviteId)
+        => $"{options.AppBaseUrl.TrimEnd('/')}/join/{tokenOrInviteId}";
 
     private static string BuildHtmlBody(string inviterName, string groupName, string url)
         => $"""
