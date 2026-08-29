@@ -10,6 +10,7 @@ import {
 } from './db'
 import { tickClock, type VectorClock } from '@/domain/vectorClock'
 import type { SplitType } from '@/domain/splitting'
+import { newId } from '@/domain/ids'
 
 export interface SyncOperationRequest {
   operationId: string
@@ -135,7 +136,7 @@ export class SyncEngine {
     const previous = await this.latestClockFor(request.entityId)
 
     const operation: OutboxOperation = {
-      operationId: crypto.randomUUID(),
+      operationId: newId(),
       entityType: request.entityType,
       entityId: request.entityId,
       operation: request.operation,

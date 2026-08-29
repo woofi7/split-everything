@@ -36,6 +36,15 @@ export async function computeFingerprint(
     normalizeMerchant(description),
   ].join('|')
 
+  // Secure contexts only. There is no honest fallback: this hash has to match the
+  // one the server computes, or duplicate detection quietly stops agreeing with
+  // it, so saying plainly what is missing beats a wrong answer.
+  if (!crypto.subtle) {
+    throw new Error(
+      'Matching statement rows against your existing expenses needs a secure connection (https, or localhost).',
+    )
+  }
+
   const bytes = new TextEncoder().encode(payload)
   const digest = await crypto.subtle.digest('SHA-256', bytes)
 

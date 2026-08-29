@@ -102,8 +102,24 @@ async function createInvite(): Promise<void> {
 
 async function copyInviteLink(): Promise<void> {
   if (!newInvite.value) return
-  await navigator.clipboard?.writeText(newInvite.value.url)
-  message.value = 'Invite link copied.'
+
+  // The clipboard API needs a secure context, which a plain LAN address is not.
+  // Claiming success there told people the link was copied when nothing had
+  // happened, so say what is going on and leave the link on screen to select.
+  if (!navigator.clipboard) {
+    message.value = null
+    error.value = 'Copying needs a secure connection. The link above can be selected instead.'
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(newInvite.value.url)
+    error.value = null
+    message.value = 'Invite link copied.'
+  } catch {
+    message.value = null
+    error.value = 'Could not copy the link. It can be selected above instead.'
+  }
 }
 
 async function archive(): Promise<void> {
@@ -239,6 +255,12 @@ async function unarchive(): Promise<void> {
 
       <div v-if="newInvite" class="mt-3 flex flex-col items-center gap-3">
         <img v-if="qrUrl" :src="qrUrl" alt="Invite QR code" class="h-40 w-40 rounded-lg bg-white p-2" />
+
+        <!-- Readable on its own, so an invite can be shared without the clipboard. -->
+        <p class="w-full break-all text-center text-xs text-[var(--text-muted)]">
+          {{ newInvite.url }}
+        </p>
+
         <button
           type="button"
           class="tap-target rounded-lg border px-3 text-sm"
