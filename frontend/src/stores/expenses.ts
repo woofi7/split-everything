@@ -163,6 +163,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     // builds on it rather than looking like a concurrent write.
     await patch(expense.id, { vectorClock: operation.vectorClock })
     await refreshPendingCount()
+    syncSoon()
 
     return (await db.expenses.get(expense.id))!
   }
@@ -242,6 +243,7 @@ export const useExpensesStore = defineStore('expenses', () => {
 
     await patch(updated.id, { vectorClock: operation.vectorClock })
     await refreshPendingCount()
+    syncSoon()
 
     return (await db.expenses.get(updated.id))!
   }
@@ -264,6 +266,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     })
 
     await refreshPendingCount()
+    syncSoon()
   }
 
   async function comment(expenseId: string, body: string, authorMemberId: string): Promise<LocalComment> {
@@ -304,6 +307,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     })
 
     await refreshPendingCount()
+    syncSoon()
     return entity
   }
 
@@ -357,6 +361,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     })
 
     await refreshPendingCount()
+    syncSoon()
     return entity
   }
 
@@ -410,6 +415,22 @@ export const useExpensesStore = defineStore('expenses', () => {
     }))
 
     return pairwiseDebts(groupExpenses, groupSettlements)
+  }
+
+  /**
+   * Drains the queue in the background, without blocking the caller.
+   *
+   * Every mutation ends with this. A write is finished the moment it is in the
+   * outbox and on screen, so the person never waits on the network; but something
+   * has to actually send it, or the row stays marked as waiting until the app is
+   * reloaded. Pulling afterwards brings back the server's canonical row, which is
+   * how a foreign-currency expense picks up the real exchange rate.
+   */
+  function syncSoon(): void {
+    void sync().catch(() => {
+      // Offline or unreachable. The operation is still queued and the pending
+      // indicator already says so, so there is nothing to report here.
+    })
   }
 
   async function sync(): Promise<void> {
