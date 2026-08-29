@@ -46,10 +46,28 @@ const groupDto = {
   expenseCount: 0,
 }
 
+/**
+ * What the list endpoint really returns.
+ *
+ * A summary carries no roster and no lineage: those come from a detail read.
+ * Handing the list a full detail object here would hide every bug in the merge
+ * that fills the gaps from the cached copy.
+ */
+const summaryDto = {
+  id: groupId,
+  name: 'Roommates',
+  baseCurrency: 'CAD',
+  colorHex: '#4f46e5',
+  isArchived: false,
+  myNetBalance: 0,
+  memberCount: 2,
+  lastActivityAt: null,
+}
+
 function fakeApi(overrides: Record<string, unknown> = {}) {
   return {
     get: vi.fn(async (path: string) => {
-      if (path === '/groups') return [{ ...groupDto, memberCount: 2, lastActivityAt: null }]
+      if (path === '/groups') return [summaryDto]
       if (path.startsWith('/groups/')) return groupDto
       return []
     }),
@@ -193,7 +211,8 @@ describe('groups store', () => {
   it('lists members of a group', async () => {
     const store = useGroupsStore()
     store.attachApi(fakeApi() as never)
-    await store.loadAll()
+    // The roster comes from a detail read; the list endpoint only counts members.
+    await store.get(groupId)
 
     expect(store.membersOf(groupId).map((m) => m.displayName)).toEqual(['Alice', 'Bob'])
   })
@@ -201,10 +220,40 @@ describe('groups store', () => {
   it('knows which member is me', async () => {
     const store = useGroupsStore()
     store.attachApi(fakeApi() as never)
-    await store.loadAll()
+    await store.get(groupId)
 
     expect(store.myMemberId(groupId, 'user-1')).toBe(alice)
     expect(store.myMemberId(groupId, 'someone-else')).toBeNull()
+  })
+
+  it('keeps the member count from the list when it has no roster', async () => {
+    const store = useGroupsStore()
+    store.attachApi(fakeApi() as never)
+
+    await store.loadAll()
+
+    // All a cold start knows about who is in the group.
+    expect(store.groups[0].members).toEqual([])
+    expect(store.groups[0].memberCount).toBe(2)
+  })
+
+  it('keeps the cached roster across a list refresh', async () => {
+    const store = useGroupsStore()
+    store.attachApi(fakeApi() as never)
+    await store.get(groupId)
+
+    // The second pass merges the cached roster into a summary that has none. The
+    // cached copy is read back through a reactive ref, and a reactive value cannot
+    // be written to IndexedDB: it throws DataCloneError, which the offline catch
+    // would swallow as an unreachable server.
+    await store.loadAll()
+
+    expect(store.isOffline).toBe(false)
+    expect(store.membersOf(groupId).map((m) => m.displayName)).toEqual(['Alice', 'Bob'])
+
+    const stored = await db.groups.get(groupId)
+    expect(stored?.members.map((member) => member.displayName)).toEqual(['Alice', 'Bob'])
+    expect(stored?.lineageId).toBe('lineage-1')
   })
 
   it('returns no members for a group it does not know', () => {

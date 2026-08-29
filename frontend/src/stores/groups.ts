@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { db, type LocalGroup, type LocalMember } from '@/offline/db'
 import type { ApiClient } from '@/api/client'
@@ -223,7 +223,13 @@ export const useGroupsStore = defineStore('groups', () => {
 function toLocalGroup(dto: GroupSummaryDto, existing: LocalGroup[]): LocalGroup {
   // A summary carries no member list; keep whatever the detail read already gave
   // us rather than blanking the roster on every list refresh.
-  const previous = existing.find((group) => group.id === dto.id)
+  //
+  // Unwrapped, because the cached copy is read back out of a reactive ref and the
+  // result of this goes straight into IndexedDB. A reactive value is a Proxy, and
+  // a Proxy cannot be structure-cloned: the write fails with DataCloneError, which
+  // the caller cannot tell apart from an unreachable server.
+  const cached = existing.find((group) => group.id === dto.id)
+  const previous = cached ? toRaw(cached) : undefined
 
   return {
     id: dto.id,
@@ -235,6 +241,9 @@ function toLocalGroup(dto: GroupSummaryDto, existing: LocalGroup[]): LocalGroup 
     isArchived: dto.isArchived,
     lineageId: dto.lineageId ?? previous?.lineageId ?? '',
     members: dto.members ?? previous?.members ?? [],
+    // A detail read has the roster but no count; a summary has the count but no
+    // roster. Either one can answer "how many people".
+    memberCount: dto.memberCount ?? dto.members?.length ?? previous?.memberCount ?? 0,
     myNetBalance: dto.myNetBalance,
     totalSpend: dto.totalSpend ?? previous?.totalSpend ?? 0,
     expenseCount: dto.expenseCount ?? previous?.expenseCount ?? 0,

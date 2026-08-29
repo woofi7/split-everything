@@ -55,6 +55,19 @@ describe('GroupCard', () => {
     expect(wrapper.text()).toContain('Alice, Bob')
   })
 
+  it('counts the people when the roster is not loaded yet', () => {
+    // What a cold start looks like: the list endpoint sent a count, not a roster.
+    const wrapper = mountCard(group({ members: [], memberCount: 3 }))
+
+    expect(wrapper.text()).toContain('3 people')
+  })
+
+  it('says just you when there really is nobody else', () => {
+    const wrapper = mountCard(group({ members: [], memberCount: 1 }))
+
+    expect(wrapper.text()).toContain('Just you')
+  })
+
   it('says you are owed when the balance is positive', () => {
     const wrapper = mountCard(group({ myNetBalance: 42.5 }))
 

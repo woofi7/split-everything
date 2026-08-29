@@ -19,9 +19,18 @@ const balanceLabel = computed(() => {
 // newer version of the app, still renders.
 const icon = computed(() => resolveIcon(props.group.iconName))
 
+// Names when we have them, a count when we do not. The group list endpoint sends
+// a member count but no roster, so on a cold start this is all a card knows, and
+// naming nobody would be wrong rather than merely vague.
 const memberSummary = computed(() => {
   const active = props.group.members.filter((member) => member.status === 'Active')
-  if (active.length === 0) return 'Just you'
+
+  if (active.length === 0) {
+    const count = props.group.memberCount ?? 0
+    if (count <= 1) return 'Just you'
+    return `${count} people`
+  }
+
   if (active.length <= 3) return active.map((member) => member.displayName).join(', ')
   return `${active.slice(0, 2).map((m) => m.displayName).join(', ')} and ${active.length - 2} more`
 })

@@ -21,6 +21,12 @@ export interface LocalGroup {
   isArchived: boolean
   lineageId: string
   members: LocalMember[]
+  /**
+   * Active members, as the list endpoint reports it. The list carries a count but
+   * no roster, so this is the only member information a group has until a detail
+   * read fills `members` in.
+   */
+  memberCount?: number
   myNetBalance: number
   totalSpend: number
   expenseCount: number
