@@ -4,6 +4,7 @@ import {
   minorUnit,
   roundMoney,
   formatMoney,
+  formatAmount,
   parseAmountInput,
 } from '@/domain/money'
 
@@ -111,5 +112,16 @@ describe('parsing what a person types', () => {
 
   it('treats parentheses as negative, as accounting exports do', () => {
     expect(parseAmountInput('(42.00)')).toBe(-42)
+  })
+})
+
+describe('formatAmount', () => {
+  it('renders the amount with no symbol, for inputs and previews', () => {
+    expect(formatAmount(12.5, 'CAD')).toBe('12.50')
+  })
+
+  it('respects the currency precision', () => {
+    expect(formatAmount(12.5, 'JPY')).toBe('13')
+    expect(formatAmount(12.5, 'KWD')).toBe('12.500')
   })
 })

@@ -8,14 +8,16 @@ export interface ApiClientOptions {
 }
 
 export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly isOffline = false,
-  ) {
+  readonly status: number
+  readonly code: string
+  readonly isOffline: boolean
+
+  constructor(status: number, code: string, message: string, isOffline = false) {
     super(message)
     this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.isOffline = isOffline
   }
 }
 
@@ -32,8 +34,11 @@ type QueryValue = string | number | boolean | null | undefined
  */
 export class ApiClient {
   private refreshInFlight: Promise<string | null> | null = null
+  private readonly options: ApiClientOptions
 
-  constructor(private readonly options: ApiClientOptions) {}
+  constructor(options: ApiClientOptions) {
+    this.options = options
+  }
 
   get<T>(path: string, query?: Record<string, QueryValue>): Promise<T> {
     return this.request<T>('GET', path, { query })

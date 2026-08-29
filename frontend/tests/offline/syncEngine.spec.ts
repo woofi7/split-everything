@@ -891,3 +891,253 @@ describe('offline sync engine', () => {
     expect(await db.expenses.get('broken')).toBeUndefined()
   })
 })
+
+describe('pulled payload tolerance', () => {
+  beforeEach(async () => {
+    await resetDatabase()
+  })
+
+  function pullingEngine(payload: Record<string, unknown>, entityType = 'Expense') {
+    return new SyncEngine(
+      fakeApi({
+        pull: vi.fn(async () => ({
+          entries: [
+            {
+              serverSeq: 20,
+              groupId,
+              entityType,
+              entityId: 'entity-1',
+              operation: 'Create',
+              deviceId: 'device-b',
+              payloadJson: JSON.stringify(payload),
+              vectorClock: { 'device-b': 1 },
+              lineageId: 'lineage-1',
+              sourceGroupId: null,
+              counterpartGroupId: null,
+              createdAt: '2026-02-01T12:00:00Z',
+            },
+          ],
+          groupCursors: { [groupId]: 20 },
+          snapshots: [],
+          hasMore: false,
+        })),
+      }),
+      () => true,
+    )
+  }
+
+  it('fills in the fields a sparse payload leaves out', async () => {
+    // The server omits nulls, so the client must not choke on a minimal snapshot.
+    await pullingEngine({ id: 'entity-1', paidByMemberId: memberId, description: 'Sparse' }).pull()
+
+    const stored = await db.expenses.get('entity-1')
+    expect(stored?.currency).toBe('CAD')
+    expect(stored?.exchangeRate).toBe(1)
+    expect(stored?.revision).toBe(1)
+    expect(stored?.splits).toEqual([])
+    expect(stored?.items).toEqual([])
+  })
+
+  it('reads a numeric split type, which the sync snapshot uses', async () => {
+    await pullingEngine({
+      id: 'entity-1',
+      paidByMemberId: memberId,
+      description: 'Numeric',
+      amount: 10,
+      splitType: 2,
+    }).pull()
+
+    expect((await db.expenses.get('entity-1'))?.splitType).toBe('Shares')
+  })
+
+  it('reads a named split type, which the HTTP API uses', async () => {
+    await pullingEngine({
+      id: 'entity-1',
+      paidByMemberId: memberId,
+      description: 'Named',
+      amount: 10,
+      splitType: 'Percentage',
+    }).pull()
+
+    expect((await db.expenses.get('entity-1'))?.splitType).toBe('Percentage')
+  })
+
+  it('falls back to an equal split for an unrecognised type', async () => {
+    await pullingEngine({
+      id: 'entity-1',
+      paidByMemberId: memberId,
+      description: 'Odd',
+      amount: 10,
+      splitType: 'Nonsense',
+    }).pull()
+
+    expect((await db.expenses.get('entity-1'))?.splitType).toBe('Equal')
+  })
+
+  it('accepts items keyed as members or memberIds', async () => {
+    await pullingEngine({
+      id: 'entity-1',
+      paidByMemberId: memberId,
+      description: 'Itemized',
+      amount: 10,
+      items: [
+        { description: 'A', amount: 5, members: [memberId] },
+        { description: 'B', amount: 5, memberIds: [memberId] },
+      ],
+    }).pull()
+
+    const stored = await db.expenses.get('entity-1')
+    expect(stored?.items.every((item) => item.memberIds.length === 1)).toBe(true)
+  })
+
+  it('fills in a sparse settlement payload', async () => {
+    await pullingEngine(
+      { id: 'entity-1', fromMemberId: 'a', toMemberId: 'b' },
+      'Settlement',
+    ).pull()
+
+    const stored = await db.settlements.get('entity-1')
+    expect(stored?.currency).toBe('CAD')
+    expect(stored?.amount).toBe(0)
+  })
+
+  it('fills in a sparse comment payload', async () => {
+    await pullingEngine({ id: 'entity-1', expenseId: 'e', body: 'Hi' }, 'ExpenseComment').pull()
+
+    expect((await db.comments.get('entity-1'))?.isDeleted).toBe(false)
+  })
+
+  it('ignores an entity type it does not handle', async () => {
+    await pullingEngine({ id: 'entity-1' }, 'CategoryRule').pull()
+
+    expect(await getCursor(groupId)).toBe(20)
+  })
+
+  it('ignores a delete for an entity type it does not handle', async () => {
+    const engine = new SyncEngine(
+      fakeApi({
+        pull: vi.fn(async () => ({
+          entries: [
+            {
+              serverSeq: 21,
+              groupId,
+              entityType: 'CategoryRule',
+              entityId: 'entity-1',
+              operation: 'Delete',
+              deviceId: 'device-b',
+              payloadJson: '{}',
+              vectorClock: {},
+              lineageId: 'lineage-1',
+              sourceGroupId: null,
+              counterpartGroupId: null,
+              createdAt: '2026-02-01T12:00:00Z',
+            },
+          ],
+          groupCursors: { [groupId]: 21 },
+          snapshots: [],
+          hasMore: false,
+        })),
+      }),
+      () => true,
+    )
+
+    await engine.pull()
+
+    expect(await getCursor(groupId)).toBe(21)
+  })
+
+  it('retries a rejected operation the user fixed', async () => {
+    const engine = new SyncEngine(fakeApi(), () => false)
+    const operation = await engine.enqueue({
+      entityType: 'Expense',
+      entityId: 'expense-1',
+      operation: 'Create',
+      groupId,
+      payload: {},
+    })
+    await db.outbox.update(operation.operationId, { status: 'rejected', lastError: 'bad' })
+
+    await engine.retry(operation.operationId)
+
+    const reloaded = await db.outbox.get(operation.operationId)
+    expect(reloaded?.status).toBe('pending')
+    expect(reloaded?.lastError).toBeNull()
+  })
+
+  it('ticks from the newest queued clock for an entity, not the stored one', async () => {
+    const engine = new SyncEngine(fakeApi(), () => false)
+    await seedExpense('expense-1', false)
+
+    const first = await engine.enqueue({
+      entityType: 'Expense',
+      entityId: 'expense-1',
+      operation: 'Update',
+      groupId,
+      payload: {},
+    })
+    const second = await engine.enqueue({
+      entityType: 'Expense',
+      entityId: 'expense-1',
+      operation: 'Update',
+      groupId,
+      payload: {},
+    })
+
+    const device = Object.keys(second.vectorClock).find((key) => key !== 'device-a')!
+    expect(second.vectorClock[device]).toBe(first.vectorClock[device] + 1)
+  })
+
+  it('ticks from a settlement clock when that is what the entity is', async () => {
+    const engine = new SyncEngine(fakeApi(), () => false)
+    await db.settlements.put({
+      id: 'settlement-1',
+      groupId,
+      fromMemberId: 'a',
+      toMemberId: 'b',
+      amount: 10,
+      currency: 'CAD',
+      amountInBaseCurrency: 10,
+      settledAt: '2026-01-01T00:00:00Z',
+      isDeleted: false,
+      vectorClock: { 'device-z': 4 },
+      serverSeq: 1,
+      pending: false,
+    })
+
+    const operation = await engine.enqueue({
+      entityType: 'Settlement',
+      entityId: 'settlement-1',
+      operation: 'Update',
+      groupId,
+      payload: {},
+    })
+
+    expect(operation.vectorClock['device-z']).toBe(4)
+  })
+
+  it('ticks from a comment clock when that is what the entity is', async () => {
+    const engine = new SyncEngine(fakeApi(), () => false)
+    await db.comments.put({
+      id: 'comment-1',
+      expenseId: 'expense-1',
+      groupId,
+      authorMemberId: 'a',
+      parentCommentId: null,
+      body: 'Hi',
+      createdAt: '2026-01-01T00:00:00Z',
+      isDeleted: false,
+      vectorClock: { 'device-y': 7 },
+      pending: false,
+    })
+
+    const operation = await engine.enqueue({
+      entityType: 'ExpenseComment',
+      entityId: 'comment-1',
+      operation: 'Update',
+      groupId,
+      payload: {},
+    })
+
+    expect(operation.vectorClock['device-y']).toBe(7)
+  })
+})

@@ -1,0 +1,184 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import AppShell from '@/components/layout/AppShell.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useExpensesStore } from '@/stores/expenses'
+import { ApiClient } from '@/api/client'
+
+const auth = useAuthStore()
+const expenses = useExpensesStore()
+const router = useRouter()
+
+const displayName = ref(auth.user?.displayName ?? '')
+const defaultCurrency = ref(auth.user?.defaultCurrency ?? 'CAD')
+const message = ref<string | null>(null)
+const error = ref<string | null>(null)
+const confirmingDelete = ref(false)
+
+const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
+
+const api = new ApiClient({
+  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  getAccessToken: () => auth.accessToken,
+  getDeviceId: () => null,
+  refreshAccessToken: () => auth.refresh(),
+  onUnauthorized: () => void auth.signOut(),
+})
+
+const isLight = computed(() => auth.theme === 'light')
+
+async function save(): Promise<void> {
+  error.value = null
+  message.value = null
+
+  try {
+    await auth.updateProfile({
+      displayName: displayName.value,
+      defaultCurrency: defaultCurrency.value,
+    })
+    message.value = 'Saved.'
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not save your profile.'
+  }
+}
+
+async function exportData(): Promise<void> {
+  error.value = null
+
+  try {
+    const blob = await api.blob('/auth/me/export')
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `split-everything-export-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not export your data.'
+  }
+}
+
+async function signOut(): Promise<void> {
+  await auth.signOut()
+  await router.replace({ name: 'sign-in' })
+}
+
+async function deleteAccount(): Promise<void> {
+  error.value = null
+
+  try {
+    await auth.deleteAccount()
+    await router.replace({ name: 'sign-in' })
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not delete your account.'
+  }
+}
+</script>
+
+<template>
+  <AppShell
+    title="Profile"
+    :subtitle="auth.user?.email"
+    :pending-count="expenses.pendingCount"
+    :rejected-count="expenses.rejectedCount"
+    :is-syncing="expenses.isSyncing"
+  >
+    <form class="surface-card mb-4 flex flex-col gap-4 p-4" @submit.prevent="save">
+      <label class="flex flex-col gap-1">
+        <span class="text-sm text-[var(--text-muted)]">Display name</span>
+        <input
+          v-model="displayName"
+          type="text"
+          maxlength="120"
+          class="tap-target rounded-lg border bg-[var(--surface)] px-3"
+          style="border-color: var(--border)"
+        />
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-sm text-[var(--text-muted)]">
+          Your currency, used for totals across groups
+        </span>
+        <select
+          v-model="defaultCurrency"
+          class="tap-target rounded-lg border bg-[var(--surface)] px-3"
+          style="border-color: var(--border)"
+        >
+          <option v-for="code in currencies" :key="code" :value="code">{{ code }}</option>
+        </select>
+      </label>
+
+      <button type="submit" class="tap-target rounded-lg bg-brand-600 text-sm font-medium text-white">
+        Save
+      </button>
+
+      <p v-if="message" class="text-sm text-owed" role="status">{{ message }}</p>
+    </form>
+
+    <section class="surface-card mb-4 flex items-center justify-between p-4">
+      <span class="text-sm">Light mode</span>
+      <button
+        type="button"
+        class="tap-target rounded-full border px-3 text-sm"
+        style="border-color: var(--border)"
+        :aria-pressed="isLight"
+        @click="auth.setTheme(isLight ? 'dark' : 'light')"
+      >
+        {{ isLight ? 'On' : 'Off' }}
+      </button>
+    </section>
+
+    <section class="surface-card mb-4 flex flex-col gap-3 p-4">
+      <RouterLink :to="{ name: 'import' }" class="tap-target flex items-center text-sm">
+        Import a Settle Up export or a statement
+      </RouterLink>
+      <RouterLink :to="{ name: 'conflicts' }" class="tap-target flex items-center text-sm">
+        Changes needing attention
+      </RouterLink>
+    </section>
+
+    <section class="surface-card flex flex-col gap-3 p-4">
+      <button type="button" class="tap-target text-left text-sm" @click="exportData">
+        Download all my data
+      </button>
+
+      <button type="button" class="tap-target text-left text-sm" @click="signOut">Sign out</button>
+
+      <button
+        v-if="!confirmingDelete"
+        type="button"
+        class="tap-target text-left text-sm text-owing"
+        @click="confirmingDelete = true"
+      >
+        Delete my account
+      </button>
+
+      <div v-else class="flex flex-col gap-2">
+        <p class="text-sm text-[var(--text-muted)]">
+          Your name stays on past expenses so other people's balances remain correct, but your
+          account and sign-in are removed. This cannot be undone.
+        </p>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="tap-target flex-1 rounded-lg border text-sm"
+            style="border-color: var(--border)"
+            @click="confirmingDelete = false"
+          >
+            Keep my account
+          </button>
+          <button
+            type="button"
+            class="tap-target flex-1 rounded-lg bg-owing text-sm font-medium text-white"
+            @click="deleteAccount"
+          >
+            Delete it
+          </button>
+        </div>
+      </div>
+
+      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
+    </section>
+  </AppShell>
+</template>

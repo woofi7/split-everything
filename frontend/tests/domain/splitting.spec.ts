@@ -243,3 +243,48 @@ describe('itemized splitting', () => {
     expect(Number(shares.reduce((sum, s) => sum + s.amount, 0).toFixed(2))).toBe(71.11)
   })
 })
+
+describe('residue reconciliation', () => {
+  it('puts a rounding residue on the largest share', () => {
+    // Exact amounts that each round cleanly but leave a cent against the total.
+    const shares = calculateSplit(100, 'CAD', 'ExactAmount', [
+      { memberId: alice, value: 33.334 },
+      { memberId: bob, value: 33.333 },
+      { memberId: carol, value: 33.333 },
+    ])
+
+    expect(shares.reduce((sum, s) => sum + s.amount, 0)).toBe(100)
+  })
+
+  it('breaks a residue tie on member id, so two devices agree', () => {
+    const first = calculateSplit(100, 'CAD', 'ExactAmount', [
+      { memberId: alice, value: 50.001 },
+      { memberId: bob, value: 50.001 },
+    ])
+    const second = calculateSplit(100, 'CAD', 'ExactAmount', [
+      { memberId: bob, value: 50.001 },
+      { memberId: alice, value: 50.001 },
+    ])
+
+    const normalise = (shares: ReturnType<typeof calculateSplit>) =>
+      Object.fromEntries(shares.map((s) => [s.memberId, s.amount]))
+
+    expect(normalise(first)).toEqual(normalise(second))
+    expect(first.reduce((sum, s) => sum + s.amount, 0)).toBe(100)
+  })
+
+  it('handles a residue against negative shares', () => {
+    const shares = calculateSplit(-100, 'CAD', 'ExactAmount', [
+      { memberId: alice, value: -50.001 },
+      { memberId: bob, value: -49.999 },
+    ])
+
+    expect(shares.reduce((sum, s) => sum + s.amount, 0)).toBe(-100)
+  })
+
+  it('rejects an unknown split type', () => {
+    expect(() =>
+      calculateSplit(10, 'CAD', 'Nonsense' as never, members(alice)),
+    ).toThrow(/Unknown split type/)
+  })
+})
