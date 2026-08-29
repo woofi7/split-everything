@@ -128,19 +128,18 @@ describe('a local write syncs itself', () => {
 
   it('does not make the caller wait for the network', async () => {
     const store = storeWith()
-    let pushed = false
     api = fakeSyncApi()
-    api.push.mockImplementation(async () => {
-      pushed = true
-      return { accepted: [], conflicts: [], rejected: [], groupCursors: {} }
-    })
+
+    // A push that never answers. If add() waited on it, this test would hang.
+    api.push.mockImplementation(() => new Promise(() => {}))
     store.attachSync(new SyncEngine(api, () => true))
 
-    // add() resolves on the local write; the push is still to come.
     const expense = await store.add(draft)
 
+    // Written, on screen, and still marked unsent, with the push outstanding.
     expect(expense.pending).toBe(true)
-    expect(pushed).toBe(false)
+    expect(store.forGroup(groupId)).toHaveLength(1)
+    expect(await db.outbox.count()).toBe(1)
   })
 
   it('leaves the change queued when the push fails, without throwing', async () => {

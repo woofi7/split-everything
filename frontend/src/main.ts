@@ -7,7 +7,7 @@ import { setApiClient } from './api/provider'
 import { apiBaseUrl } from './api/config'
 import { SyncEngine } from './offline/syncEngine'
 import { HttpSyncApi } from './api/syncApi'
-import { getDeviceId } from './offline/db'
+import { deviceIdNow, getDeviceId } from './offline/db'
 import { useAuthStore } from './stores/auth'
 import { useGroupsStore } from './stores/groups'
 import { useExpensesStore } from './stores/expenses'
@@ -21,14 +21,14 @@ async function bootstrap(): Promise<void> {
   const auth = useAuthStore()
   auth.restore()
 
-  // Resolved once at start, because it keys every vector clock and must be stable
-  // for the life of the install.
-  const deviceId = await getDeviceId()
+  // Resolved at start because it keys every vector clock. Read live rather than
+  // captured, since signing in as a different account mints a new one.
+  await getDeviceId()
 
   const api = new ApiClient({
     baseUrl: apiBaseUrl(),
     getAccessToken: () => auth.accessToken,
-    getDeviceId: () => deviceId,
+    getDeviceId: () => deviceIdNow(),
     refreshAccessToken: () => auth.refresh(),
     onUnauthorized: () => {
       void auth.signOut()
