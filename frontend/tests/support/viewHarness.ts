@@ -231,6 +231,8 @@ export interface MountViewOptions {
   conflicts?: LocalConflict[]
   outbox?: OutboxOperation[]
   signedIn?: boolean
+  /** Whose device this is, as restore() would have set it before any view mounts. */
+  rememberedAccount?: { email: string; displayName: string; avatarUrl: string | null }
   online?: boolean
 }
 
@@ -277,6 +279,7 @@ export async function mountView(
       refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
     } as never
   }
+  if (options.rememberedAccount) auth.rememberedAccount = options.rememberedAccount
   auth.attachApi(api as never)
 
   const groupsStore = useGroupsStore()

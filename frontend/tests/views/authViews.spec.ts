@@ -37,19 +37,108 @@ describe('SignInView', () => {
     let callback: ((response: { credential?: string }) => void) | undefined
     const renderButton = vi.fn()
 
+    let options: Record<string, unknown> | undefined
+
     ;(window as unknown as { google: unknown }).google = {
       accounts: {
         id: {
-          initialize: vi.fn((options: { callback: (r: { credential?: string }) => void }) => {
-            callback = options.callback
+          initialize: vi.fn((given: { callback: (r: { credential?: string }) => void }) => {
+            options = given as unknown as Record<string, unknown>
+            callback = given.callback
           }),
           renderButton,
         },
       },
     }
 
-    return { renderButton, fire: (credential) => callback?.({ credential }) }
+    return {
+      renderButton,
+      fire: (credential) => callback?.({ credential }),
+      initializeOptions: () => options,
+    }
   }
+
+  it('asks for the account this device belongs to, by name', async () => {
+    const { wrapper } = await mountView(SignInView, {
+      signedIn: false,
+      rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
+    })
+
+    // The device already knows whose it is. Starting from a blank form asks a
+    // question it has the answer to.
+    const text = textOf(wrapper)
+    expect(text).toContain('Alice')
+    expect(text).toContain('alice@example.com')
+  })
+
+  it('offers to continue as the remembered account', async () => {
+    const { wrapper, auth, api } = await mountView(SignInView, {
+      signedIn: false,
+      api: fakeApi({
+        '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true }),
+        '/auth/dev': () => ({
+          user: {
+            id: 'user-1',
+            email: 'alice@example.com',
+            displayName: 'Alice',
+            avatarUrl: null,
+            defaultCurrency: 'CAD',
+            prefersLightTheme: false,
+          },
+          tokens: {
+            accessToken: 'a',
+            accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+            refreshToken: 'r',
+            refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+          },
+          isNewUser: false,
+          autoJoinedGroupIds: [],
+        }),
+      }),
+      rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
+    })
+
+    await wrapper.find('[data-testid="continue-as"]').trigger('click')
+    await settle()
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/auth/dev',
+      expect.objectContaining({ email: 'alice@example.com' }),
+    )
+    expect(replace).toHaveBeenCalled()
+  })
+
+  it('can hand the device to someone else', async () => {
+    const { wrapper, auth } = await mountView(SignInView, {
+      signedIn: false,
+      rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
+    })
+
+    await wrapper.find('[data-testid="forget-device"]').trigger('click')
+    await settle(1)
+
+    expect(auth.rememberedAccount).toBeNull()
+    expect(textOf(wrapper)).not.toContain('alice@example.com')
+  })
+
+  it('starts from nobody when the device has never been used', async () => {
+    const { wrapper } = await mountView(SignInView, { signedIn: false })
+
+    expect(wrapper.find('[data-testid="continue-as"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="forget-device"]').exists()).toBe(false)
+  })
+
+  it('tells Google which account to offer', async () => {
+    const google = withGoogle()
+    await mountView(SignInView, {
+      signedIn: false,
+      rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
+    })
+
+    // So the chooser opens on the right account rather than every account signed
+    // into the browser.
+    expect(google.initializeOptions()?.login_hint).toBe('alice@example.com')
+  })
 
   it('explains what the app is', async () => {
     const { wrapper } = await mountView(SignInView, { signedIn: false })
@@ -115,7 +204,7 @@ describe('SignInView', () => {
     await settle()
 
     expect(auth.isSignedIn).toBe(true)
-    expect(replace).toHaveBeenCalledWith('/groups')
+    expect(replace).toHaveBeenCalledWith('/dashboard')
   })
 
   it('returns to where the visitor was headed', async () => {
@@ -167,7 +256,7 @@ describe('SignInView', () => {
 
     // An open redirect would let a crafted link bounce someone off-site with a
     // fresh session in hand.
-    expect(replace).toHaveBeenCalledWith('/groups')
+    expect(replace).toHaveBeenCalledWith('/dashboard')
   })
 
   it('reports a refused sign-in', async () => {
@@ -254,7 +343,7 @@ describe('SignInView', () => {
       expect.objectContaining({ email: 'alice@example.com' }),
     )
     expect(auth.isSignedIn).toBe(true)
-    expect(replace).toHaveBeenCalledWith('/groups')
+    expect(replace).toHaveBeenCalledWith('/dashboard')
   })
 
   it('keeps the development submit disabled without an address', async () => {
@@ -289,7 +378,7 @@ describe('SignInView', () => {
   it('sends an already signed-in visitor straight on', async () => {
     await mountView(SignInView, { signedIn: true })
 
-    expect(replace).toHaveBeenCalledWith('/groups')
+    expect(replace).toHaveBeenCalledWith('/dashboard')
   })
 })
 

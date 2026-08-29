@@ -41,6 +41,11 @@ async function bootstrap(): Promise<void> {
   auth.attachApi(api)
   useGroupsStore().attachApi(api)
 
+  // Before the router runs, so the guard sees the session rather than bouncing
+  // someone to sign-in while a good session sits in the cookie the app cannot
+  // read. Costs one request, and only when nothing was stored locally.
+  await auth.resumeSession()
+
   const engine = new SyncEngine(new HttpSyncApi(api))
   const expenses = useExpensesStore()
   expenses.attachSync(engine)

@@ -67,6 +67,28 @@ export class ApiClient {
     return this.request<T>('POST', path, { form })
   }
 
+  /**
+   * A request whose 401 is an answer rather than a failure.
+   *
+   * Used to ask whether this device still has a session. The ordinary path treats
+   * a 401 as the session ending: it refreshes, and failing that signs the app out
+   * and sends the person to sign-in. On the way in that is wrong twice over -
+   * there is nothing to refresh yet, and pushing to sign-in would throw away a
+   * public page someone deliberately opened, an invite link most of all.
+   */
+  async probe<T>(path: string): Promise<T | null> {
+    try {
+      const response = await this.send('POST', path, {})
+      if (!response.ok) return null
+
+      const text = await response.text()
+      return text ? (JSON.parse(text) as T) : null
+    } catch {
+      // Offline, or nothing there. Either way there is no session to report.
+      return null
+    }
+  }
+
   /** Raw response, for endpoints that return a file rather than JSON. */
   async blob(path: string, query?: Record<string, QueryValue>): Promise<Blob> {
     const response = await this.send('GET', path, { query })
