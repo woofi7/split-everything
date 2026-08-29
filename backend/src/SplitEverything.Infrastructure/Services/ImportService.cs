@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SplitEverything.Application.Abstractions;
 using SplitEverything.Application.Common;
 using SplitEverything.Application.Contracts.Expenses;
+using SplitEverything.Application.Contracts.Groups;
 using SplitEverything.Application.Contracts.Import;
 using SplitEverything.Application.Services;
 using SplitEverything.Domain.Algorithms;
@@ -27,7 +28,8 @@ public sealed class ImportService(
     ISyncWriter writer,
     IActivityService activity,
     ICurrencyConverter currency,
-    IClock clock) : IImportService
+    IClock clock,
+    IGroupService groups) : IImportService
 {
     private static readonly Dictionary<string, string[]> HeaderAliases = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -37,7 +39,9 @@ public sealed class ImportService(
         ["currency"] = ["currency", "waehrung", "wahrung", "devise", "moneda", "ccy"],
         ["category"] = ["category", "kategorie", "categorie", "categoria", "type"],
         ["paidBy"] = ["who paid", "paid by", "payer", "bezahlt von", "paye par", "pagado por"],
-        ["participants"] = ["for whom", "participants", "split with", "fuer wen", "fur wen", "pour qui", "beneficiaries"]
+        ["participants"] = ["for whom", "participants", "split with", "fuer wen", "fur wen", "pour qui", "beneficiaries"],
+        ["splitAmounts"] = ["split amounts", "split amount", "shares", "montants"],
+        ["type"] = ["type", "kind", "art"]
     };
 
     // ---- analysis --------------------------------------------------------
@@ -85,14 +89,22 @@ public sealed class ImportService(
     public async Task<CsvPreviewResult> PreviewCsvAsync(
         Guid userId, Stream csv, CsvPreviewRequest request, CancellationToken ct = default)
     {
-        await GroupAccess.RequireMemberAsync(db, userId, request.GroupId, ct);
+        if (request.GroupId is { } previewGroupId)
+            await GroupAccess.RequireMemberAsync(db, userId, previewGroupId, ct);
 
         var table = SettleUpCsvReader.Read(csv);
-        var members = await LoadMembersAsync(request.GroupId, ct);
+
+        // No group means nothing to match names against and no history to compare,
+        // so every name comes back unmapped and nothing is a duplicate.
+        var members = request.GroupId is { } forMembers
+            ? await LoadMembersAsync(forMembers, ct)
+            : new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
         var parsed = ParseRows(table, request.Mapping, request.MemberNameMapping, members, request.FallbackCurrency);
 
-        var fingerprints = parsed.Select(r => r.Fingerprint).ToList();
-        var duplicates = await FindDuplicatesAsync(userId, fingerprints, request.GroupId, ct);
+        var duplicates = request.GroupId is { } forDuplicates
+            ? await FindDuplicatesAsync(userId, parsed.Select(r => r.Fingerprint).ToList(), forDuplicates, ct)
+            : [];
 
         var rows = parsed
             .Select(r => duplicates.TryGetValue(r.Fingerprint, out var match)
@@ -120,12 +132,20 @@ public sealed class ImportService(
     public async Task<ImportCommitResult> CommitCsvAsync(
         Guid userId, Stream csv, CsvCommitRequest request, CancellationToken ct = default)
     {
-        var actor = await GroupAccess.RequireMemberAsync(db, userId, request.GroupId, ct);
-        var group = await GroupAccess.RequireGroupAsync(db, request.GroupId, ct);
+        // Read the file before anything is created. A file that cannot be read must
+        // not leave an empty group behind, which would be a worse outcome than the
+        // failure itself.
+        var table = SettleUpCsvReader.Read(csv);
+        if (table.Rows.Count == 0)
+            throw new ValidationException("That export has a header row but no expenses.");
+
+        var groupId = request.GroupId ?? await CreateGroupForImportAsync(userId, request, ct);
+
+        var actor = await GroupAccess.RequireMemberAsync(db, userId, groupId, ct);
+        var group = await GroupAccess.RequireGroupAsync(db, groupId, ct);
         GroupAccess.RequireWritable(group);
 
-        var table = SettleUpCsvReader.Read(csv);
-        var members = await LoadMembersAsync(request.GroupId, ct);
+        var members = await LoadMembersAsync(groupId, ct);
         var nameMapping = new Dictionary<string, Guid?>(request.MemberNameMapping, StringComparer.OrdinalIgnoreCase);
         var createdMemberIds = new List<Guid>();
         var warnings = new List<string>();
@@ -146,7 +166,7 @@ public sealed class ImportService(
             {
                 var member = new GroupMember
                 {
-                    GroupId = request.GroupId,
+                    GroupId = groupId,
                     DisplayName = name,
                     Role = GroupRole.Member,
                     Status = MembershipStatus.Active,
@@ -157,7 +177,7 @@ public sealed class ImportService(
                 db.GroupMembers.Add(member);
                 await db.SaveChangesAsync(ct);
 
-                await writer.RecordAsync(member, SyncEntityType.GroupMember, request.GroupId,
+                await writer.RecordAsync(member, SyncEntityType.GroupMember, groupId,
                     SyncOperation.Create, deviceId, userId, GroupService.MemberPayload(member), ct: ct);
 
                 members[name] = member.Id;
@@ -172,13 +192,13 @@ public sealed class ImportService(
         }
 
         var duplicates = request.SkipDuplicates
-            ? await FindDuplicatesAsync(userId, parsed.Select(r => r.Fingerprint).ToList(), request.GroupId, ct)
+            ? await FindDuplicatesAsync(userId, parsed.Select(r => r.Fingerprint).ToList(), groupId, ct)
             : [];
 
         var skipRows = request.SkipRowNumbers.ToHashSet();
         var batch = new ImportBatch
         {
-            GroupId = request.GroupId,
+            GroupId = groupId,
             ImportedByUserId = userId,
             Source = "settleup-csv",
             SourceLabel = request.SourceLabel,
@@ -188,6 +208,7 @@ public sealed class ImportService(
         await db.SaveChangesAsync(ct);
 
         var created = 0;
+        var createdSettlements = 0;
         var skipped = 0;
         var seenFingerprints = new HashSet<string>();
 
@@ -216,12 +237,61 @@ public sealed class ImportService(
                 ? row.ParticipantMemberIds
                 : [row.PaidByMemberId!.Value];
 
-            var shares = SplitCalculator.Calculate(row.Amount!.Value, rowCurrency, SplitType.Equal,
-                participants.Select(id => new SplitInput(id, null)).ToList());
+            // A transfer is one person paying another down, not money spent. Booked
+            // as an expense it would count once as spending and again as a share
+            // owed, moving both balances the wrong way.
+            if (row.IsSettlement)
+            {
+                var payee = participants.FirstOrDefault(id => id != row.PaidByMemberId!.Value);
+                if (payee == Guid.Empty)
+                {
+                    skipped++;
+                    warnings.Add($"Row {row.RowNumber}: a transfer needs someone to pay.");
+                    continue;
+                }
+
+                var settlement = new Settlement
+                {
+                    GroupId = groupId,
+                    FromMemberId = row.PaidByMemberId!.Value,
+                    ToMemberId = payee,
+                    Amount = row.Amount!.Value,
+                    Currency = rowCurrency,
+                    AmountInBaseCurrency = conversion.Amount,
+                    SettledAt = row.SpentAt!.Value,
+                    Note = row.Description,
+                    CreatedAt = clock.UtcNow,
+                    UpdatedAt = clock.UtcNow
+                };
+                db.Settlements.Add(settlement);
+
+                await writer.RecordAsync(settlement, SyncEntityType.Settlement, groupId,
+                    SyncOperation.Create, deviceId, userId, SettlementService.SettlementPayload(settlement), ct: ct);
+
+                createdSettlements++;
+                continue;
+            }
+
+            // The export's own per-person amounts, used as weights rather than as
+            // final figures. An export can disagree with itself by a cent, and this
+            // one does: 53.99 split "27;27" adds up to 54.00. Weighting keeps the
+            // ratio the export intended while the shares still sum to the total,
+            // which the rest of the app requires and the sync path enforces.
+            var exact = row.SplitAmounts;
+            var useExact = exact is { Count: > 0 }
+                           && exact.Count == participants.Count
+                           && exact.All(a => a >= 0m)
+                           && exact.Sum() > 0m;
+
+            var shares = useExact
+                ? SplitCalculator.Calculate(row.Amount!.Value, rowCurrency, SplitType.Shares,
+                    participants.Select((id, index) => new SplitInput(id, exact![index])).ToList())
+                : SplitCalculator.Calculate(row.Amount!.Value, rowCurrency, SplitType.Equal,
+                    participants.Select(id => new SplitInput(id, null)).ToList());
 
             var expense = new Expense
             {
-                GroupId = request.GroupId,
+                GroupId = groupId,
                 PaidByMemberId = row.PaidByMemberId!.Value,
                 Description = row.Description,
                 Amount = row.Amount!.Value,
@@ -246,7 +316,7 @@ public sealed class ImportService(
                 db.ExpenseSplits.Add(new ExpenseSplit
                 {
                     ExpenseId = expense.Id,
-                    GroupId = request.GroupId,
+                    GroupId = groupId,
                     MemberId = share.MemberId,
                     Amount = share.Amount,
                     AmountInBaseCurrency = CurrencyPrecision.Round(
@@ -256,7 +326,7 @@ public sealed class ImportService(
                 });
             }
 
-            await writer.RecordAsync(expense, SyncEntityType.Expense, request.GroupId,
+            await writer.RecordAsync(expense, SyncEntityType.Expense, groupId,
                 SyncOperation.Create, deviceId, userId, ExpenseService.ExpensePayload(expense), ct: ct);
 
             created++;
@@ -265,15 +335,36 @@ public sealed class ImportService(
         batch.ExpenseCount = created;
         batch.SkippedCount = skipped;
 
-        await activity.RecordAsync(request.GroupId, ActivityKind.ImportCommitted, userId, actor.Id,
-            SyncEntityType.Group, request.GroupId,
+        await activity.RecordAsync(groupId, ActivityKind.ImportCommitted, userId, actor.Id,
+            SyncEntityType.Group, groupId,
             $"{actor.DisplayName} imported {created} expenses from a Settle Up export",
             new { created, skipped, request.SourceLabel }, ct);
 
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
 
-        return new ImportCommitResult(batch.Id, request.GroupId, created, skipped, createdMemberIds, warnings);
+        return new ImportCommitResult(batch.Id, groupId, created, createdSettlements, skipped, createdMemberIds, warnings);
+    }
+
+    /// <summary>
+    /// Creates the group an import is going into, when the wizard did not name an
+    /// existing one. Goes through the group service rather than inserting a row, so
+    /// the owner membership, vector clock, sync log entry and activity all happen
+    /// the way they do for a group made by hand.
+    /// </summary>
+    private async Task<Guid> CreateGroupForImportAsync(
+        Guid userId, CsvCommitRequest request, CancellationToken ct)
+    {
+        var name = request.NewGroupName?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ValidationException("Name the group this import should create.");
+
+        var created = await groups.CreateAsync(userId, new CreateGroupRequest(
+            name,
+            request.FallbackCurrency?.Trim().ToUpperInvariant() ?? "CAD",
+            null, null, null, []), ct);
+
+        return created.Id;
     }
 
     public async Task<ImportCommitResult> CommitStatementAsync(
@@ -416,7 +507,7 @@ public sealed class ImportService(
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
 
-        return new ImportCommitResult(batch.Id, groupIds[0], created, skipped, [], warnings);
+        return new ImportCommitResult(batch.Id, groupIds[0], created, 0, skipped, [], warnings);
     }
 
     public async Task<DuplicateCheckResult> CheckDuplicatesAsync(
@@ -680,7 +771,10 @@ public sealed class ImportService(
             }
             else
             {
-                var participantColumn = mapping.PaidByColumn is null ? 6 : mapping.PaidByColumn.Value + 1;
+                // The mapped column when there is one. The old fallback guessed the
+                // column beside the payer, which in a real export is the amount.
+                var participantColumn = mapping.ParticipantsColumn
+                                        ?? (mapping.PaidByColumn is null ? 6 : mapping.PaidByColumn.Value + 1);
                 participantNames.AddRange(CsvValueParser.ParseNameList(Cell(raw, participantColumn)));
             }
 
@@ -695,20 +789,50 @@ public sealed class ImportService(
                 else participantIds.Add(resolved.Value);
             }
 
+            // Paired positionally with the participants, which is how the export
+            // writes them. A count that does not line up is not trustworthy, so the
+            // split is computed instead.
+            var splitAmounts = mapping.SplitAmountsColumn is { } splitColumn
+                ? CsvValueParser.ParseAmountList(Cell(raw, splitColumn), mapping.DecimalSeparator)
+                : [];
+            if (splitAmounts.Count != participantNames.Count) splitAmounts = [];
+
+            var isSettlement = mapping.TypeColumn is { } typeColumn
+                               && IsTransfer(Cell(raw, typeColumn));
+
             var fingerprint = ExpenseFingerprint.Compute(
                 spentAt ?? DateTimeOffset.MinValue,
                 amount ?? 0m,
                 rowCurrency ?? "XXX",
                 description);
 
+            var categoryName = mapping.CategoryColumn is { } categoryColumn
+                ? Cell(raw, categoryColumn)?.Trim()
+                : null;
+            // A cell holding only spaces is not a category.
+            if (string.IsNullOrWhiteSpace(categoryName)) categoryName = null;
+
             rows.Add(new ParsedExpenseRow(
-                i + 1, spentAt, description, amount, rowCurrency,
-                mapping.CategoryColumn is { } categoryColumn ? Cell(raw, categoryColumn)?.Trim() : null,
+                i + 1, spentAt, description, amount, rowCurrency, categoryName,
                 payerName, payerId, participantNames, participantIds,
-                fingerprint, false, null, problems));
+                fingerprint, false, null, problems, splitAmounts, isSettlement));
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// Whether a Type cell marks a settlement. Settle Up calls it a transfer; other
+    /// wordings are accepted because the column is free text in practice.
+    /// </summary>
+    private static bool IsTransfer(string? value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return false;
+
+        return trimmed.Equals("transfer", StringComparison.OrdinalIgnoreCase)
+               || trimmed.Equals("settlement", StringComparison.OrdinalIgnoreCase)
+               || trimmed.Equals("payment", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<Dictionary<string, DuplicateMatchDto>> FindDuplicatesAsync(

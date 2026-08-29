@@ -20,7 +20,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
     public override async Task InitializeAsync()
     {
         await base.InitializeAsync();
-        Imports = new ImportService(Db, Writer, Activity, Currency, Clock);
+        Imports = new ImportService(Db, Writer, Activity, Currency, Clock, Groups);
     }
 
     private static Stream Csv(string fileName)
@@ -254,7 +254,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob", "Carol");
 
         var result = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group),
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group),
             [], false, true, "CAD", "export.csv"));
 
         result.CreatedExpenses.ShouldBe(4);
@@ -273,7 +273,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var members = NameMap(group);
 
         await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), members, [], false, true, "CAD", null));
+            Guid.NewGuid(), group.Id, null, BasicMapping(), members, [], false, true, "CAD", null));
 
         var dinner = await NewContext().Expenses
             .Include(e => e.Splits)
@@ -288,7 +288,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob", "Carol");
 
         await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
 
         var balance = await Settlements.GetGroupBalanceAsync(userId, group.Id);
         balance.Balances.Sum(b => b.Net).ShouldBe(0m);
@@ -300,7 +300,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob");
 
         var result = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group),
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group),
             [], CreateMissingMembers: true, true, "CAD", null));
 
         result.CreatedMemberIds.ShouldNotBeEmpty();
@@ -314,7 +314,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob");
 
         var result = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group),
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group),
             [], CreateMissingMembers: false, true, "CAD", null));
 
         result.CreatedExpenses.ShouldBe(2);
@@ -328,7 +328,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob", "Carol");
 
         var result = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group),
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group),
             SkipRowNumbers: [1, 2], false, true, "CAD", null));
 
         result.CreatedExpenses.ShouldBe(2);
@@ -339,7 +339,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
     {
         var (userId, group) = await SetupAsync("Bob", "Carol");
         var request = new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group), [], false, true, "CAD", null);
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group), [], false, true, "CAD", null);
 
         await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), request);
         var second = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), request);
@@ -354,10 +354,10 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob", "Carol");
         var members = NameMap(group);
         await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), members, [], false, true, "CAD", null));
+            Guid.NewGuid(), group.Id, null, BasicMapping(), members, [], false, true, "CAD", null));
 
         var second = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), members, [], false,
+            Guid.NewGuid(), group.Id, null, BasicMapping(), members, [], false,
             SkipDuplicates: false, "CAD", null));
 
         second.CreatedExpenses.ShouldBe(4);
@@ -369,7 +369,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob", "Carol");
 
         var result = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group), [], false, true, "CAD", "export.csv"));
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group), [], false, true, "CAD", "export.csv"));
 
         var batch = await NewContext().ImportBatches.SingleAsync(b => b.Id == result.ImportBatchId);
         batch.Source.ShouldBe("settleup-csv");
@@ -382,7 +382,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
     {
         var (userId, group) = await SetupAsync("Bob", "Carol");
         var result = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
 
         await Imports.RollbackBatchAsync(userId, result.ImportBatchId);
 
@@ -397,7 +397,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
     {
         var (userId, group) = await SetupAsync("Bob", "Carol");
         var result = await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
         var stranger = await TestData.SeedUserAsync(Db, "Stranger");
 
         await Should.ThrowAsync<ForbiddenException>(
@@ -410,7 +410,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob", "Carol");
 
         await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
 
         (await NewContext().ActivityLog.AnyAsync(a => a.Kind == ActivityKind.ImportCommitted)).ShouldBeTrue();
     }
@@ -421,7 +421,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob", "Carol");
 
         await Imports.CommitCsvAsync(userId, Csv("settleup-basic.csv"), new CsvCommitRequest(
-            Guid.NewGuid(), group.Id, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
+            Guid.NewGuid(), group.Id, null, BasicMapping(), NameMap(group), [], false, true, "CAD", null));
 
         (await NewContext().SyncLog.CountAsync(e =>
             e.GroupId == group.Id && e.EntityType == SyncEntityType.Expense)).ShouldBe(4);

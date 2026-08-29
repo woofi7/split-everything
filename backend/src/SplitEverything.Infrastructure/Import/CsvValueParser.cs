@@ -78,6 +78,31 @@ public static class CsvValueParser
         return negative ? -amount : amount;
     }
 
+    /// <summary>
+    /// Splits a per-person amount cell such as "209.43;209.43".
+    ///
+    /// Order is meaningful: these line up with the participant names, so nothing is
+    /// deduplicated or reordered the way names are. A cell that does not parse
+    /// cleanly returns nothing, and the caller computes the split instead of
+    /// trusting half an answer.
+    /// </summary>
+    public static IReadOnlyList<decimal> ParseAmountList(string? value, string? decimalSeparator)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return [];
+
+        var parts = value.Split([';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var amounts = new List<decimal>(parts.Length);
+
+        foreach (var part in parts)
+        {
+            var parsed = ParseAmount(part, decimalSeparator);
+            if (parsed is null) return [];
+            amounts.Add(parsed.Value);
+        }
+
+        return amounts;
+    }
+
     /// <summary>Splits a participant cell such as "Alice, Bob" or "Alice; Bob".</summary>
     public static IReadOnlyList<string> ParseNameList(string? value)
     {

@@ -162,7 +162,7 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
         previewed.CommittableCount.ShouldBe(2);
 
         var commit = await PostCsvAsync("/api/import/csv/commit",
-            new CsvCommitRequest(Guid.NewGuid(), group.Id, mapping, names, [], true, true, "CAD", null));
+            new CsvCommitRequest(Guid.NewGuid(), group.Id, null, mapping, names, [], true, true, "CAD", null));
         commit.EnsureSuccessStatusCode();
         var committed = await commit.Content.ReadFromJsonAsync<ImportCommitResult>(Json);
         committed!.CreatedExpenses.ShouldBe(2);
