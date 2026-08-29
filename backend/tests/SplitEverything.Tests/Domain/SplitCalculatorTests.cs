@@ -42,6 +42,19 @@ public class SplitCalculatorTests
     }
 
     [Fact]
+    public void The_leftover_minor_unit_goes_to_the_lowest_member_id()
+    {
+        var shares = SplitCalculator.Calculate(10m, "CAD", SplitType.Equal, Members(Alice, Bob, Carol));
+
+        // Pinned deliberately: the offline client runs the same algorithm, and both
+        // sides must agree on who receives the extra cent or a synced expense would
+        // be rewritten into different amounts than the person was shown.
+        shares.Single(s => s.MemberId == Alice).Amount.ShouldBe(3.34m);
+        shares.Single(s => s.MemberId == Bob).Amount.ShouldBe(3.33m);
+        shares.Single(s => s.MemberId == Carol).Amount.ShouldBe(3.33m);
+    }
+
+    [Fact]
     public void Equal_split_across_one_member_gives_them_everything()
         => SplitCalculator.Calculate(42.42m, "CAD", SplitType.Equal, Members(Alice))
             .Single().Amount.ShouldBe(42.42m);
