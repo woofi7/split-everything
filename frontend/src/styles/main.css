@@ -1,0 +1,81 @@
+@import 'tailwindcss';
+
+/*
+ * Dark by default, as the spec asks. The palette is defined once here as tokens so
+ * a light-mode toggle only swaps values, and no component hardcodes a colour.
+ */
+@theme {
+  --font-sans: 'Inter var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --color-ink-50: #f8fafc;
+  --color-ink-200: #e2e8f0;
+  --color-ink-400: #94a3b8;
+  --color-ink-500: #64748b;
+  --color-ink-700: #334155;
+  --color-ink-800: #1e293b;
+  --color-ink-900: #0f172a;
+  --color-ink-950: #080d18;
+
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+
+  --color-owed: #34d399;
+  --color-owing: #fb7185;
+}
+
+:root {
+  color-scheme: dark;
+
+  --surface: var(--color-ink-900);
+  --surface-raised: var(--color-ink-800);
+  --surface-sunken: var(--color-ink-950);
+  --border: color-mix(in oklab, var(--color-ink-700) 70%, transparent);
+  --text: var(--color-ink-50);
+  --text-muted: var(--color-ink-400);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --surface: #ffffff;
+  --surface-raised: #f8fafc;
+  --surface-sunken: #eef2f7;
+  --border: #dbe2ea;
+  --text: var(--color-ink-900);
+  --text-muted: var(--color-ink-500);
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  /* Mobile first: the bottom nav must clear the home indicator. */
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Nothing in a list view should be able to scroll the page sideways. */
+body {
+  overflow-x: hidden;
+}
+
+@utility surface-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+@utility tap-target {
+  /* Anything tappable stays at least 44px, which is the smallest reliable
+     touch target on a phone. */
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}

@@ -174,7 +174,9 @@ export const useExpensesStore = defineStore('expenses', () => {
     const existing = await db.expenses.get(expenseId)
     if (!existing) throw new Error('That expense is not on this device.')
 
-    const group = await requireGroup(existing.groupId)
+    // Guard only: editing an expense in a group this device no longer has would
+    // leave the split unverifiable.
+    await requireGroup(existing.groupId)
 
     const description = (changes.description ?? existing.description).trim()
     if (!description) throw new Error('An expense needs a description.')

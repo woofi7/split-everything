@@ -1,7 +1,6 @@
 import {
   db,
   getAllCursors,
-  getCursor,
   getDeviceId,
   setCursor,
   type LocalComment,
@@ -123,11 +122,13 @@ const PULL_BATCH_SIZE = 500
  */
 export class SyncEngine {
   private flushing: Promise<SyncPushResult> | null = null
+  private readonly api: SyncApi
+  private readonly isOnline: () => boolean
 
-  constructor(
-    private readonly api: SyncApi,
-    private readonly isOnline: () => boolean = () => navigator.onLine,
-  ) {}
+  constructor(api: SyncApi, isOnline: () => boolean = () => navigator.onLine) {
+    this.api = api
+    this.isOnline = isOnline
+  }
 
   async enqueue(request: EnqueueRequest): Promise<OutboxOperation> {
     const deviceId = await getDeviceId()
