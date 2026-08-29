@@ -1,0 +1,123 @@
+name: split-everything
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Postgres refuses to initialise a non-empty data directory otherwise.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - internal
+
+  api:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Auth__JwtSigningKey: ${JWT_SIGNING_KEY}
+      Auth__JwtIssuer: ${PUBLIC_URL}
+      Auth__JwtAudience: ${PUBLIC_URL}
+      Auth__GoogleClientId: ${GOOGLE_CLIENT_ID}
+      Auth__AppBaseUrl: ${PUBLIC_URL}
+      Push__VapidPublicKey: ${VAPID_PUBLIC_KEY}
+      Push__VapidPrivateKey: ${VAPID_PRIVATE_KEY}
+      Push__VapidSubject: ${VAPID_SUBJECT}
+      Push__FcmProjectId: ${FCM_PROJECT_ID}
+      Push__FcmServiceAccountJson: ${FCM_SERVICE_ACCOUNT_JSON}
+      Push__ApnsKeyId: ${APNS_KEY_ID}
+      Push__ApnsTeamId: ${APNS_TEAM_ID}
+      Push__ApnsBundleId: ${APNS_BUNDLE_ID}
+      Push__ApnsPrivateKey: ${APNS_PRIVATE_KEY}
+      Email__SmtpHost: ${SMTP_HOST}
+      Email__SmtpPort: ${SMTP_PORT}
+      Email__Username: ${SMTP_USERNAME}
+      Email__Password: ${SMTP_PASSWORD}
+      Email__FromAddress: ${SMTP_FROM_ADDRESS}
+      ReceiptStorage__RootPath: /data/receipts
+    volumes:
+      - receipts:/data/receipts
+    labels:
+      - traefik.enable=true
+      # The API and the web app share one hostname, so the browser makes no
+      # cross-origin requests and the refresh cookie stays first-party.
+      - traefik.http.routers.split-api.rule=Host(`${PUBLIC_HOST}`) && (PathPrefix(`/api`) || PathPrefix(`/hubs`))
+      - traefik.http.routers.split-api.entrypoints=websecure
+      - traefik.http.routers.split-api.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.split-api.priority=20
+      - traefik.http.services.split-api.loadbalancer.server.port=8080
+      # SignalR needs sticky sessions the moment there is more than one replica.
+      - traefik.http.services.split-api.loadbalancer.sticky.cookie=true
+      - traefik.http.services.split-api.loadbalancer.sticky.cookie.name=split_affinity
+      - traefik.http.services.split-api.loadbalancer.sticky.cookie.httponly=true
+      - traefik.http.services.split-api.loadbalancer.sticky.cookie.secure=true
+    networks:
+      - internal
+      - traefik
+
+  web:
+    image: ${WEB_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      - api
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.split-web.rule=Host(`${PUBLIC_HOST}`)
+      - traefik.http.routers.split-web.entrypoints=websecure
+      - traefik.http.routers.split-web.tls.certresolver=${CERT_RESOLVER}
+      # Lower than the API router, so /api and /hubs win.
+      - traefik.http.routers.split-web.priority=10
+      - traefik.http.services.split-web.loadbalancer.server.port=8080
+      - traefik.http.routers.split-web.middlewares=split-security@docker
+      - traefik.http.middlewares.split-security.headers.stsSeconds=31536000
+      - traefik.http.middlewares.split-security.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.split-security.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.split-security.headers.browserXssFilter=true
+    networks:
+      - traefik
+
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS}
+    volumes:
+      - ./infra/backup/backup.sh:/usr/local/bin/backup.sh:ro
+      - backups:/backups
+    entrypoint: ["/bin/sh", "/usr/local/bin/backup.sh"]
+    networks:
+      - internal
+
+volumes:
+  postgres-data:
+  receipts:
+  backups:
+
+networks:
+  internal:
+  # Created by the Traefik stack; this one only joins it.
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK}

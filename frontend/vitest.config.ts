@@ -46,6 +46,9 @@ export default defineConfig({
         'src/views/GroupView.vue',
         'src/components/layout/**',
         'src/**/*.d.ts',
+        // Registration paths that only exist inside a Capacitor shell or a real
+        // service worker; the pure part, VAPID key decoding, is tested.
+        'src/native/push.ts',
       ],
       thresholds: {
         // Everything that decides anything - money, splits, clocks, balances, the
