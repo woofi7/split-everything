@@ -216,3 +216,74 @@ describe('api client', () => {
     expect(new Headers(init.headers).has('Content-Type')).toBe(false)
   })
 })
+
+describe('probing for a session', () => {
+  const jsonResponse = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+  it('returns the body when there is a session', async () => {
+    const onUnauthorized = vi.fn()
+    const refreshAccessToken = vi.fn(async () => 'fresh')
+    const fetchMock = vi.fn(async () => jsonResponse({ accessToken: 'a' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = new ApiClient({
+      baseUrl: '/api',
+      getAccessToken: () => null,
+      getDeviceId: () => 'device-a',
+      onUnauthorized,
+      refreshAccessToken,
+    })
+
+    expect(await client.probe<{ accessToken: string }>('/auth/refresh')).toEqual({
+      accessToken: 'a',
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('treats a 401 as an answer, not a failure', async () => {
+    const onUnauthorized = vi.fn()
+    const refreshAccessToken = vi.fn(async () => 'fresh')
+    const fetchMock = vi.fn(async () => jsonResponse({ title: 'Unauthorized' }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = new ApiClient({
+      baseUrl: '/api',
+      getAccessToken: () => null,
+      getDeviceId: () => 'device-a',
+      onUnauthorized,
+      refreshAccessToken,
+    })
+
+    const result = await client.probe('/auth/refresh')
+
+    // Signing the app out and pushing to sign-in on the way in would throw away a
+    // public page someone had deliberately opened, an invite link most of all.
+    expect(result).toBeNull()
+    expect(onUnauthorized).not.toHaveBeenCalled()
+    expect(refreshAccessToken).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('returns nothing when the server cannot be reached', async () => {
+    const onUnauthorized = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new Error('network down')
+    }))
+
+    const client = new ApiClient({
+      baseUrl: '/api',
+      getAccessToken: () => null,
+      getDeviceId: () => 'device-a',
+      onUnauthorized,
+    })
+
+    expect(await client.probe('/auth/refresh')).toBeNull()
+    expect(onUnauthorized).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+})

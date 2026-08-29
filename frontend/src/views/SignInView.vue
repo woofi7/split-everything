@@ -46,9 +46,33 @@ onMounted(async () => {
   mountGoogleButton()
 })
 
+/**
+ * Signs back in as the account this device belongs to.
+ *
+ * Only reachable when the development form is available, because that is the only
+ * way to sign someone in from a name alone. With Google the account is a hint on
+ * its own button: the credential still has to come from Google.
+ */
+async function continueAsRemembered(): Promise<void> {
+  const remembered = auth.rememberedAccount
+  if (!remembered) return
+
+  error.value = null
+  isSigningIn.value = true
+
+  try {
+    await auth.signInAsDeveloper(remembered.email)
+    await router.replace(redirectTarget())
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not sign in.'
+  } finally {
+    isSigningIn.value = false
+  }
+}
+
 function redirectTarget(): string {
   const redirect = route.query.redirect
-  return typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/groups'
+  return typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/dashboard'
 }
 
 /**
@@ -71,6 +95,9 @@ function mountGoogleButton(): void {
   google.accounts.id.initialize({
     client_id: clientId,
     callback: (response: { credential?: string }) => void handleCredential(response.credential),
+    // So the chooser opens on the account this device belongs to, rather than on
+    // every account signed into the browser.
+    login_hint: auth.rememberedAccount?.email,
   })
 
   if (buttonHost.value) {
@@ -128,7 +155,36 @@ async function handleCredential(credential?: string): Promise<void> {
         SE
       </div>
 
-      <div>
+      <div v-if="auth.rememberedAccount" class="w-full">
+        <h2 class="text-xl font-semibold">Welcome back</h2>
+        <p class="mt-2 text-sm text-[var(--text-muted)]">
+          This device belongs to
+          <span class="text-[var(--text)]">{{ auth.rememberedAccount.displayName }}</span>
+          ({{ auth.rememberedAccount.email }}).
+        </p>
+
+        <button
+          v-if="capabilities?.developmentSignIn"
+          type="button"
+          data-testid="continue-as"
+          class="tap-target mt-4 w-full rounded-lg bg-brand-600 text-sm font-medium text-white disabled:opacity-60"
+          :disabled="isSigningIn"
+          @click="continueAsRemembered"
+        >
+          Continue as {{ auth.rememberedAccount.displayName }}
+        </button>
+
+        <button
+          type="button"
+          data-testid="forget-device"
+          class="tap-target mt-2 w-full text-xs text-[var(--text-muted)] underline"
+          @click="auth.forgetDevice()"
+        >
+          Use a different account
+        </button>
+      </div>
+
+      <div v-else>
         <h2 class="text-xl font-semibold">Shared expenses, settled properly</h2>
         <p class="mt-2 text-sm text-[var(--text-muted)]">
           Sign in with Google to see your groups. There is no password to remember.
