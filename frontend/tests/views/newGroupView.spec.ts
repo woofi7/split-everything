@@ -12,6 +12,18 @@ vi.mock('vue-router', () => ({
 }))
 
 describe('NewGroupView', () => {
+  /**
+   * Adds someone with no account, through the field a person would use: type a
+   * name nobody matches, then take the fallback.
+   */
+  async function addByName(wrapper: { find: (s: string) => any }, name: string) {
+    await wrapper.find('input[type="search"]').setValue(name)
+    await settle(1)
+    const fallback = wrapper.find('[data-testid="add-placeholder"]')
+    if (fallback.exists()) await fallback.trigger('click')
+    await settle(1)
+  }
+
   it('creates the group and opens it', async () => {
     const api = fakeApi({ '/groups': () => testGroup() })
     const { wrapper } = await mountView(NewGroupView, { api, groups: [] })
@@ -24,6 +36,70 @@ describe('NewGroupView', () => {
       '/groups',
       expect.objectContaining({ name: 'Roommates', baseCurrency: 'CAD' }),
     )
+    expect(replace).toHaveBeenCalledWith({
+      name: 'group',
+      params: { groupId: testGroup().id },
+    })
+  })
+
+  it('adds people who already have an account when the group is created', async () => {
+    const api = fakeApi({
+      '/groups': () => testGroup(),
+      '/users/addable': () => [
+        { id: 'user-bob', displayName: 'Bob Brown', email: 'bob@example.com', avatarUrl: null },
+      ],
+    })
+    const { wrapper } = await mountView(NewGroupView, { api, groups: [] })
+
+    await wrapper.find('input[placeholder="Roommates"]').setValue('Roommates')
+    await wrapper.find('input[type="search"]').setValue('bob')
+    await settle()
+    await wrapper.find('[data-testid="candidate"]').trigger('click')
+    await settle()
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    // The group has to exist before anyone can be added to it, so this is a
+    // second call rather than part of the create.
+    expect(api.post).toHaveBeenCalledWith(
+      `/groups/${testGroup().id}/members/user`,
+      { userId: 'user-bob' },
+    )
+  })
+
+  it('asks for everyone with an account, since there is no group yet', async () => {
+    const api = fakeApi({ '/groups': () => testGroup(), '/users/addable': () => [] })
+
+    await mountView(NewGroupView, { api, groups: [] })
+    await settle()
+
+    expect(api.get).toHaveBeenCalledWith('/users/addable', undefined)
+  })
+
+  it('still opens the group when adding someone to it fails', async () => {
+    const api = fakeApi({
+      '/groups': () => testGroup(),
+      '/users/addable': () => [
+        { id: 'user-bob', displayName: 'Bob Brown', email: 'bob@example.com', avatarUrl: null },
+      ],
+    })
+    const { wrapper } = await mountView(NewGroupView, { api, groups: [] })
+
+    await wrapper.find('input[placeholder="Roommates"]').setValue('Roommates')
+    await wrapper.find('input[type="search"]').setValue('bob')
+    await settle()
+    await wrapper.find('[data-testid="candidate"]').trigger('click')
+    await settle()
+
+    // The group is already created at this point. Stranding the person on this
+    // screen would leave them unsure whether it exists.
+    api.post.mockImplementation(async (path: string) =>
+      path.endsWith('/members/user') ? Promise.reject(new Error('nope')) : testGroup(),
+    )
+
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
     expect(replace).toHaveBeenCalledWith({
       name: 'group',
       params: { groupId: testGroup().id },
@@ -44,11 +120,7 @@ describe('NewGroupView', () => {
   it('collects people by name before the group exists', async () => {
     const { wrapper } = await mountView(NewGroupView, { groups: [] })
 
-    const memberInput = wrapper.find('input[placeholder="Bob"]')
-    await memberInput.setValue('Bob')
-    const addButton = wrapper.findAll('button').find((button) => button.text() === 'Add')
-    await addButton!.trigger('click')
-    await settle(1)
+    await addByName(wrapper, 'Bob')
 
     expect(textOf(wrapper)).toContain('Bob')
   })
@@ -56,9 +128,10 @@ describe('NewGroupView', () => {
   it('adds a person on the enter key', async () => {
     const { wrapper } = await mountView(NewGroupView, { groups: [] })
 
-    const memberInput = wrapper.find('input[placeholder="Bob"]')
+    const memberInput = wrapper.find('input[type="search"]')
     await memberInput.setValue('Carol')
-    await memberInput.trigger('keydown.enter')
+    await settle(1)
+    await memberInput.trigger('keydown', { key: 'Enter' })
     await settle(1)
 
     expect(textOf(wrapper)).toContain('Carol')
@@ -67,11 +140,7 @@ describe('NewGroupView', () => {
   it('ignores a blank name', async () => {
     const { wrapper } = await mountView(NewGroupView, { groups: [] })
 
-    const memberInput = wrapper.find('input[placeholder="Bob"]')
-    await memberInput.setValue('   ')
-    const addButton = wrapper.findAll('button').find((button) => button.text() === 'Add')
-    await addButton!.trigger('click')
-    await settle(1)
+    await addByName(wrapper, '   ')
 
     expect(wrapper.findAll('[aria-label="People added so far"] li')).toHaveLength(0)
   })
@@ -79,14 +148,7 @@ describe('NewGroupView', () => {
   it('does not add the same person twice', async () => {
     const { wrapper } = await mountView(NewGroupView, { groups: [] })
 
-    const memberInput = wrapper.find('input[placeholder="Bob"]')
-    const addButton = wrapper.findAll('button').find((button) => button.text() === 'Add')
-
-    for (const name of ['Bob', 'bob']) {
-      await memberInput.setValue(name)
-      await addButton!.trigger('click')
-      await settle(1)
-    }
+    for (const name of ['Bob', 'bob']) await addByName(wrapper, name)
 
     expect(wrapper.findAll('[aria-label="People added so far"] li')).toHaveLength(1)
   })
@@ -94,11 +156,7 @@ describe('NewGroupView', () => {
   it('removes a person again', async () => {
     const { wrapper } = await mountView(NewGroupView, { groups: [] })
 
-    const memberInput = wrapper.find('input[placeholder="Bob"]')
-    await memberInput.setValue('Bob')
-    const addButton = wrapper.findAll('button').find((button) => button.text() === 'Add')
-    await addButton!.trigger('click')
-    await settle(1)
+    await addByName(wrapper, 'Bob')
 
     await wrapper.find('button[aria-label="Remove Bob"]').trigger('click')
     await settle(1)
@@ -111,10 +169,7 @@ describe('NewGroupView', () => {
     const { wrapper } = await mountView(NewGroupView, { api, groups: [] })
 
     await wrapper.find('input[placeholder="Roommates"]').setValue('Roommates')
-    const memberInput = wrapper.find('input[placeholder="Bob"]')
-    await memberInput.setValue('Bob')
-    const addButton = wrapper.findAll('button').find((button) => button.text() === 'Add')
-    await addButton!.trigger('click')
+    await addByName(wrapper, 'Bob')
     await wrapper.find('form').trigger('submit')
     await settle()
 

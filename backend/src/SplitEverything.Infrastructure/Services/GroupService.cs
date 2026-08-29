@@ -262,6 +262,85 @@ public sealed class GroupService(
             member.Role, member.Status, true, 0m);
     }
 
+    public async Task<GroupMemberDto> AddUserMemberAsync(
+        Guid userId, Guid groupId, AddUserMemberRequest request, CancellationToken ct = default)
+    {
+        var actor = await GroupAccess.RequireMemberAsync(db, userId, groupId, ct);
+        var group = await GroupAccess.RequireGroupAsync(db, groupId, ct);
+        GroupAccess.RequireWritable(group);
+
+        var invitee = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, ct)
+                      ?? throw new NotFoundException($"User {request.UserId}");
+
+        // Deliberately ignores the tombstone, the same as redeeming an invite:
+        // someone who was removed and comes back has to reclaim their original row.
+        // A second one would collide with the one-membership-per-user index and
+        // orphan whatever history still points at the first.
+        var existing = await db.GroupMembers
+            .FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == invitee.Id, ct);
+
+        if (existing is not null)
+        {
+            if (existing.Status == MembershipStatus.Active && !existing.IsDeleted)
+                return MemberDto(existing, invitee.AvatarUrl);
+
+            existing.Status = MembershipStatus.Active;
+            existing.LeftAt = null;
+            existing.IsDeleted = false;
+            existing.DeletedAt = null;
+
+            await writer.RecordAsync(existing, SyncEntityType.GroupMember, groupId,
+                SyncOperation.Update, DeviceFor(userId), userId, MemberPayload(existing), ct: ct);
+
+            await activity.RecordAsync(groupId, ActivityKind.MemberInvited, userId, actor.Id,
+                SyncEntityType.GroupMember, existing.Id,
+                $"{actor.DisplayName} added {invitee.DisplayName} back to {group.Name}", ct: ct);
+
+            await db.SaveChangesAsync(ct);
+            return MemberDto(existing, invitee.AvatarUrl);
+        }
+
+        var member = NewMember(groupId, invitee.Id, invitee.DisplayName, GroupRole.Member);
+        db.GroupMembers.Add(member);
+
+        await writer.RecordAsync(member, SyncEntityType.GroupMember, groupId, SyncOperation.Create,
+            DeviceFor(userId), userId, MemberPayload(member), ct: ct);
+
+        await activity.RecordAsync(groupId, ActivityKind.MemberInvited, userId, actor.Id,
+            SyncEntityType.GroupMember, member.Id,
+            $"{actor.DisplayName} added {invitee.DisplayName} to {group.Name}", ct: ct);
+
+        await db.SaveChangesAsync(ct);
+
+        return MemberDto(member, invitee.AvatarUrl);
+    }
+
+    public async Task<IReadOnlyList<AddableUserDto>> ListAddableUsersAsync(
+        Guid userId, Guid? groupId, CancellationToken ct = default)
+    {
+        // Membership is the gate. Without it, naming a group id would tell a
+        // stranger who is in it by omission.
+        if (groupId is { } id) await GroupAccess.RequireMemberAsync(db, userId, id, ct);
+
+        var taken = groupId is { } forGroup
+            ? await db.GroupMembers
+                .Where(m => m.GroupId == forGroup && !m.IsDeleted
+                            && m.Status == MembershipStatus.Active && m.UserId != null)
+                .Select(m => m.UserId!.Value)
+                .ToListAsync(ct)
+            : [];
+
+        return await db.Users
+            .Where(u => u.Id != userId && !taken.Contains(u.Id))
+            .OrderBy(u => u.DisplayName)
+            .Select(u => new AddableUserDto(u.Id, u.DisplayName, u.Email, u.AvatarUrl))
+            .ToListAsync(ct);
+    }
+
+    private static GroupMemberDto MemberDto(GroupMember member, string? avatarUrl)
+        => new(member.Id, member.UserId, member.DisplayName, avatarUrl,
+            member.Role, member.Status, member.UserId is null, 0m);
+
     public async Task RemoveMemberAsync(Guid userId, Guid groupId, Guid memberId, CancellationToken ct = default)
     {
         var actor = await GroupAccess.RequireAdminAsync(db, userId, groupId, ct);

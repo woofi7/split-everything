@@ -46,6 +46,17 @@ public sealed record GroupSummaryDto(
 
 public sealed record AddPlaceholderMemberRequest(string DisplayName);
 
+/// <summary>Adds someone who already has an account, rather than a placeholder.</summary>
+public sealed record AddUserMemberRequest(Guid UserId);
+
+/// <summary>
+/// Someone with an account who is not in the group yet.
+///
+/// Carries the email because two people can share a display name, and the person
+/// choosing needs to be able to tell them apart.
+/// </summary>
+public sealed record AddableUserDto(Guid Id, string DisplayName, string Email, string? AvatarUrl);
+
 public sealed record CreateInviteRequest(string? Email, Guid? ClaimsMemberId, int MaxUses, int ExpiresInHours);
 
 public sealed record InviteDto(

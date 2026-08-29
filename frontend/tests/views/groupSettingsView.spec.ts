@@ -108,19 +108,6 @@ describe('GroupSettingsView', () => {
     expect(textOf(wrapper)).toContain('(removed)')
   })
 
-  it('adds a person by name', async () => {
-    const client = api()
-    const { wrapper } = await mountView(GroupSettingsView, { api: client })
-
-    await wrapper.find('input[placeholder="Add someone by name"]').setValue('Carol')
-    await wrapper.findAll('button').find((b) => b.text() === 'Add')!.trigger('click')
-    await settle()
-
-    expect(client.post).toHaveBeenCalledWith(`/groups/${GROUP_ID}/members`, {
-      displayName: 'Carol',
-    })
-  })
-
   it('removes a person', async () => {
     const client = api()
     const { wrapper } = await mountView(GroupSettingsView, { api: client })
@@ -190,6 +177,72 @@ describe('GroupSettingsView', () => {
       expect.objectContaining({ email: 'bob@example.com' }),
     )
     vi.unstubAllGlobals()
+  })
+
+  it('adds someone who already has an account', async () => {
+    const client = api({
+      '/users/addable': () => [
+        { id: 'user-bob', displayName: 'Bob Brown', email: 'bob@example.com', avatarUrl: null },
+      ],
+    })
+
+    const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+    await wrapper.find('input[type="search"]').setValue('bob')
+    await settle()
+    await wrapper.find('[data-testid="candidate"]').trigger('click')
+    await settle()
+
+    // A real membership, not a placeholder that has to be claimed later.
+    expect(client.post).toHaveBeenCalledWith(
+      `/groups/${GROUP_ID}/members/user`,
+      { userId: 'user-bob' },
+    )
+  })
+
+  it('still adds someone with no account, by name', async () => {
+    const client = api({ '/users/addable': () => [] })
+
+    const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+    await wrapper.find('input[type="search"]').setValue('Dave')
+    await settle()
+    await wrapper.find('[data-testid="add-placeholder"]').trigger('click')
+    await settle()
+
+    expect(client.post).toHaveBeenCalledWith(
+      `/groups/${GROUP_ID}/members`,
+      { displayName: 'Dave' },
+    )
+  })
+
+  it('does not offer people already in the group', async () => {
+    // The server filters them out; this pins that the view asks per group rather
+    // than for a global directory.
+    const client = api({ '/users/addable': () => [] })
+
+    await mountView(GroupSettingsView, { api: client })
+    await settle()
+
+    expect(client.get).toHaveBeenCalledWith('/users/addable', { groupId: GROUP_ID })
+  })
+
+  it('reports a failure to add someone', async () => {
+    const client = api({
+      '/users/addable': () => [
+        { id: 'user-bob', displayName: 'Bob Brown', email: 'bob@example.com', avatarUrl: null },
+      ],
+    })
+    client.post.mockRejectedValue(new Error('That person is already a member.'))
+
+    const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+    await wrapper.find('input[type="search"]').setValue('bob')
+    await settle()
+    await wrapper.find('[data-testid="candidate"]').trigger('click')
+    await settle()
+
+    expect(textOf(wrapper)).toContain('That person is already a member.')
   })
 
   it('shows the invite link so it can be read without the clipboard', async () => {

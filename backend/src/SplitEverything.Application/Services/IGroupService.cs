@@ -15,6 +15,20 @@ public interface IGroupService
     Task<GroupMemberDto> AddPlaceholderMemberAsync(Guid userId, Guid groupId, AddPlaceholderMemberRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// Adds someone who already has an account. The other way into a group is an
+    /// invite link, which suits a person who has never opened the app; this is for
+    /// one who is already here.
+    /// </summary>
+    Task<GroupMemberDto> AddUserMemberAsync(Guid userId, Guid groupId, AddUserMemberRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// People with an account who could be added to a group: everyone but the
+    /// caller and the group's current members. Pass a null group for a group that
+    /// does not exist yet.
+    /// </summary>
+    Task<IReadOnlyList<AddableUserDto>> ListAddableUsersAsync(Guid userId, Guid? groupId, CancellationToken ct = default);
+
+    /// <summary>
     /// Removes a member. Someone with history is deactivated rather than deleted, so
     /// past expenses keep pointing at a real row.
     /// </summary>

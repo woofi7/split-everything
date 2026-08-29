@@ -2,6 +2,7 @@ import { computed, ref, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { db, type LocalGroup, type LocalMember } from '@/offline/db'
 import type { ApiClient } from '@/api/client'
+import type { AddableUser } from '@/api/types'
 
 interface GroupSummaryDto {
   id: string
@@ -179,6 +180,29 @@ export const useGroupsStore = defineStore('groups', () => {
     await refresh(groupId)
   }
 
+  /** Adds someone who already has an account, rather than a placeholder. */
+  async function addUserMember(groupId: string, userId: string): Promise<void> {
+    await requireApi().post(`/groups/${groupId}/members/user`, { userId })
+    await refresh(groupId)
+  }
+
+  /**
+   * People with an account who are not in this group yet.
+   *
+   * Read on demand rather than cached: the point of the list is to be current,
+   * and it changes whenever anyone else signs up or joins.
+   */
+  async function addableUsers(groupId?: string): Promise<AddableUser[]> {
+    const people = await requireApi().get<AddableUser[]>(
+      '/users/addable',
+      groupId ? { groupId } : undefined,
+    )
+
+    // This list is a convenience on top of a field that works without it, so
+    // anything unexpected becomes "nobody" rather than breaking the form.
+    return Array.isArray(people) ? people : []
+  }
+
   async function removeMember(groupId: string, memberId: string): Promise<void> {
     await requireApi().delete(`/groups/${groupId}/members/${memberId}`)
     await refresh(groupId)
@@ -214,6 +238,8 @@ export const useGroupsStore = defineStore('groups', () => {
     archive,
     unarchive,
     addPlaceholderMember,
+    addUserMember,
+    addableUsers,
     removeMember,
     membersOf,
     myMemberId,
