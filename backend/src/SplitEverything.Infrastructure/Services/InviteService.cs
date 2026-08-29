@@ -145,17 +145,31 @@ public sealed class InviteService(
             throw new ForbiddenException("This invite was issued to a different email address.");
         }
 
+        // Deliberately ignores the tombstone: someone who was removed and comes back
+        // must reclaim their original row. Inserting a second one would collide with
+        // the one-membership-per-user index, and would orphan whatever history is
+        // still attached to the old row.
         var existing = await db.GroupMembers.FirstOrDefaultAsync(m =>
-            m.GroupId == invite.GroupId && m.UserId == userId && !m.IsDeleted, ct);
+            m.GroupId == invite.GroupId && m.UserId == userId, ct);
 
         if (existing is not null)
         {
-            if (existing.Status != MembershipStatus.Active)
+            if (existing.Status != MembershipStatus.Active || existing.IsDeleted)
             {
                 existing.Status = MembershipStatus.Active;
                 existing.LeftAt = null;
+                existing.IsDeleted = false;
+                existing.DeletedAt = null;
+
+                await writer.RecordAsync(existing, SyncEntityType.GroupMember, invite.GroupId,
+                    SyncOperation.Update, GroupService.DeviceFor(userId), userId,
+                    GroupService.MemberPayload(existing), ct: ct);
+
+                invite.UseCount += 1;
                 await db.SaveChangesAsync(ct);
+                db.ChangeTracker.Clear();
             }
+
             return new RedeemInviteResult(invite.GroupId, existing.Id, AlreadyMember: true);
         }
 

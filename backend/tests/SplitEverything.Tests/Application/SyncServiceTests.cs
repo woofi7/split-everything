@@ -620,3 +620,388 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         return expense.Id;
     }
 }
+
+/// <summary>
+/// The rejection branches: every way a client payload can be unacceptable. These
+/// matter because a rejection has to be reported per operation, never as a failure
+/// of the whole batch.
+/// </summary>
+public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixture)
+{
+    private SyncService Sync => new(Db, Writer, Broadcaster, Clock);
+
+    private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id,
+            new CreateGroupRequest("Roommates", "CAD", null, null, null, ["Bob"]));
+        return (user.Id, group,
+            group.Members.First(m => m.UserId == user.Id).Id,
+            group.Members.First(m => m.DisplayName == "Bob").Id);
+    }
+
+    private async Task<SyncRejectedDto> PushAsync(
+        Guid userId, Guid groupId, SyncEntityType type, string payloadJson,
+        SyncOperation operation = SyncOperation.Create, Guid? entityId = null)
+    {
+        var result = await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(groupId, type, entityId ?? Guid.CreateVersion7(), operation, payloadJson,
+                new Dictionary<string, long> { [TestData.DeviceB] = 1 })
+        ]));
+
+        return result.Rejected.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task An_expense_with_no_description_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, paidByMemberId = alice, amount = 10m,
+            splits = new[] { new { memberId = alice, amount = 10m } }
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Expense, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task An_expense_with_a_zero_amount_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, paidByMemberId = alice, description = "Free", amount = 0m,
+            splits = new[] { new { memberId = alice, amount = 0m } }
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Expense, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task An_expense_with_no_participants_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, paidByMemberId = alice, description = "Dinner",
+            amount = 10m, splits = Array.Empty<object>()
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Expense, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task An_expense_whose_payer_is_not_a_member_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, paidByMemberId = Guid.NewGuid(), description = "Dinner",
+            amount = 10m, splits = new[] { new { memberId = alice, amount = 10m } }
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Expense, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task An_expense_with_a_stranger_in_the_split_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, paidByMemberId = alice, description = "Dinner", amount = 10m,
+            splits = new[] { new { memberId = Guid.NewGuid(), amount = 10m } }
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Expense, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task An_expense_whose_splits_do_not_add_up_is_rejected()
+    {
+        var (userId, group, alice, bob) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, paidByMemberId = alice, description = "Dinner", amount = 100m,
+            splits = new[]
+            {
+                new { memberId = alice, amount = 10m },
+                new { memberId = bob, amount = 10m }
+            }
+        });
+
+        // Trusting a client's arithmetic here would create a debt nobody owes.
+        (await PushAsync(userId, group.Id, SyncEntityType.Expense, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task A_settlement_with_a_zero_amount_is_rejected()
+    {
+        var (userId, group, alice, bob) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, fromMemberId = bob, toMemberId = alice, amount = 0m
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Settlement, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task A_settlement_with_the_same_member_on_both_sides_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, fromMemberId = alice, toMemberId = alice, amount = 10m
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Settlement, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task A_settlement_with_a_stranger_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, fromMemberId = Guid.NewGuid(), toMemberId = alice, amount = 10m
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Settlement, json)).Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task An_unparseable_settlement_payload_is_rejected()
+    {
+        var (userId, group, _, _) = await SetupAsync();
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Settlement, "not json"))
+            .Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task A_comment_with_no_body_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
+            group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+
+        var json = JsonSerializer.Serialize(new
+        {
+            expenseId = expense.Id, groupId = group.Id, authorMemberId = alice, body = "  "
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.ExpenseComment, json))
+            .Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task A_comment_on_an_expense_that_does_not_exist_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            expenseId = Guid.NewGuid(), groupId = group.Id, authorMemberId = alice, body = "Orphan"
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.ExpenseComment, json)).Code.ShouldBe("NotFound");
+    }
+
+    [Fact]
+    public async Task A_comment_from_a_stranger_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
+            group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+
+        var json = JsonSerializer.Serialize(new
+        {
+            expenseId = expense.Id, groupId = group.Id, authorMemberId = Guid.NewGuid(), body = "Hi"
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.ExpenseComment, json))
+            .Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task An_unparseable_comment_payload_is_rejected()
+    {
+        var (userId, group, _, _) = await SetupAsync();
+
+        (await PushAsync(userId, group.Id, SyncEntityType.ExpenseComment, "{{{"))
+            .Code.ShouldBe("InvalidPayload");
+    }
+
+    [Fact]
+    public async Task An_entity_type_clients_cannot_sync_is_rejected()
+    {
+        var (userId, group, _, _) = await SetupAsync();
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Group, "{}")).Code.ShouldBe("UnsupportedEntity");
+    }
+
+    [Fact]
+    public async Task A_push_into_an_archived_group_is_rejected()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        await Groups.ArchiveAsync(userId, group.Id);
+        var json = JsonSerializer.Serialize(new
+        {
+            groupId = group.Id, paidByMemberId = alice, description = "Late", amount = 10m,
+            splits = new[] { new { memberId = alice, amount = 10m } }
+        });
+
+        (await PushAsync(userId, group.Id, SyncEntityType.Expense, json)).Code.ShouldBe("GroupArchived");
+    }
+
+    [Fact]
+    public async Task Deleting_something_that_was_never_synced_is_a_no_op()
+    {
+        var (userId, group, _, _) = await SetupAsync();
+
+        var result = await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.Expense, Guid.CreateVersion7(), SyncOperation.Delete,
+                "{}", new Dictionary<string, long> { [TestData.DeviceB] = 1 })
+        ]));
+
+        result.Rejected.ShouldBeEmpty();
+        result.Accepted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Deleting_a_settlement_that_was_never_synced_is_a_no_op()
+    {
+        var (userId, group, _, _) = await SetupAsync();
+
+        var result = await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.Settlement, Guid.CreateVersion7(), SyncOperation.Delete,
+                "{}", new Dictionary<string, long> { [TestData.DeviceB] = 1 })
+        ]));
+
+        result.Accepted.ShouldBeEmpty();
+        result.Rejected.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task An_offline_settlement_delete_tombstones_it()
+    {
+        var (userId, group, alice, bob) = await SetupAsync();
+        var settlement = await Settlements.CreateAsync(userId,
+            new SplitEverything.Application.Contracts.Settlements.CreateSettlementRequest(
+                group.Id, bob, alice, 25m, "CAD", TestData.Jan1, null, null, null));
+
+        var newer = new Dictionary<string, long>(settlement.VectorClock) { [TestData.DeviceB] = 1 };
+        await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.Settlement, settlement.Id, SyncOperation.Delete, "{}", newer)
+        ]));
+
+        (await NewContext().Settlements.FirstAsync(s => s.Id == settlement.Id)).IsDeleted.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task An_offline_comment_edit_is_applied_and_marked_edited()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
+            group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+        var comment = await Expenses.AddCommentAsync(userId,
+            new CreateCommentRequest(expense.Id, "First", null, null));
+
+        var stored = await Db.ExpenseComments.FirstAsync(c => c.Id == comment.Id);
+        var newer = new Dictionary<string, long>(stored.Clock.Counters) { [TestData.DeviceB] = 1 };
+        Db.ChangeTracker.Clear();
+
+        await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.ExpenseComment, comment.Id, SyncOperation.Update,
+                JsonSerializer.Serialize(new
+                {
+                    id = comment.Id, expenseId = expense.Id, groupId = group.Id,
+                    authorMemberId = alice, body = "Edited offline"
+                }), newer)
+        ]));
+
+        var reloaded = await NewContext().ExpenseComments.FirstAsync(c => c.Id == comment.Id);
+        reloaded.Body.ShouldBe("Edited offline");
+        reloaded.EditedAt.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task An_offline_comment_delete_tombstones_it()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
+            group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+        var comment = await Expenses.AddCommentAsync(userId,
+            new CreateCommentRequest(expense.Id, "Doomed", null, null));
+
+        var stored = await Db.ExpenseComments.FirstAsync(c => c.Id == comment.Id);
+        var newer = new Dictionary<string, long>(stored.Clock.Counters) { [TestData.DeviceB] = 1 };
+        Db.ChangeTracker.Clear();
+
+        await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.ExpenseComment, comment.Id, SyncOperation.Delete, "{}", newer)
+        ]));
+
+        (await NewContext().ExpenseComments.FirstAsync(c => c.Id == comment.Id)).IsDeleted.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_concurrent_settlement_edit_produces_a_conflict()
+    {
+        var (userId, group, alice, bob) = await SetupAsync();
+        var settlement = await Settlements.CreateAsync(userId,
+            new SplitEverything.Application.Contracts.Settlements.CreateSettlementRequest(
+                group.Id, bob, alice, 25m, "CAD", TestData.Jan1, null, null, null));
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            id = settlement.Id, groupId = group.Id, fromMemberId = bob,
+            toMemberId = alice, amount = 30m, currency = "CAD"
+        });
+
+        foreach (var device in new[] { "device-x", "device-y" })
+        {
+            var clock = new Dictionary<string, long>(settlement.VectorClock) { [device] = 9 };
+            var result = await Sync.PushAsync(userId, new SyncPushRequest(device, [
+                Operation(group.Id, SyncEntityType.Settlement, settlement.Id,
+                    SyncOperation.Update, payload, clock)
+            ]));
+
+            if (device == "device-y") result.Conflicts.ShouldHaveSingleItem();
+        }
+    }
+
+    [Fact]
+    public async Task A_concurrent_comment_edit_produces_a_conflict()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+        var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
+            group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+        var comment = await Expenses.AddCommentAsync(userId,
+            new CreateCommentRequest(expense.Id, "First", null, null));
+        var stored = await Db.ExpenseComments.FirstAsync(c => c.Id == comment.Id);
+        var baseClock = stored.Clock.Counters;
+        Db.ChangeTracker.Clear();
+
+        foreach (var device in new[] { "device-x", "device-y" })
+        {
+            var clock = new Dictionary<string, long>(baseClock) { [device] = 9 };
+            var result = await Sync.PushAsync(userId, new SyncPushRequest(device, [
+                Operation(group.Id, SyncEntityType.ExpenseComment, comment.Id, SyncOperation.Update,
+                    JsonSerializer.Serialize(new
+                    {
+                        id = comment.Id, expenseId = expense.Id, groupId = group.Id,
+                        authorMemberId = alice, body = $"Edit from {device}"
+                    }), clock)
+            ]));
+
+            if (device == "device-y") result.Conflicts.ShouldHaveSingleItem();
+        }
+    }
+}
