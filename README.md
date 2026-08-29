@@ -1,0 +1,186 @@
+# Split Everything
+
+A self-hosted expense-sharing app: shared groups, real splits, offline-first, with
+a Settle Up importer and a bank-statement importer that never uploads the
+statement.
+
+Built to the spec in [docs/spec.md](docs/spec.md).
+
+## What it does
+
+- **Splits** equally, by percentage, by shares, by exact amount, or itemized
+  line-by-line ("who had the appetizer"), with rounding that always sums to the
+  total.
+- **Settles up** with a greedy reduction to the fewest transfers, or shows the raw
+  who-owes-whom view if you prefer it.
+- **Works offline.** Every write lands locally and queues; conflicts from two
+  devices editing at once are flagged for a person, never silently overwritten.
+- **Imports** a Settle Up CSV export (upload, map, preview, commit) and a bank or
+  credit-card statement parsed entirely in the browser.
+- **Groups** can be archived, merged, split apart, and individual expenses moved
+  between them carrying their full history.
+- **Recurring expenses**, receipts, threaded comments, categories, multi-currency
+  with frozen rates, push notifications, and a stats dashboard.
+
+## Layout
+
+```
+backend/     ASP.NET Core 10 API: Domain, Application, Infrastructure, Api, Tests
+frontend/    Vue 3 + Tailwind PWA, wrapped by Capacitor for iOS and Android
+infra/       Traefik notes, backup and restore scripts
+scripts/     Coverage gate
+docs/        The spec this was built from
+```
+
+The backend is layered so the rules can be tested without a web server or a
+browser: `Domain` holds the money and sync algorithms with no dependencies,
+`Application` holds the contracts, `Infrastructure` holds Postgres and the outbound
+adapters, and `Api` is only transport.
+
+## Running it locally
+
+You need .NET 10, Node 24 and Docker.
+
+```bash
+# Postgres for development
+docker run -d --name split-postgres \
+  -e POSTGRES_DB=split_everything \
+  -e POSTGRES_USER=split \
+  -e POSTGRES_PASSWORD=split \
+  -p 5432:5432 postgres:17-alpine
+
+# API on http://localhost:5080
+cd backend
+dotnet run --project src/SplitEverything.Api
+
+# App on http://localhost:5173, proxying /api and /hubs to the API
+cd frontend
+npm install
+npm run dev
+```
+
+Sign-in needs a Google OAuth client id. Create one in the Google Cloud console
+with `http://localhost:5173` as an authorised origin, then set
+`Auth:GoogleClientId` for the API and `VITE_GOOGLE_CLIENT_ID` for the app.
+
+Without it, everything except sign-in still runs, and the whole test suite runs
+with no configuration at all.
+
+## Tests
+
+The backend suite runs against a real Postgres in a throwaway container, because
+the schema leans on jsonb columns, partial unique indexes and identity sequences
+that the in-memory provider does not enforce.
+
+```bash
+cd backend
+dotnet test                                    # 748 tests
+dotnet test --settings coverlet.runsettings \
+  --collect:"XPlat Code Coverage" \
+  --results-directory TestResults
+python3 ../scripts/check-coverage.py 'TestResults/*/coverage.cobertura.xml'
+
+cd frontend
+npm test                                       # 387 tests
+npm run test:coverage                          # enforces per-layer thresholds
+```
+
+Coverage floors are enforced in CI: 95% of lines on the backend (100% on the
+application layer), and per-layer thresholds on the frontend with 95% on the
+domain logic. What is left uncovered is code whose only untested path needs a live
+third party: signing a real Google token, completing a real Web Push handshake,
+exchanging a real Firebase service account.
+
+### The contracts worth knowing about
+
+Two pieces of logic exist on both sides and must agree exactly. Both are pinned by
+tests in both suites, so a drift fails a build instead of corrupting data:
+
+- **Split rounding.** The client shows a preview and stores the amounts offline, so
+  it runs the same largest-remainder distribution with the same member-id
+  tie-break. `SplitCalculatorTests.The_leftover_minor_unit_goes_to_the_lowest_member_id`
+  and its frontend twin pin which member receives a leftover cent.
+- **The duplicate fingerprint.** The statement never leaves the device, so
+  duplicate detection rests entirely on a hash the browser computes.
+  `ExpenseFingerprintTests.A_known_transaction_hashes_to_a_pinned_value` and its
+  frontend twin assert the same constant.
+
+## Deploying
+
+Push to `main`. CI runs both suites, publishes two images to GHCR, and calls a
+Portainer webhook to pull them.
+
+On the host:
+
+```bash
+cp .env.example .env    # fill it in; nothing has a default
+docker compose up -d
+```
+
+Both containers answer on one hostname behind Traefik, with `/api` and `/hubs`
+routed to the API at a higher priority. One hostname means no cross-origin
+requests, a first-party refresh cookie, and no CORS to configure. See
+[infra/traefik/README.md](infra/traefik/README.md).
+
+Backups run in their own container: a gzipped `pg_dump` on start and then daily,
+pruned to `BACKUP_RETENTION_DAYS`. Restore with `infra/backup/restore.sh`, which
+asks for the dump explicitly and makes you type the database name.
+
+## The mobile shells
+
+The spec settled on Capacitor rather than a pure PWA or two native apps: iOS
+suspends background web apps aggressively enough to break reliable sync and make
+Web Push unreliable, while two native apps double the maintenance of a
+solo-maintained app for no benefit at this scale.
+
+```bash
+cd frontend
+npm run build
+npx cap add android          # or ios
+npx cap sync
+npx cap open android
+```
+
+The native projects are generated, not committed: they are fully derivable from
+`capacitor.config.ts` and the built bundle. `.github/workflows/mobile.yml` builds
+a debug APK on demand; the iOS job builds unsigned, since an archive for TestFlight
+needs signing material that is a decision to make once rather than a default.
+
+Push registration is one function for all three channels (`src/native/push.ts`):
+APNs and FCM in a shell, Web Push in a browser, all registering the same shape
+with the API.
+
+## How offline actually works
+
+Every write goes to IndexedDB and an outbox, then returns. Nothing waits on the
+network.
+
+- The outbox drains in the order the changes were made, so a create is never sent
+  after the edit that depends on it.
+- A failed push leaves the queue untouched and retries. A change the server will
+  never accept is parked rather than retried forever, so it cannot block
+  everything behind it.
+- A pull never overwrites a local edit that has not been sent yet.
+- Each entity carries a vector clock. An incoming revision that causally follows
+  the stored one wins; one that is already contained is dropped; two concurrent
+  ones become a conflict record holding both versions for a person to resolve.
+- Per-group cursors, not the connection, are what guarantee nothing is missed. A
+  dropped WebSocket is therefore harmless: SignalR is an optimisation over the
+  same delta pull.
+- Settled history older than a year is collapsed into a self-contained snapshot
+  and trimmed, so the log does not grow without bound. A device further behind
+  than the cutoff bootstraps from the snapshot.
+
+## The statement importer, and why it is different
+
+The Settle Up importer runs on the server: it is our own structured export.
+
+A bank statement does not. It is parsed entirely in the browser, in a Web Worker,
+with PDF.js for the text layer and Tesseract for scans. The only thing that ever
+reaches the API is the list of expense records the user confirmed. There is no
+endpoint that accepts a statement file, and the staged parsing data is cleared
+when the review session commits or is cancelled, whichever comes first.
+
+Automated table extraction from a PDF is unreliable, so the design assumes it will
+be wrong sometimes: every row carries its problems, the review step is mandatory,
+and nothing commits until confirmed.

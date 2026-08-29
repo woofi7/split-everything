@@ -1,0 +1,101 @@
+name: Mobile shells
+
+# Manual, because a native build needs signing material and is not part of every
+# push. TestFlight and a private APK are the distribution targets from the spec.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which shell to build
+        type: choice
+        options: [android, ios, both]
+        default: android
+
+jobs:
+  android:
+    if: inputs.platform == 'android' || inputs.platform == 'both'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build the web bundle
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.PUBLIC_URL }}/api
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+        run: npm run build
+
+      # The native project is generated rather than committed: it is entirely
+      # derivable from capacitor.config.ts and the built bundle.
+      - name: Add and sync the Android shell
+        working-directory: frontend
+        run: |
+          npx cap add android || echo "Already added"
+          npx cap sync android
+
+      - name: Assemble a debug APK
+        working-directory: frontend/android
+        run: ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: split-everything-debug-apk
+          path: frontend/android/app/build/outputs/apk/debug/*.apk
+
+  ios:
+    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build the web bundle
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.PUBLIC_URL }}/api
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+        run: npm run build
+
+      - name: Add and sync the iOS shell
+        working-directory: frontend
+        run: |
+          npx cap add ios || echo "Already added"
+          npx cap sync ios
+
+      # Unsigned: an archive for TestFlight needs a signing certificate and a
+      # provisioning profile in the runner keychain, which is a decision to make
+      # once rather than a default to bake in here.
+      - name: Build the app without signing
+        working-directory: frontend/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
