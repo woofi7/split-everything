@@ -7,7 +7,7 @@ import ConflictsView from '@/views/ConflictsView.vue'
 import ExpenseView from '@/views/ExpenseView.vue'
 import GroupSettingsView from '@/views/GroupSettingsView.vue'
 import GroupView from '@/views/GroupView.vue'
-import GroupsView from '@/views/GroupsView.vue'
+import DashboardView from '@/views/DashboardView.vue'
 import ImportView from '@/views/ImportView.vue'
 import JoinView from '@/views/JoinView.vue'
 import NewGroupView from '@/views/NewGroupView.vue'
@@ -68,7 +68,7 @@ const api = () =>
  * reached before signing in are allowed to.
  */
 const inApp: Array<[string, Component]> = [
-  ['Groups', GroupsView],
+  ['Dashboard', DashboardView],
   ['Group', GroupView],
   ['Group settings', GroupSettingsView],
   ['New group', NewGroupView],
@@ -94,18 +94,18 @@ const preAuth: Array<[string, Component]> = [
  * without a back button the only way out is the browser's own.
  */
 const subScreens: Array<[string, Component, string]> = [
-  ['Group', GroupView, 'Groups'],
+  ['Group', GroupView, 'Dashboard'],
   ['Group settings', GroupSettingsView, 'Roommates'],
-  ['New group', NewGroupView, 'Groups'],
+  ['New group', NewGroupView, 'Dashboard'],
   ['Expense', ExpenseView, 'Roommates'],
   ['Settle up', SettleView, 'Roommates'],
   ['Import', ImportView, 'Profile'],
   ['Conflicts', ConflictsView, 'Profile'],
-  ['Not found', NotFoundView, 'Groups'],
+  ['Not found', NotFoundView, 'Dashboard'],
 ]
 
 const tabScreens: Array<[string, Component]> = [
-  ['Groups', GroupsView],
+  ['Dashboard', DashboardView],
   ['Activity', ActivityView],
   ['Stats', StatsView],
   ['Profile', ProfileView],

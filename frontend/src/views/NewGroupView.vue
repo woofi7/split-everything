@@ -98,7 +98,7 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="New group" :back-to="{ name: 'groups' }" back-label="Groups">
+  <AppShell title="New group" :back-to="{ name: 'dashboard' }" back-label="Dashboard">
     <form class="flex flex-col gap-5" @submit.prevent="save">
       <label class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">Name</span>

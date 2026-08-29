@@ -290,7 +290,7 @@ describe('ImportView', () => {
     expect(payload.rows).toHaveLength(1)
     expect(payload.rows[0].groupId).toBe(GROUP_ID)
     expect(payload.rows[0].paidByMemberId).toBe(ALICE)
-    expect(replace).toHaveBeenCalledWith({ name: 'groups' })
+    expect(replace).toHaveBeenCalledWith({ name: 'dashboard' })
   })
 
   it('never sends the raw statement line', async () => {

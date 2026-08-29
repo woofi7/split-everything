@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupCard from '@/components/groups/GroupCard.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
+import SpendPie from '@/components/ui/SpendPie.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
@@ -16,11 +17,26 @@ onMounted(async () => {
   await groups.loadAll()
   await expenses.hydrate()
 })
+
+const currency = computed(() => auth.user?.defaultCurrency ?? 'CAD')
+
+/**
+ * Spend per group, for the pie. Archived groups are left out: the chart is about
+ * where money is going, and a frozen group is not going anywhere.
+ */
+const spendByGroup = computed(() =>
+  groups.visibleGroups.map((group) => ({
+    id: group.id,
+    label: group.name,
+    amount: group.totalSpend,
+    colorHex: group.colorHex,
+  })),
+)
 </script>
 
 <template>
   <AppShell
-    title="Groups"
+    title="Dashboard"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-offline="groups.isOffline"
@@ -39,10 +55,16 @@ onMounted(async () => {
       <p class="text-sm text-[var(--text-muted)]">Across all groups</p>
       <MoneyAmount
         :amount="groups.netAcrossGroups"
-        :currency="auth.user?.defaultCurrency ?? 'CAD'"
+        :currency="currency"
         signed
         size="lg"
       />
+    </section>
+
+    <!-- Where the money went, before the list of where to look. -->
+    <section v-if="groups.visibleGroups.length > 0" class="surface-card mb-4 p-4">
+      <p class="mb-3 text-sm text-[var(--text-muted)]">Spending by group</p>
+      <SpendPie :slices="spendByGroup" :currency="currency" />
     </section>
 
     <div v-if="groups.visibleGroups.length > 0" class="flex flex-col gap-3">
