@@ -9,3 +9,8 @@
 *.woff2 binary
 *.pdf binary
 *.keystore binary
+
+# A real Settle Up export, kept byte for byte. It is UTF-16 with a byte order
+# mark, and line ending normalisation would corrupt it into a fixture that no
+# longer reproduces what the app actually emits.
+backend/tests/SplitEverything.Tests/Fixtures/settleup-world-tour.csv binary

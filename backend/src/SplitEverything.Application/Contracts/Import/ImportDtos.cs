@@ -27,10 +27,22 @@ public sealed record CsvColumnMapping(
     // Column index -> member name, for exports with one column per participant.
     IReadOnlyDictionary<int, string>? ParticipantColumns,
     string? DateFormat,
-    string? DecimalSeparator);
+    string? DecimalSeparator,
+    // The single "for whom" cell, several names in one column. Without it the
+    // participants were guessed to sit beside the payer, which in a real export is
+    // the amount.
+    int? ParticipantsColumn = null,
+    // Per-person amounts, in the same order as the participants. Present in real
+    // exports, and the only way an uneven split survives the round trip.
+    int? SplitAmountsColumn = null,
+    // "expense" or "transfer". A transfer is a settlement, and booking it as an
+    // expense moves every balance in the group by the wrong amount twice over.
+    int? TypeColumn = null);
 
 public sealed record CsvPreviewRequest(
-    Guid GroupId,
+    // Null while the wizard is still importing into a group that does not exist
+    // yet: there are no members to match against and no history to duplicate.
+    Guid? GroupId,
     CsvColumnMapping Mapping,
     // Settle Up exports carry display names, not emails; the user maps them to members.
     IReadOnlyDictionary<string, Guid?> MemberNameMapping,
@@ -50,7 +62,12 @@ public sealed record ParsedExpenseRow(
     string Fingerprint,
     bool IsDuplicate,
     Guid? DuplicateOfExpenseId,
-    IReadOnlyList<string> Problems)
+    IReadOnlyList<string> Problems,
+    // Per-person amounts from the export, in participant order. Empty when the
+    // export does not carry them, in which case the split is computed.
+    IReadOnlyList<decimal>? SplitAmounts = null,
+    // A settlement rather than an expense: someone paying down what they owed.
+    bool IsSettlement = false)
 {
     public bool IsCommittable => Problems.Count == 0 && SpentAt is not null && Amount is not null;
 }
@@ -65,7 +82,11 @@ public sealed record CsvPreviewResult(
 
 public sealed record CsvCommitRequest(
     Guid AnalysisId,
-    Guid GroupId,
+    // Null to create a group for this import, named by NewGroupName. An export is
+    // one group's history, so a group that does not exist here yet is the ordinary
+    // case rather than the exception.
+    Guid? GroupId,
+    string? NewGroupName,
     CsvColumnMapping Mapping,
     IReadOnlyDictionary<string, Guid?> MemberNameMapping,
     // Rows the user unticked in the preview.
@@ -80,6 +101,7 @@ public sealed record ImportCommitResult(
     Guid ImportBatchId,
     Guid GroupId,
     int CreatedExpenses,
+    int CreatedSettlements,
     int SkippedRows,
     IReadOnlyList<Guid> CreatedMemberIds,
     IReadOnlyList<string> Warnings);
