@@ -2,17 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import SettleView from '@/views/SettleView.vue'
 import { db } from '@/offline/db'
-import {
-  ALICE,
-  BOB,
-  GROUP_ID,
-  fakeApi,
-  mountView,
-  settle,
-  testExpense,
-  testGroup,
-  textOf,
-} from '../support/viewHarness'
+import { ALICE, BOB, GROUP_ID, fakeApi, mountView, settle, testExpense, testGroup, textOf, waitFor } from '../support/viewHarness'
 
 const replace = vi.fn()
 let query: Record<string, string> = {}
@@ -76,7 +66,9 @@ describe('SettleView', () => {
     })
 
     await wrapper.find('form').trigger('submit')
-    await settle()
+    // The redirect is the last thing to happen, so it is the only safe signal
+    // that the whole action finished.
+    await waitFor(() => replace.mock.calls.length > 0)
 
     expect(await db.settlements.count()).toBe(1)
     expect(expensesStore.balanceFor(GROUP_ID).every((b) => Math.abs(b.net) < 0.01)).toBe(true)

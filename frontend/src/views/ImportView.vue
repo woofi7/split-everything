@@ -209,7 +209,7 @@ async function cancel(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Import">
+  <AppShell title="Import" :back-to="{ name: 'profile' }" back-label="Profile">
     <section v-if="!session" class="flex flex-col gap-4">
       <div class="surface-card p-4">
         <h2 class="font-medium">A bank or credit card statement</h2>

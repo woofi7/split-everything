@@ -88,6 +88,79 @@ const preAuth: Array<[string, Component]> = [
   ['Join', JoinView],
 ]
 
+/**
+ * Screens the tab bar cannot reach. A tab is the way back to a top-level screen,
+ * but nothing in the bar leads to a group, an expense or a settings page, so
+ * without a back button the only way out is the browser's own.
+ */
+const subScreens: Array<[string, Component, string]> = [
+  ['Group', GroupView, 'Groups'],
+  ['Group settings', GroupSettingsView, 'Roommates'],
+  ['New group', NewGroupView, 'Groups'],
+  ['Expense', ExpenseView, 'Roommates'],
+  ['Settle up', SettleView, 'Roommates'],
+  ['Import', ImportView, 'Profile'],
+  ['Conflicts', ConflictsView, 'Profile'],
+  ['Not found', NotFoundView, 'Groups'],
+]
+
+const tabScreens: Array<[string, Component]> = [
+  ['Groups', GroupsView],
+  ['Activity', ActivityView],
+  ['Stats', StatsView],
+  ['Profile', ProfileView],
+  ['Add expense', AddExpenseView],
+]
+
+describe('the back button', () => {
+  it.each(subScreens)('is on the %s screen', async (_name, component) => {
+    const { wrapper } = await mountView(component, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(true)
+  })
+
+  it.each(subScreens)('says where it goes on the %s screen', async (_name, component, parent) => {
+    const { wrapper } = await mountView(component, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    // Named, so the label reads as a destination rather than just "back".
+    expect(wrapper.find('[data-testid="back"]').attributes('aria-label')).toBe(`Back to ${parent}`)
+  })
+
+  it.each(subScreens)('points somewhere real on the %s screen', async (_name, component) => {
+    const { wrapper } = await mountView(component, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    // A link, not history: a screen opened from a notification or a shared URL
+    // has nothing to go back to.
+    const to = wrapper.findComponent('[data-testid="back"]').props('to') as { name?: string }
+    expect(to?.name).toBeTruthy()
+  })
+
+  it.each(tabScreens)('is not on the %s screen, which is a tab', async (_name, component) => {
+    const { wrapper } = await mountView(component, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    // The tab is already lit; a back button here would compete with it.
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
+  })
+
+  it.each(preAuth)('is not on the %s screen', async (_name, component) => {
+    const { wrapper } = await mountView(component, { api: api(), signedIn: false })
+
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
+  })
+})
+
 describe('the bottom tab bar', () => {
   it.each(inApp)('is on the %s screen', async (_name, component) => {
     const { wrapper } = await mountView(component, {

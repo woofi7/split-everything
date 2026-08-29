@@ -127,7 +127,12 @@ async function unarchive(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Group settings" :subtitle="group?.name">
+  <AppShell
+    title="Group settings"
+    :subtitle="group?.name"
+    :back-to="{ name: 'group', params: { groupId } }"
+    :back-label="group?.name ?? 'Group'"
+  >
     <form class="surface-card mb-4 flex flex-col gap-3 p-4" @submit.prevent="save">
       <div class="flex items-end gap-3">
         <div class="flex flex-col gap-1">

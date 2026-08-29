@@ -41,6 +41,13 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // The dev server binds every interface so a phone on the same network can
+    // reach it. That lives on the dev script as --host, not here: Vite 8.2.2
+    // ignores server.host from the config file, and a setting that looks applied
+    // but is not is worse than none.
+    //
+    // Only this port is exposed. The API stays on localhost and is reached
+    // through the proxy below, from this machine.
     proxy: {
       '/api': { target: 'http://localhost:5080', changeOrigin: true },
       '/hubs': { target: 'http://localhost:5080', ws: true, changeOrigin: true },

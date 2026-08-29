@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import BottomNav from './BottomNav.vue'
 import SyncIndicator from '@/components/ui/SyncIndicator.vue'
 
@@ -16,6 +17,15 @@ const props = withDefaults(
     isOffline?: boolean
     isSyncing?: boolean
     showNav?: boolean
+    /**
+     * Where this screen goes back to, on the screens no tab can reach. A route
+     * rather than history: a screen opened from a notification, a shared link or
+     * a reload has no history to go back to, and after a redirect the previous
+     * entry is not where the person came from.
+     */
+    backTo?: RouteLocationRaw
+    /** Named, so the control reads as a destination rather than just "back". */
+    backLabel?: string
   }>(),
   {
     subtitle: undefined,
@@ -24,6 +34,8 @@ const props = withDefaults(
     isOffline: false,
     isSyncing: false,
     showNav: true,
+    backTo: undefined,
+    backLabel: 'Back',
   },
 )
 </script>
@@ -35,7 +47,26 @@ const props = withDefaults(
       style="border-color: var(--border)"
     >
       <div class="flex items-baseline justify-between gap-3 py-3">
-        <div class="min-w-0">
+        <RouterLink
+          v-if="props.backTo"
+          :to="props.backTo"
+          data-testid="back"
+          class="tap-target -ml-2 flex shrink-0 items-center self-center pr-1 text-[var(--text-muted)]"
+          :aria-label="`Back to ${props.backLabel}`"
+        >
+          <svg
+            class="h-6 w-6"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </RouterLink>
+
+        <div class="min-w-0 flex-1">
           <h1 class="truncate text-lg font-semibold">{{ title }}</h1>
           <p v-if="subtitle" class="truncate text-sm text-[var(--text-muted)]">{{ subtitle }}</p>
         </div>
