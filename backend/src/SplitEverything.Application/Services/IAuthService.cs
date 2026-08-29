@@ -11,6 +11,16 @@ public interface IAuthService
     /// </summary>
     Task<SignInResult> SignInWithGoogleAsync(GoogleSignInRequest request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Signs in without Google. Refused unless AllowDevelopmentSignIn is on, which
+    /// production never sets: this is an authentication bypass and exists only so
+    /// the app can be used locally before an OAuth client is registered.
+    /// </summary>
+    Task<SignInResult> SignInAsDeveloperAsync(DevelopmentSignInRequest request, CancellationToken ct = default);
+
+    /// <summary>What the sign-in page can offer.</summary>
+    AuthCapabilities GetCapabilities();
+
     /// <summary>Rotates the refresh token. Presenting a revoked token kills the whole chain.</summary>
     Task<AuthTokens> RefreshAsync(RefreshRequest request, CancellationToken ct = default);
 

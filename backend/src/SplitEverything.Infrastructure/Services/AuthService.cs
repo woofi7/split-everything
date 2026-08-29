@@ -62,31 +62,7 @@ public sealed class AuthService(
 
         user.LastSeenAt = clock.UtcNow;
 
-        if (!string.IsNullOrWhiteSpace(request.DeviceId))
-        {
-            var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == request.DeviceId, ct);
-            if (device is null)
-            {
-                db.Devices.Add(new Device
-                {
-                    Id = request.DeviceId,
-                    UserId = user.Id,
-                    Label = request.DeviceLabel,
-                    Platform = string.IsNullOrWhiteSpace(request.Platform) ? "web" : request.Platform,
-                    CreatedAt = clock.UtcNow,
-                    LastSyncedAt = clock.UtcNow
-                });
-            }
-            else if (device.UserId != user.Id)
-            {
-                throw new ForbiddenException("That device is registered to another account.");
-            }
-            else
-            {
-                device.LastSyncedAt = clock.UtcNow;
-            }
-        }
-
+        await RegisterDeviceAsync(user, request.DeviceId, ct, request.DeviceLabel, request.Platform);
         await db.SaveChangesAsync(ct);
 
         var issued = await IssueAsync(user, request.DeviceId, ct);
@@ -99,6 +75,64 @@ public sealed class AuthService(
 
         return new SignInResult(Map(user), issued, isNewUser, autoJoined);
     }
+
+    public async Task<SignInResult> SignInAsDeveloperAsync(
+        DevelopmentSignInRequest request, CancellationToken ct = default)
+    {
+        if (!options.AllowDevelopmentSignIn)
+        {
+            // Checked here rather than only in the controller, so calling the
+            // service directly is no way around it.
+            throw new ForbiddenException("Development sign-in is not enabled.");
+        }
+
+        var email = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+        if (email.Length == 0 || !email.Contains('@') || email.StartsWith('@') || email.EndsWith('@'))
+            throw new ValidationException("A valid email address is required.");
+
+        // Namespaced subject: a development account can never collide with a real
+        // Google subject, and matching on email would let this take over somebody's
+        // actual account.
+        var subject = $"dev:{email}";
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.GoogleSubject == subject, ct);
+        var isNewUser = user is null;
+
+        if (user is null)
+        {
+            user = new User
+            {
+                GoogleSubject = subject,
+                Email = email,
+                DisplayName = string.IsNullOrWhiteSpace(request.DisplayName)
+                    ? email.Split('@')[0]
+                    : request.DisplayName.Trim(),
+                CreatedAt = clock.UtcNow
+            };
+            db.Users.Add(user);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            user.DisplayName = request.DisplayName.Trim();
+        }
+
+        user.LastSeenAt = clock.UtcNow;
+
+        await RegisterDeviceAsync(user, request.DeviceId, ct);
+        await db.SaveChangesAsync(ct);
+
+        var issued = await IssueAsync(user, request.DeviceId, ct);
+        var autoJoined = await RedeemPendingInvitesAsync(user, ct);
+
+        db.ChangeTracker.Clear();
+
+        return new SignInResult(Map(user), issued, isNewUser, autoJoined);
+    }
+
+    public AuthCapabilities GetCapabilities()
+        => new(
+            GoogleConfigured: !string.IsNullOrWhiteSpace(options.GoogleClientId),
+            DevelopmentSignIn: options.AllowDevelopmentSignIn);
 
     public async Task<AuthTokens> RefreshAsync(RefreshRequest request, CancellationToken ct = default)
     {
@@ -291,6 +325,41 @@ public sealed class AuthService(
     }
 
     // ---- internals -------------------------------------------------------
+
+    /// <summary>
+    /// Records the device the sign-in came from. Its id keys every vector clock, so
+    /// a device already claimed by another account is refused rather than moved.
+    /// </summary>
+    private async Task RegisterDeviceAsync(
+        User user,
+        string? deviceId,
+        CancellationToken ct,
+        string? label = null,
+        string? platform = null)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId)) return;
+
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == deviceId, ct);
+
+        if (device is null)
+        {
+            db.Devices.Add(new Device
+            {
+                Id = deviceId,
+                UserId = user.Id,
+                Label = label,
+                Platform = string.IsNullOrWhiteSpace(platform) ? "web" : platform,
+                CreatedAt = clock.UtcNow,
+                LastSyncedAt = clock.UtcNow
+            });
+            return;
+        }
+
+        if (device.UserId != user.Id)
+            throw new ForbiddenException("That device is registered to another account.");
+
+        device.LastSyncedAt = clock.UtcNow;
+    }
 
     private async Task<AuthTokens> IssueAsync(User user, string? deviceId, CancellationToken ct)
     {

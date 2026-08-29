@@ -59,12 +59,20 @@ npm install
 npm run dev
 ```
 
-Sign-in needs a Google OAuth client id. Create one in the Google Cloud console
-with `http://localhost:5173` as an authorised origin, then set
-`Auth:GoogleClientId` for the API and `VITE_GOOGLE_CLIENT_ID` for the app.
+### Signing in locally
 
-Without it, everything except sign-in still runs, and the whole test suite runs
-with no configuration at all.
+`appsettings.Development.json` sets `Auth:AllowDevelopmentSignIn`, so the sign-in
+page offers a form that takes an email address and nothing else. Use a second
+address in another browser profile to act as another person and test sharing.
+
+That is an authentication bypass, so it is guarded twice: the service refuses
+unless the flag is on, and startup forces the flag off whenever the environment is
+not Development. Both guards have tests, including one that sets the environment
+variable and asserts the endpoint still answers 403.
+
+For real Google sign-in, create an OAuth client in the Google Cloud console with
+`http://localhost:5173` as an authorised origin, then set `Auth:GoogleClientId`
+for the API and `VITE_GOOGLE_CLIENT_ID` for the app.
 
 ## Tests
 

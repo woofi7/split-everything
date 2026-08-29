@@ -4,6 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { googleClientId } from '@/api/config'
+import { useApi } from '@/api/provider'
+
+interface AuthCapabilities {
+  googleConfigured: boolean
+  developmentSignIn: boolean
+}
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -17,12 +23,24 @@ const isSigningIn = ref(false)
 // button at all.
 const buttonHost = useTemplateRef<HTMLElement>('buttonHost')
 
+const capabilities = ref<AuthCapabilities | null>(null)
+const devEmail = ref('')
+const devName = ref('')
 
 
-onMounted(() => {
+
+onMounted(async () => {
   if (auth.isSignedIn) {
     void router.replace(redirectTarget())
     return
+  }
+
+  // Asked, not assumed: the page has to tell "not configured yet" apart from
+  // "broken", and only the server knows whether the development sign-in is on.
+  try {
+    capabilities.value = await useApi().get<AuthCapabilities>('/auth/capabilities')
+  } catch {
+    capabilities.value = null
   }
 
   mountGoogleButton()
@@ -43,7 +61,10 @@ function mountGoogleButton(): void {
   const clientId = googleClientId()
 
   if (!google?.accounts?.id || !clientId) {
-    error.value = 'Google sign-in is unavailable. Check your connection and try again.'
+    // Not an error when there is another way in; the page says so below instead.
+    if (!capabilities.value?.developmentSignIn) {
+      error.value = 'Google sign-in is unavailable. Check your connection and try again.'
+    }
     return
   }
 
@@ -60,6 +81,20 @@ function mountGoogleButton(): void {
       text: 'continue_with',
       width: 280,
     })
+  }
+}
+
+async function signInAsDeveloper(): Promise<void> {
+  isSigningIn.value = true
+  error.value = null
+
+  try {
+    await auth.signInAsDeveloper(devEmail.value, devName.value)
+    await router.replace(redirectTarget())
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not sign you in.'
+  } finally {
+    isSigningIn.value = false
   }
 }
 
@@ -101,6 +136,53 @@ async function handleCredential(credential?: string): Promise<void> {
       </div>
 
       <div ref="buttonHost" class="min-h-[44px]" />
+
+      <form
+        v-if="capabilities?.developmentSignIn"
+        class="flex w-full flex-col gap-3 border-t pt-6 text-left"
+        style="border-color: var(--border)"
+        @submit.prevent="signInAsDeveloper"
+      >
+        <div>
+          <p class="text-sm font-medium">Development sign-in</p>
+          <p class="text-xs text-[var(--text-muted)]">
+            This server has no Google client configured, so it is letting you in with
+            just an address. Use a different one to act as a second person and test
+            sharing. Never enabled in production.
+          </p>
+        </div>
+
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Email</span>
+          <input
+            v-model="devEmail"
+            type="email"
+            required
+            placeholder="alice@example.com"
+            class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
+            style="border-color: var(--border)"
+          />
+        </label>
+
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Name</span>
+          <input
+            v-model="devName"
+            type="text"
+            placeholder="Alice"
+            class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
+            style="border-color: var(--border)"
+          />
+        </label>
+
+        <button
+          type="submit"
+          class="tap-target rounded-lg bg-brand-600 text-sm font-medium text-white disabled:opacity-60"
+          :disabled="isSigningIn || !devEmail"
+        >
+          Continue
+        </button>
+      </form>
 
       <p v-if="isSigningIn" class="text-sm text-[var(--text-muted)]">Signing you in</p>
 
