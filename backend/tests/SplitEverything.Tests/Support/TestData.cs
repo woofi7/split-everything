@@ -116,9 +116,10 @@ public static class TestData
         return (group, members);
     }
 
-    public static async Task<User> SeedUserAsync(AppDbContext db, string name = "Alice")
+    public static async Task<User> SeedUserAsync(
+        AppDbContext db, string name = "Alice", string? email = null, string? googleSub = null)
     {
-        var user = User(name);
+        var user = User(name, email, googleSub);
         db.Users.Add(user);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();

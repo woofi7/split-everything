@@ -48,6 +48,20 @@ public sealed class GroupsController(
         Guid groupId, AddPlaceholderMemberRequest request, CancellationToken ct)
         => Ok(await groups.AddPlaceholderMemberAsync(UserId, groupId, request, ct));
 
+    [HttpPost("{groupId:guid}/members/user")]
+    public async Task<ActionResult<GroupMemberDto>> AddUserMember(
+        Guid groupId, AddUserMemberRequest request, CancellationToken ct)
+        => Ok(await groups.AddUserMemberAsync(UserId, groupId, request, ct));
+
+    /// <summary>
+    /// People with an account who are not in the group yet, so the add-someone
+    /// field can search them instead of asking for a name to be typed exactly.
+    /// </summary>
+    [HttpGet("/api/users/addable")]
+    public async Task<ActionResult<IReadOnlyList<AddableUserDto>>> AddableUsers(
+        [FromQuery] Guid? groupId, CancellationToken ct)
+        => Ok(await groups.ListAddableUsersAsync(UserId, groupId, ct));
+
     [HttpDelete("{groupId:guid}/members/{memberId:guid}")]
     public async Task<IActionResult> RemoveMember(Guid groupId, Guid memberId, CancellationToken ct)
     {

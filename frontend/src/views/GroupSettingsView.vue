@@ -4,9 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import AppShell from '@/components/layout/AppShell.vue'
 import IconPicker from '@/components/ui/IconPicker.vue'
+import PersonPicker from '@/components/groups/PersonPicker.vue'
 import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
 import { useApi } from '@/api/provider'
+import type { AddableUser } from '@/api/types'
 
 interface InviteDto {
   id: string
@@ -29,7 +31,7 @@ const isPickingIcon = ref(false)
 const inviteEmail = ref('')
 const newInvite = ref<InviteDto | null>(null)
 const qrUrl = ref<string | null>(null)
-const memberDraft = ref('')
+const addable = ref<AddableUser[]>([])
 const error = ref<string | null>(null)
 const message = ref<string | null>(null)
 
@@ -38,6 +40,7 @@ onMounted(async () => {
   const group = await groups.get(groupId.value)
   name.value = group?.name ?? ''
   iconName.value = group?.iconName ?? null
+  await loadAddable()
 })
 
 const icon = computed(() => resolveIcon(iconName.value))
@@ -60,11 +63,32 @@ async function chooseIcon(next: string | null): Promise<void> {
   await save()
 }
 
-async function addMember(): Promise<void> {
+async function loadAddable(): Promise<void> {
+  try {
+    addable.value = await groups.addableUsers(groupId.value)
+  } catch {
+    // Not fatal: the field falls back to adding someone by name, which is all it
+    // could do before anyway.
+    addable.value = []
+  }
+}
+
+/** Someone who already has an account, so they see the group straight away. */
+async function addPerson(person: AddableUser): Promise<void> {
   error.value = null
   try {
-    await groups.addPlaceholderMember(groupId.value, memberDraft.value)
-    memberDraft.value = ''
+    await groups.addUserMember(groupId.value, person.id)
+    await loadAddable()
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not add that person.'
+  }
+}
+
+/** Someone with no account. Claimed later if they take an invite to this group. */
+async function addPlaceholder(displayName: string): Promise<void> {
+  error.value = null
+  try {
+    await groups.addPlaceholderMember(groupId.value, displayName)
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not add that person.'
   }
@@ -211,23 +235,12 @@ async function unarchive(): Promise<void> {
         </li>
       </ul>
 
-      <div class="flex gap-2">
-        <input
-          v-model="memberDraft"
-          type="text"
-          placeholder="Add someone by name"
-          class="tap-target flex-1 rounded-lg border bg-[var(--surface)] px-3 text-sm"
-          style="border-color: var(--border)"
-        />
-        <button
-          type="button"
-          class="tap-target rounded-lg border px-3 text-sm"
-          style="border-color: var(--border)"
-          @click="addMember"
-        >
-          Add
-        </button>
-      </div>
+      <PersonPicker
+        :candidates="addable"
+        label="Add someone to this group"
+        @pick="addPerson"
+        @add-placeholder="addPlaceholder"
+      />
     </section>
 
     <section class="surface-card mb-4 p-4">

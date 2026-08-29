@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import AppShell from '@/components/layout/AppShell.vue'
 import IconPicker from '@/components/ui/IconPicker.vue'
+import PersonPicker from '@/components/groups/PersonPicker.vue'
 import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
+import type { AddableUser } from '@/api/types'
 
 const groups = useGroupsStore()
 const router = useRouter()
@@ -16,28 +18,44 @@ const iconName = ref<string | null>(null)
 const isPickingIcon = ref(false)
 
 const icon = computed(() => resolveIcon(iconName.value))
-const memberDraft = ref('')
 const memberNames = ref<string[]>([])
+const addable = ref<AddableUser[]>([])
+const chosen = ref<AddableUser[]>([])
 const error = ref<string | null>(null)
 const isSaving = ref(false)
 
 const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
 
-function addMember(): void {
-  const trimmed = memberDraft.value.trim()
-  if (!trimmed) return
-
-  if (memberNames.value.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) {
-    memberDraft.value = ''
-    return
+onMounted(async () => {
+  try {
+    // No group id: nobody is a member of a group that does not exist yet.
+    addable.value = await groups.addableUsers()
+  } catch {
+    // The field still adds people by name, which is all it could do before.
+    addable.value = []
   }
+})
+
+/** Held until the group exists, since there is nothing to add them to yet. */
+function addPerson(person: AddableUser): void {
+  if (chosen.value.some((existing) => existing.id === person.id)) return
+  chosen.value.push(person)
+}
+
+function addPlaceholder(displayName: string): void {
+  const trimmed = displayName.trim()
+  if (!trimmed) return
+  if (memberNames.value.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) return
 
   memberNames.value.push(trimmed)
-  memberDraft.value = ''
 }
 
 function removeMember(index: number): void {
   memberNames.value.splice(index, 1)
+}
+
+function removePerson(index: number): void {
+  chosen.value.splice(index, 1)
 }
 
 async function save(): Promise<void> {
@@ -57,6 +75,18 @@ async function save(): Promise<void> {
       iconName: iconName.value,
       placeholderMemberNames: memberNames.value,
     })
+
+    // Sequential rather than part of the create: a member row needs a group to
+    // belong to. A failure here is not worth stranding anyone on this screen for,
+    // since the group itself is already made and the settings page can finish the
+    // job.
+    for (const person of chosen.value) {
+      try {
+        await groups.addUserMember(group.id, person.id)
+      } catch {
+        // Reported on the group screen, where the roster is visible.
+      }
+    }
 
     await router.replace({ name: 'group', params: { groupId: group.id } })
   } catch (caught) {
@@ -117,27 +147,39 @@ async function save(): Promise<void> {
 
       <div class="flex flex-col gap-2">
         <span class="text-sm text-[var(--text-muted)]">
-          People, by name. You can invite them properly later.
+          People. Search anyone who already has an account, or add a name for
+          someone who does not.
         </span>
 
-        <div class="flex gap-2">
-          <input
-            v-model="memberDraft"
-            type="text"
-            placeholder="Bob"
-            class="tap-target flex-1 rounded-lg border bg-[var(--surface-raised)] px-3"
+        <PersonPicker
+          :candidates="addable"
+          label="Add someone to this group"
+          @pick="addPerson"
+          @add-placeholder="addPlaceholder"
+        />
+
+        <ul
+          v-if="chosen.length > 0"
+          class="flex flex-wrap gap-2"
+          aria-label="People with an account, added so far"
+        >
+          <li
+            v-for="(person, index) in chosen"
+            :key="person.id"
+            class="flex items-center gap-1 rounded-full border px-2 py-1 text-sm"
             style="border-color: var(--border)"
-            @keydown.enter.prevent="addMember"
-          />
-          <button
-            type="button"
-            class="tap-target rounded-lg border px-3 text-sm"
-            style="border-color: var(--border)"
-            @click="addMember"
           >
-            Add
-          </button>
-        </div>
+            {{ person.displayName }}
+            <button
+              type="button"
+              class="text-[var(--text-muted)]"
+              :aria-label="`Remove ${person.displayName}`"
+              @click="removePerson(index)"
+            >
+              x
+            </button>
+          </li>
+        </ul>
 
         <ul
           v-if="memberNames.length > 0"
