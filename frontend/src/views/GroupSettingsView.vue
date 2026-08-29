@@ -150,7 +150,7 @@ async function archive(): Promise<void> {
   error.value = null
   try {
     await groups.archive(groupId.value)
-    await router.replace({ name: 'groups' })
+    await router.replace({ name: 'dashboard' })
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not archive the group.'
   }

@@ -73,10 +73,20 @@ describe('BottomNav', () => {
     const wrapper = mountNav()
 
     const text = wrapper.text()
-    for (const label of ['Groups', 'Activity', 'Stats', 'Profile']) {
+    for (const label of ['Dashboard', 'Activity', 'Stats', 'Profile']) {
       expect(text).toContain(label)
     }
     expect(wrapper.find('[aria-label="Add an expense"]').exists()).toBe(true)
+  })
+
+  it('lifts the tab you are on into a circle', () => {
+    const wrapper = mountNav()
+
+    // Every tab carries the icon holder; the active class is what grows it, so the
+    // holder has to be a element of its own rather than the svg.
+    const holders = wrapper.findAll('[data-testid="tab-icon"]')
+    expect(holders).toHaveLength(4)
+    expect(holders[0].classes()).toContain('nav-tab-icon')
   })
 
   it('puts the add action in the middle, where a thumb reaches', () => {
@@ -95,7 +105,7 @@ describe('BottomNav', () => {
       .findAllComponents(RouterLinkStub)
       .map((link) => (link.props().to as { name: string }).name)
 
-    expect(targets).toEqual(['groups', 'activity', 'add-expense', 'stats', 'profile'])
+    expect(targets).toEqual(['dashboard', 'activity', 'add-expense', 'stats', 'profile'])
   })
 
   it('names itself for a screen reader', () => {

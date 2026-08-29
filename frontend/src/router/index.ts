@@ -2,7 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: { name: 'groups' } },
+  { path: '/', redirect: { name: 'dashboard' } },
   {
     path: '/sign-in',
     name: 'sign-in',
@@ -17,7 +17,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/JoinView.vue'),
     meta: { public: true },
   },
-  { path: '/groups', name: 'groups', component: () => import('@/views/GroupsView.vue') },
+  { path: '/dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
+  // Anything already pointing at the old path still lands somewhere.
+  { path: '/groups', redirect: { name: 'dashboard' } },
   { path: '/groups/new', name: 'new-group', component: () => import('@/views/NewGroupView.vue') },
   { path: '/groups/:groupId', name: 'group', component: () => import('@/views/GroupView.vue') },
   {

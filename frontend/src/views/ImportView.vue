@@ -194,7 +194,7 @@ async function commit(): Promise<void> {
 
     await expenses.sync()
     message.value = `Imported ${result.createdExpenses} transactions.`
-    await router.replace({ name: 'groups' })
+    await router.replace({ name: 'dashboard' })
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not import those transactions.'
   } finally {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
-import GroupsView from '@/views/GroupsView.vue'
+import DashboardView from '@/views/DashboardView.vue'
 import { GROUP_ID, fakeApi, mountView, settle, testGroup, textOf } from '../support/viewHarness'
 
 vi.mock('vue-router', () => ({
@@ -12,15 +12,15 @@ vi.mock('vue-router', () => ({
 const summaries = (...groups: ReturnType<typeof testGroup>[]) =>
   fakeApi({ '/groups': () => groups })
 
-describe('GroupsView', () => {
+describe('DashboardView', () => {
   it('lists the groups it loaded', async () => {
-    const { wrapper } = await mountView(GroupsView, { api: summaries(testGroup()) })
+    const { wrapper } = await mountView(DashboardView, { api: summaries(testGroup()) })
 
     expect(textOf(wrapper)).toContain('Roommates')
   })
 
   it('shows the total across groups', async () => {
-    const { wrapper } = await mountView(GroupsView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: summaries(
         testGroup({ id: 'a', name: 'A', myNetBalance: 50 }),
         testGroup({ id: 'b', name: 'B', myNetBalance: -20 }),
@@ -33,7 +33,7 @@ describe('GroupsView', () => {
   })
 
   it('puts a group you owe in above a settled one', async () => {
-    const { wrapper } = await mountView(GroupsView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: summaries(
         testGroup({ id: 'settled', name: 'Settled', myNetBalance: 0 }),
         testGroup({ id: 'owing', name: 'Owing', myNetBalance: -40 }),
@@ -46,7 +46,7 @@ describe('GroupsView', () => {
   })
 
   it('offers a way to create the first group when there are none', async () => {
-    const { wrapper } = await mountView(GroupsView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => [] }),
       groups: [],
     })
@@ -59,7 +59,7 @@ describe('GroupsView', () => {
     const api = fakeApi()
     api.get.mockRejectedValue(new Error('offline'))
 
-    const { wrapper } = await mountView(GroupsView, { api })
+    const { wrapper } = await mountView(DashboardView, { api })
 
     // The cached group still renders: that is the whole point of the local replica.
     expect(textOf(wrapper)).toContain('Roommates')
@@ -67,7 +67,7 @@ describe('GroupsView', () => {
   })
 
   it('hides archived groups until asked', async () => {
-    const { wrapper } = await mountView(GroupsView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: summaries(testGroup({ isArchived: true })),
       groups: [],
     })
@@ -77,7 +77,7 @@ describe('GroupsView', () => {
   })
 
   it('reveals archived groups when the toggle is used', async () => {
-    const { wrapper } = await mountView(GroupsView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: summaries(testGroup({ isArchived: true })),
       groups: [],
     })
@@ -90,15 +90,54 @@ describe('GroupsView', () => {
   })
 
   it('does not offer the archive toggle when nothing is archived', async () => {
-    const { wrapper } = await mountView(GroupsView, { api: summaries(testGroup()) })
+    const { wrapper } = await mountView(DashboardView, { api: summaries(testGroup()) })
 
     expect(textOf(wrapper)).not.toContain('archived groups')
   })
 
   it('links each group to its detail screen', async () => {
-    const { wrapper } = await mountView(GroupsView, { api: summaries(testGroup()) })
+    const { wrapper } = await mountView(DashboardView, { api: summaries(testGroup()) })
 
     const links = wrapper.findAllComponents(RouterLinkStub)
     expect(links.some((link) => JSON.stringify(link.props().to).includes(GROUP_ID))).toBe(true)
+  })
+})
+
+describe('DashboardView spending pie', () => {
+  it('shows how the spending is split across groups', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({
+        '/groups': () => [
+          { ...testGroup(), id: 'g1', name: 'Roommates', totalSpend: 600, colorHex: '#4f46e5' },
+          { ...testGroup(), id: 'g2', name: 'Ski trip', totalSpend: 400, colorHex: '#0ea5e9' },
+        ],
+      }),
+      groups: [],
+    })
+
+    const text = textOf(wrapper)
+    expect(text).toContain('Roommates')
+    expect(text).toContain('60%')
+    expect(text).toContain('40%')
+  })
+
+  it('says nothing has been spent rather than drawing an empty circle', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({
+        '/groups': () => [{ ...testGroup(), totalSpend: 0 }],
+      }),
+      groups: [],
+    })
+
+    expect(textOf(wrapper)).toContain('Nothing spent yet')
+  })
+
+  it('leaves the pie out entirely when there are no groups', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => [] }),
+      groups: [],
+    })
+
+    expect(wrapper.find('svg[role="img"]').exists()).toBe(false)
   })
 })

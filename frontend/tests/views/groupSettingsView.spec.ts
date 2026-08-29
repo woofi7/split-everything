@@ -340,7 +340,7 @@ describe('GroupSettingsView', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('Archive this group'))!.trigger('click')
     await settle()
 
-    expect(replace).toHaveBeenCalledWith({ name: 'groups' })
+    expect(replace).toHaveBeenCalledWith({ name: 'dashboard' })
   })
 
   it('offers to reopen an archived group instead', async () => {

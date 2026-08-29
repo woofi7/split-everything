@@ -39,8 +39,8 @@ const plan = computed(() =>
     :rejected-count="expenses.rejectedCount"
     :is-offline="groups.isOffline"
     :is-syncing="expenses.isSyncing"
-    :back-to="{ name: 'groups' }"
-    back-label="Groups"
+    :back-to="{ name: 'dashboard' }"
+    back-label="Dashboard"
   >
     <template #header-action>
       <RouterLink

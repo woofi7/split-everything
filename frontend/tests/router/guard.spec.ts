@@ -48,7 +48,7 @@ describe('route guard', () => {
 
     await router.push('/groups')
 
-    expect(router.currentRoute.value.name).toBe('groups')
+    expect(router.currentRoute.value.name).toBe('dashboard')
   })
 
   it('leaves the invite page public', async () => {
@@ -64,13 +64,13 @@ describe('route guard', () => {
     expect(router.currentRoute.value.name).toBe('sign-in')
   })
 
-  it('redirects the root to the group list', async () => {
+  it('redirects the root to the dashboard', async () => {
     localStorage.setItem('split-everything.session', JSON.stringify(session))
     useAuthStore().restore()
 
     await router.push('/')
 
-    expect(router.currentRoute.value.name).toBe('groups')
+    expect(router.currentRoute.value.name).toBe('dashboard')
   })
 
   it('has a catch-all for an unknown path', async () => {
@@ -86,7 +86,7 @@ describe('route guard', () => {
     const names = router.getRoutes().map((route) => route.name)
 
     for (const name of [
-      'groups',
+      'dashboard',
       'group',
       'group-settings',
       'new-group',
