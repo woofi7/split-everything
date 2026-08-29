@@ -154,6 +154,29 @@ describe('PersonPicker', () => {
     expect(wrapper.find('[data-testid="add-placeholder"]').exists()).toBe(true)
   })
 
+  it('clears the query on Escape', async () => {
+    const wrapper = mountPicker()
+    await type(wrapper, 'ali')
+
+    await wrapper.find('input[type="search"]').trigger('keydown', { key: 'Escape' })
+
+    // Closes the list without picking anyone, which is what Escape means.
+    expect((wrapper.find('input[type="search"]').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.findAll('[data-testid="candidate"]')).toHaveLength(0)
+    expect(wrapper.emitted('pick')).toBeFalsy()
+  })
+
+  it('follows the pointer, so a click lands on the row under it', async () => {
+    const wrapper = mountPicker()
+    await type(wrapper, 'bob')
+
+    const rows = wrapper.findAll('[data-testid="candidate"]')
+    await rows[1].trigger('mousemove')
+
+    expect(rows[1].attributes('aria-selected')).toBe('true')
+    expect(rows[0].attributes('aria-selected')).toBe('false')
+  })
+
   it('describes the field for a screen reader', () => {
     const wrapper = mountPicker()
     const input = wrapper.find('input[type="search"]')
