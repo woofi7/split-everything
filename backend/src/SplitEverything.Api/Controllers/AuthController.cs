@@ -22,6 +22,30 @@ public sealed class AuthController(
         return Ok(result);
     }
 
+    /// <summary>
+    /// Signs in with an email address and no Google account.
+    ///
+    /// Only reachable when the flag is on, which startup forces off outside
+    /// Development. It exists so a fresh clone is usable before an OAuth client
+    /// has been registered.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("dev")]
+    public async Task<ActionResult<GoogleSignInResult>> SignInAsDeveloper(
+        DevelopmentSignInRequest request, CancellationToken ct)
+    {
+        var result = await auth.SignInAsDeveloperAsync(
+            request.DeviceId is null ? request with { DeviceId = CurrentUser.DeviceId } : request, ct);
+
+        SetRefreshCookie(result.Tokens);
+        return Ok(result);
+    }
+
+    /// <summary>What the sign-in page can offer, so it can explain itself.</summary>
+    [AllowAnonymous]
+    [HttpGet("capabilities")]
+    public ActionResult<AuthCapabilities> Capabilities() => Ok(auth.GetCapabilities());
+
     [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthTokens>> Refresh(RefreshRequest? request, CancellationToken ct)

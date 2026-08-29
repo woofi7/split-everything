@@ -21,4 +21,13 @@ public sealed class AuthOptions
     public string AppBaseUrl { get; set; } = "http://localhost:5173";
 
     public string? InviteFromAddress { get; set; }
+
+    /// <summary>
+    /// Allows signing in with an email address and no Google account.
+    ///
+    /// An authentication bypass, off by default, and forced off outside
+    /// Development during startup. It exists so a fresh clone is usable before an
+    /// OAuth client has been registered.
+    /// </summary>
+    public bool AllowDevelopmentSignIn { get; set; }
 }

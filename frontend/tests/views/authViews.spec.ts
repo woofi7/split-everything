@@ -192,6 +192,100 @@ describe('SignInView', () => {
     expect(textOf(wrapper)).toContain('did not return a credential')
   })
 
+  it('offers the development sign-in when the server allows it', async () => {
+    const api = fakeApi({ '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true } ) })
+
+    const { wrapper } = await mountView(SignInView, { api, signedIn: false })
+
+    const text = textOf(wrapper)
+    expect(text).toContain('Development sign-in')
+    expect(text).toContain('Never enabled in production')
+    expect(wrapper.find('input[type="email"]').exists()).toBe(true)
+  })
+
+  it('does not offer it when the server does not allow it', async () => {
+    const api = fakeApi({ '/auth/capabilities': () => ({ googleConfigured: true, developmentSignIn: false } ) })
+
+    const { wrapper } = await mountView(SignInView, { api, signedIn: false })
+
+    expect(wrapper.find('input[type="email"]').exists()).toBe(false)
+  })
+
+  it('does not complain about Google when there is another way in', async () => {
+    const api = fakeApi({ '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true } ) })
+
+    const { wrapper } = await mountView(SignInView, { api, signedIn: false })
+
+    // Showing "Google is unavailable" next to a working form would be confusing.
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+
+  it('signs in with an address when the development path is offered', async () => {
+    const api = fakeApi({
+      '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true }),
+      '/auth/dev': () => ({
+        user: {
+          id: 'user-1',
+          email: 'alice@example.com',
+          displayName: 'Alice',
+          avatarUrl: null,
+          defaultCurrency: 'CAD',
+          prefersLightTheme: false,
+        },
+        tokens: {
+          accessToken: 'access-1',
+          accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+          refreshToken: 'refresh-1',
+          refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        },
+        isNewUser: true,
+        autoJoinedGroupIds: [],
+      }),
+    })
+
+    const { wrapper, auth } = await mountView(SignInView, { api, signedIn: false })
+
+    await wrapper.find('input[type="email"]').setValue('alice@example.com')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/auth/dev',
+      expect.objectContaining({ email: 'alice@example.com' }),
+    )
+    expect(auth.isSignedIn).toBe(true)
+    expect(replace).toHaveBeenCalledWith('/groups')
+  })
+
+  it('keeps the development submit disabled without an address', async () => {
+    const api = fakeApi({ '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true } ) })
+
+    const { wrapper } = await mountView(SignInView, { api, signedIn: false })
+
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('reports a refused development sign-in', async () => {
+    const api = fakeApi({ '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true } ) })
+    api.post.mockRejectedValue(new Error('Development sign-in is not enabled.'))
+
+    const { wrapper } = await mountView(SignInView, { api, signedIn: false })
+    await wrapper.find('input[type="email"]').setValue('alice@example.com')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(textOf(wrapper)).toContain('not enabled')
+  })
+
+  it('still shows the Google failure when capabilities could not be read', async () => {
+    const api = fakeApi()
+    api.get.mockRejectedValue(new Error('offline'))
+
+    const { wrapper } = await mountView(SignInView, { api, signedIn: false })
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('unavailable')
+  })
+
   it('sends an already signed-in visitor straight on', async () => {
     await mountView(SignInView, { signedIn: true })
 

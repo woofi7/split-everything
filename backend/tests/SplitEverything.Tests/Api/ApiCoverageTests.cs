@@ -19,6 +19,38 @@ namespace SplitEverything.Tests.Api;
 public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
 {
     [Fact]
+    public async Task The_development_sign_in_is_refused_outside_development()
+    {
+        var response = await Client.PostAsJsonAsync("/api/auth/dev",
+            new DevelopmentSignInRequest("attacker@example.com", "Attacker", null), Json);
+
+        // The environment variable asks for it to be on; startup forces it off
+        // because the host is not Development. Without that, setting one variable
+        // on a production box would be a complete authentication bypass.
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Capabilities_do_not_advertise_a_bypass_that_is_forced_off()
+    {
+        var anonymous = Factory.CreateClient();
+
+        var capabilities = await anonymous.GetFromJsonAsync<AuthCapabilities>(
+            "/api/auth/capabilities", Json);
+
+        capabilities!.DevelopmentSignIn.ShouldBeFalse();
+        capabilities.GoogleConfigured.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Capabilities_are_public_so_the_sign_in_page_can_explain_itself()
+    {
+        var anonymous = Factory.CreateClient();
+
+        (await anonymous.GetAsync("/api/auth/capabilities")).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Signing_out_clears_the_refresh_cookie()
     {
         await SignInAsync();

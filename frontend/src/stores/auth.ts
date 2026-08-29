@@ -100,6 +100,24 @@ export const useAuthStore = defineStore('auth', () => {
     return result
   }
 
+  /**
+   * Signs in without Google. The server refuses this unless it was deliberately
+   * enabled outside production, so the store simply asks and reports the answer.
+   */
+  async function signInAsDeveloper(email: string, displayName?: string): Promise<SignInResult> {
+    const result = await requireApi().post<SignInResult>('/auth/dev', {
+      email,
+      displayName: displayName?.trim() || null,
+      deviceId: null,
+    })
+
+    user.value = result.user
+    tokens.value = result.tokens
+    persist()
+
+    return result
+  }
+
   async function refresh(): Promise<string | null> {
     const current = tokens.value
     if (!current) return null
@@ -185,6 +203,7 @@ export const useAuthStore = defineStore('auth', () => {
     attachApi,
     restore,
     signInWithGoogle,
+    signInAsDeveloper,
     refresh,
     signOut,
     updateProfile,

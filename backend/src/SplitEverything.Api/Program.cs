@@ -20,6 +20,15 @@ builder.Host.UseSerilog((context, logger) => logger
     .Enrich.FromLogContext()
     .WriteTo.Console());
 
+// Second, independent guard on the development sign-in. The service refuses when
+// the flag is off; this makes sure the flag cannot be on outside Development at
+// all, even if the environment sets it by mistake. It has to run before the
+// infrastructure registration, which snapshots the options.
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Configuration["Auth:AllowDevelopmentSignIn"] = "false";
+}
+
 builder.Services.AddSplitEverythingInfrastructure(builder.Configuration);
 
 builder.Services.AddControllers()
@@ -42,6 +51,7 @@ builder.Services.AddProblemDetails();
 
 var authOptions = new AuthOptions();
 builder.Configuration.GetSection(AuthOptions.SectionName).Bind(authOptions);
+
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

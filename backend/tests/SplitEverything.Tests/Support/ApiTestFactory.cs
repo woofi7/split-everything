@@ -41,7 +41,10 @@ public sealed class ApiTestFactory(string connectionString) : WebApplicationFact
         ["Auth__AppBaseUrl"] = "https://split.test",
         // The API layer is under test, not the schedulers.
         ["Database__MigrateOnStartup"] = "false",
-        ["Push__VapidPublicKey"] = "test-public-key"
+        ["Push__VapidPublicKey"] = "test-public-key",
+        // Deliberately on, to prove the startup guard forces it off outside
+        // Development. The factory runs as "Testing".
+        ["Auth__AllowDevelopmentSignIn"] = "true"
     };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
