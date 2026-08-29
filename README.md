@@ -43,20 +43,30 @@ You need .NET 10, Node 24 and Docker.
 
 ```bash
 # Postgres for development
-docker run -d --name split-postgres \
+docker run -d --name split-dev-postgres \
   -e POSTGRES_DB=split_everything \
   -e POSTGRES_USER=split \
   -e POSTGRES_PASSWORD=split \
   -p 5432:5432 postgres:17-alpine
 
-# API on http://localhost:5080
+# API on http://localhost:5080. It migrates and seeds on start.
 cd backend
-dotnet run --project src/SplitEverything.Api
+ASPNETCORE_URLS=http://localhost:5080 dotnet run --project src/SplitEverything.Api
 
 # App on http://localhost:5173, proxying /api and /hubs to the API
 cd frontend
 npm install
 npm run dev
+```
+
+If port 5432 is already taken by another project, publish Postgres somewhere else
+and point the API at it:
+
+```bash
+docker run -d --name split-dev-postgres ... -p 5433:5432 postgres:17-alpine
+
+ConnectionStrings__Postgres='Host=localhost;Port=5433;Database=split_everything;Username=split;Password=split' \
+  ASPNETCORE_URLS=http://localhost:5080 dotnet run --project src/SplitEverything.Api
 ```
 
 ### Signing in locally
