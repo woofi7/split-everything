@@ -31,20 +31,44 @@ const isJoining = ref(false)
  * requires Google, so the link alone grants nothing.
  */
 
+/**
+ * Set on the way to sign-in, and read on the way back.
+ *
+ * Without it, signing in returns to this page with the same button still to
+ * press, which reads as though signing in did nothing. The spec's flow is one
+ * decision: open the link, sign in, you are in the group.
+ *
+ * It travels in the URL rather than in memory so it survives the full page load
+ * that a sign-in redirect can involve.
+ */
+const wantsToJoin = computed(() => route.query.join === '1')
+
 onMounted(async () => {
   try {
     preview.value = await useApi().get<InvitePreview>(`/invites/${token.value}`)
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'That invite could not be found.'
+    return
   }
+
+  // Only after signing in for this invite. Someone who merely opened the link
+  // should see which group it is and decide for themselves.
+  if (wantsToJoin.value && auth.isSignedIn && preview.value.isRedeemable) await redeem()
 })
 
 async function join(): Promise<void> {
   if (!auth.isSignedIn) {
-    await router.push({ name: 'sign-in', query: { redirect: route.fullPath } })
+    await router.push({
+      name: 'sign-in',
+      query: { redirect: `/join/${token.value}?join=1` },
+    })
     return
   }
 
+  await redeem()
+}
+
+async function redeem(): Promise<void> {
   isJoining.value = true
   error.value = null
 

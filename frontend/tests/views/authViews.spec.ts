@@ -343,10 +343,72 @@ describe('JoinView', () => {
     await wrapper.find('button[type="button"]').trigger('click')
     await settle()
 
+    // The target carries the intent to join, so coming back finishes the job
+    // rather than asking for the same tap a second time.
     expect(push).toHaveBeenCalledWith({
       name: 'sign-in',
-      query: { redirect: '/join/invite-token' },
+      query: { redirect: '/join/invite-token?join=1' },
     })
+  })
+
+  it('joins on its own when the visitor comes back from signing in', async () => {
+    // The spec's flow is one decision: open the link, sign in, you are in the
+    // group. Landing back on the same page with the same button still to press
+    // reads as though signing in did nothing.
+    query = { join: '1' }
+    const api = preview()
+    api.post.mockResolvedValue({ groupId: 'group-1' })
+
+    await mountView(JoinView, { api, signedIn: true })
+    await settle()
+
+    expect(api.post).toHaveBeenCalledWith('/invites/invite-token/redeem')
+    expect(replace).toHaveBeenCalledWith({ name: 'group', params: { groupId: 'group-1' } })
+  })
+
+  it('does not join on its own when the visitor just opened the link', async () => {
+    const api = preview()
+    api.post.mockResolvedValue({ groupId: 'group-1' })
+
+    // No intent recorded: they should see what they are joining and decide.
+    const { wrapper } = await mountView(JoinView, { api, signedIn: true })
+    await settle()
+
+    expect(api.post).not.toHaveBeenCalled()
+    expect(wrapper.find('button[type="button"]').exists()).toBe(true)
+  })
+
+  it('does not try to join on its own while signed out', async () => {
+    query = { join: '1' }
+    const api = preview()
+
+    const { wrapper } = await mountView(JoinView, { api, signedIn: false })
+    await settle()
+
+    expect(api.post).not.toHaveBeenCalled()
+    expect(textOf(wrapper)).toContain('Sign in with Google to join')
+  })
+
+  it('explains it when joining on its own fails', async () => {
+    query = { join: '1' }
+    const api = preview()
+    api.post.mockRejectedValue(new Error('That invite has already been used.'))
+
+    const { wrapper } = await mountView(JoinView, { api, signedIn: true })
+    await settle()
+
+    expect(textOf(wrapper)).toContain('That invite has already been used.')
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('does not try to join an invite that cannot be redeemed', async () => {
+    query = { join: '1' }
+    const api = preview({ isRedeemable: false })
+
+    await mountView(JoinView, { api, signedIn: true })
+    await settle()
+
+    expect(api.post).not.toHaveBeenCalled()
   })
 
   it('joins the group when already signed in', async () => {
