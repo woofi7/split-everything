@@ -106,7 +106,11 @@ describe('ImportView', () => {
     const text = textOf(wrapper)
     expect(text).toContain('A bank or credit card statement')
     expect(text).toContain('A Settle Up export')
-    expect(text).toContain('handled on the server')
+
+    // The statement is read here and never uploaded; the export is parsed by the
+    // server. The difference matters enough to say on screen.
+    expect(text).toContain('never uploaded')
+    expect(wrapper.findAll('input[type="file"]').length).toBe(2)
   })
 
   it('loads the local ruleset so it can guess categories', async () => {

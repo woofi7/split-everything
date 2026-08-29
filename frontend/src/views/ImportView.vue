@@ -7,6 +7,7 @@ import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { useApi } from '@/api/provider'
+import SettleUpWizard from '@/components/import/SettleUpWizard.vue'
 import { StatementWorkerClient } from '@/import/statementWorkerClient'
 import { StatementReviewSession, type RowAction } from '@/import/reviewSession'
 import { computeFingerprint, normalizeMerchant } from '@/domain/fingerprint'
@@ -201,6 +202,20 @@ async function commit(): Promise<void> {
   }
 }
 
+async function onImported(result: {
+  groupId: string
+  createdExpenses: number
+  createdSettlements: number
+}): Promise<void> {
+  await expenses.sync()
+
+  const parts = [`${result.createdExpenses} expenses`]
+  if (result.createdSettlements > 0) parts.push(`${result.createdSettlements} settlements`)
+  message.value = `Imported ${parts.join(' and ')}.`
+
+  await router.replace({ name: 'group', params: { groupId: result.groupId } })
+}
+
 async function cancel(): Promise<void> {
   await session.value?.cancel()
   session.value = null
@@ -225,13 +240,7 @@ async function cancel(): Promise<void> {
         </label>
       </div>
 
-      <div class="surface-card p-4">
-        <h2 class="font-medium">A Settle Up export</h2>
-        <p class="mt-1 text-sm text-[var(--text-muted)]">
-          Export a group from Settle Up, then map the columns and preview before committing. That
-          import is handled on the server, since it is a structured export rather than a statement.
-        </p>
-      </div>
+      <SettleUpWizard @imported="onImported" @cancel="() => undefined" />
 
       <div v-if="progress" class="surface-card p-4" aria-live="polite">
         <p class="text-sm">{{ progress.stage }}</p>
