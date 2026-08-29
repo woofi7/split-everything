@@ -1,0 +1,5 @@
+Date,Purpose,Category,Currency,Amount,Who paid,For whom
+2026-01-05,Groceries at Metro,Groceries,CAD,84.32,Alice,"Alice, Bob"
+2026-01-07,Hydro bill,Utilities,CAD,120.00,Bob,"Alice, Bob"
+2026-01-12,Dinner out,Restaurant,CAD,64.50,Alice,"Alice, Bob, Carol"
+2026-01-18,Uber home,Transport,CAD,23.15,Carol,"Bob, Carol"

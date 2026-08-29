@@ -38,6 +38,9 @@ public abstract class ServiceTestBase(PostgresFixture fixture) : DatabaseTestBas
                 Arg.Any<DateTimeOffset?>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(
                 new ConversionResult(call.Arg<decimal>(), 1m, Clock.UtcNow)));
+        Currency.GetRateAsync(Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<DateTimeOffset?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(1m));
 
         Broadcaster = Substitute.For<ISyncBroadcaster>();
         Push = Substitute.For<IPushDispatcher>();

@@ -27,6 +27,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\SplitEverything.Infrastructure\SplitEverything.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\SplitEverything.Api\SplitEverything.Api.csproj" />
   </ItemGroup>

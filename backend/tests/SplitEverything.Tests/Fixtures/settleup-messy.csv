@@ -1,0 +1,6 @@
+Date,Purpose,Category,Currency,Amount,Who paid,For whom
+2026-01-05,Good row,Groceries,CAD,10.00,Alice,"Alice, Bob"
+not-a-date,Bad date,Groceries,CAD,10.00,Alice,"Alice, Bob"
+2026-01-06,Bad amount,Groceries,CAD,abc,Alice,"Alice, Bob"
+2026-01-07,No payer,Groceries,CAD,10.00,,"Alice, Bob"
+2026-01-08,Unknown payer,Groceries,CAD,10.00,Zebedee,"Alice, Bob"
