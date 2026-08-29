@@ -192,6 +192,61 @@ describe('GroupSettingsView', () => {
     vi.unstubAllGlobals()
   })
 
+  it('shows the invite link so it can be read without the clipboard', async () => {
+    const client = api({
+      '/groups/group-1/invites': () => ({
+        id: 'invite-1',
+        token: 'plain-token',
+        url: 'https://split.test/join/plain-token',
+        invitedEmail: null,
+        expiresAt: '2026-02-01T00:00:00Z',
+        maxUses: 1,
+        useCount: 0,
+      }),
+    })
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:qr', revokeObjectURL: vi.fn() })
+
+    const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Invite')!.trigger('click')
+    await settle()
+
+    // The clipboard API needs a secure context, so the link has to be readable
+    // on its own or a plain HTTP session cannot share an invite at all.
+    expect(textOf(wrapper)).toContain('https://split.test/join/plain-token')
+    vi.unstubAllGlobals()
+  })
+
+  it('does not claim to have copied the link when it cannot', async () => {
+    const client = api({
+      '/groups/group-1/invites': () => ({
+        id: 'invite-1',
+        token: 'plain-token',
+        url: 'https://split.test/join/plain-token',
+        invitedEmail: null,
+        expiresAt: '2026-02-01T00:00:00Z',
+        maxUses: 1,
+        useCount: 0,
+      }),
+    })
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:qr', revokeObjectURL: vi.fn() })
+    const clipboard = navigator.clipboard
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+
+    const { wrapper } = await mountView(GroupSettingsView, { api: client })
+    await wrapper.findAll('button').find((b) => b.text() === 'Invite')!.trigger('click')
+    await settle()
+
+    await wrapper.findAll('button').find((b) => b.text().includes('Copy'))!.trigger('click')
+    await settle()
+
+    expect(textOf(wrapper)).not.toContain('Invite link copied')
+    expect(textOf(wrapper)).toContain('secure connection')
+
+    Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true })
+    vi.unstubAllGlobals()
+  })
+
   it('explains that the link alone grants nothing', async () => {
     const { wrapper } = await mountView(GroupSettingsView, { api: api() })
 

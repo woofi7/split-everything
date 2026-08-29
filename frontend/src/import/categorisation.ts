@@ -1,4 +1,5 @@
 import { normalizeMerchant } from '@/domain/fingerprint'
+import { newId } from '@/domain/ids'
 
 export interface CategoryRule {
   id: string
@@ -93,7 +94,7 @@ export function learnFromCorrection(
   }
 
   return {
-    id: crypto.randomUUID(),
+    id: newId(),
     keyword,
     categoryId,
     categoryKey,

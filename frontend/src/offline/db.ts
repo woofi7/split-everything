@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie'
 import type { SplitType } from '@/domain/splitting'
 import type { VectorClock } from '@/domain/vectorClock'
+import { newId } from '@/domain/ids'
 
 /**
  * The local replica.
@@ -200,7 +201,7 @@ export async function getDeviceId(): Promise<string> {
   const existing = await db.meta.get(DEVICE_ID_KEY)
   if (existing) return existing.value
 
-  const deviceId = crypto.randomUUID()
+  const deviceId = newId()
   await db.meta.put({ key: DEVICE_ID_KEY, value: deviceId })
   return deviceId
 }

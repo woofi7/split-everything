@@ -12,6 +12,7 @@ import { calculateItemizedSplit, calculateSplit, type SplitType } from '@/domain
 import { netBalances, simplifyDebts, pairwiseDebts, type MemberBalance, type Transfer } from '@/domain/balances'
 import { roundMoney } from '@/domain/money'
 import type { SyncEngine } from '@/offline/syncEngine'
+import { newId } from '@/domain/ids'
 
 export interface ExpenseDraft {
   groupId: string
@@ -122,7 +123,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     // server freeze the real rate keeps a single source of truth for FX.
     const isBaseCurrency = draft.currency === group.baseCurrency
     const expense: LocalExpense = {
-      id: crypto.randomUUID(),
+      id: newId(),
       groupId: draft.groupId,
       paidByMemberId: draft.paidByMemberId,
       description,
@@ -278,7 +279,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     if (!expense) throw new Error('That expense is not on this device.')
 
     const entity: LocalComment = {
-      id: crypto.randomUUID(),
+      id: newId(),
       expenseId,
       groupId: expense.groupId,
       authorMemberId,
@@ -319,7 +320,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     }
 
     const entity: LocalSettlement = {
-      id: crypto.randomUUID(),
+      id: newId(),
       groupId: draft.groupId,
       fromMemberId: draft.fromMemberId,
       toMemberId: draft.toMemberId,

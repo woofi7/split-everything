@@ -1,5 +1,6 @@
 import type { StatementRow } from './statementParser'
 import type { StatementWorkerRequest, StatementWorkerResponse } from '@/workers/statementWorker'
+import { newId } from '@/domain/ids'
 
 export interface ParseProgress {
   stage: string
@@ -24,7 +25,7 @@ export class StatementWorkerClient {
   }
 
   parseCsv(text: string, onProgress?: (progress: ParseProgress) => void) {
-    return this.run({ kind: 'csv', id: crypto.randomUUID(), text }, onProgress)
+    return this.run({ kind: 'csv', id: newId(), text }, onProgress)
   }
 
   parsePdf(
@@ -33,7 +34,7 @@ export class StatementWorkerClient {
     onProgress?: (progress: ParseProgress) => void,
   ) {
     return this.run(
-      { kind: 'pdf', id: crypto.randomUUID(), buffer, statementYear },
+      { kind: 'pdf', id: newId(), buffer, statementYear },
       onProgress,
       [buffer],
     )
