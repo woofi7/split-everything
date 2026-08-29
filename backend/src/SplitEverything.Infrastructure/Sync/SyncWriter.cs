@@ -52,11 +52,9 @@ public sealed class SyncWriter(
     IGroupSequenceAllocator sequences,
     IClock clock) : ISyncWriter
 {
-    private static readonly JsonSerializerOptions PayloadOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    };
+    // The same options the push path parses with, so what the log hands back is
+    // always a shape a client can send straight back.
+    private static readonly JsonSerializerOptions PayloadOptions = SyncPayloads.Options;
 
     public async Task<long> RecordAsync<TEntity>(
         TEntity entity,

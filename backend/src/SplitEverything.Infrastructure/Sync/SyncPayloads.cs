@@ -12,11 +12,22 @@ namespace SplitEverything.Infrastructure.Sync;
 /// </summary>
 public static class SyncPayloads
 {
+    /// <summary>
+    /// The one wire format for payload JSON, used to read what a client pushes and
+    /// to write what the sync log hands back. Shared deliberately: when the two
+    /// differ, a client can push a shape the server cannot read.
+    ///
+    /// Enums travel as names, because the client holds a split type as a string.
+    /// Names and numbers are both readable, so payloads already in the log stay
+    /// readable too.
+    /// </summary>
     public static readonly JsonSerializerOptions Options = new()
     {
         PropertyNameCaseInsensitive = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        NumberHandling = JsonNumberHandling.AllowReadingFromString
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() }
     };
 
     public sealed class SplitPayload
