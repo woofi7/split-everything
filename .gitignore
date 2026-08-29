@@ -1,0 +1,44 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+.idea/
+TestResults/
+coverage/
+*.coverage
+*.trx
+*.opencover.xml
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# Capacitor native shells (generated)
+frontend/ios/App/Pods/
+frontend/ios/App/build/
+frontend/android/.gradle/
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/local.properties
+frontend/ios/App/App/public/
+frontend/android/app/src/main/assets/public/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.keystore
+appsettings.Local.json
+infra/backup/dumps/
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+*.swp
