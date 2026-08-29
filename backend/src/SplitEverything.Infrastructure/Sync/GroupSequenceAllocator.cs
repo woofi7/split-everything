@@ -36,15 +36,21 @@ public sealed class GroupSequenceAllocator(AppDbContext db) : IGroupSequenceAllo
 
         var next = allocated[0];
 
-        // Keep any already-tracked copy of the group in step, so a caller that goes
-        // on to save the entity in the same unit of work does not write back a stale
-        // counter and hand the same number out twice.
+        // Keep any already-tracked copy of the group in step, so a caller that reads
+        // the counter later in the same unit of work sees the allocation rather than
+        // a stale value and hands the same number out twice.
+        //
+        // Both current and original value are set: marking the property unmodified
+        // alone would make EF restore the current value from the original, quietly
+        // undoing the update we just performed in the database.
         var tracked = db.ChangeTracker.Entries<Domain.Entities.Group>()
             .FirstOrDefault(e => e.Entity.Id == groupId);
         if (tracked is not null)
         {
-            tracked.Entity.SequenceCounter = next;
-            tracked.Property(g => g.SequenceCounter).IsModified = false;
+            var property = tracked.Property(g => g.SequenceCounter);
+            property.OriginalValue = next;
+            property.CurrentValue = next;
+            property.IsModified = false;
         }
 
         return next;

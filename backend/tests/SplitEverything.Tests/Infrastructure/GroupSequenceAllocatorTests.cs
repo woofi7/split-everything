@@ -61,6 +61,34 @@ public class GroupSequenceAllocatorTests(PostgresFixture fixture) : DatabaseTest
     }
 
     [Fact]
+    public async Task A_tracked_group_sees_the_allocation_it_just_made()
+    {
+        var (group, _) = await SeedAsync();
+        var tracked = await Db.Groups.FirstAsync(g => g.Id == group.Id);
+        var allocator = new GroupSequenceAllocator(Db);
+
+        await allocator.NextAsync(group.Id);
+        await allocator.NextAsync(group.Id);
+
+        // A caller that goes on to renumber rows from this counter would otherwise
+        // reuse numbers already handed out and collide on (group, seq).
+        tracked.SequenceCounter.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task An_allocation_is_not_undone_by_a_later_save()
+    {
+        var (group, _) = await SeedAsync();
+        var tracked = await Db.Groups.FirstAsync(g => g.Id == group.Id);
+        await new GroupSequenceAllocator(Db).NextAsync(group.Id);
+
+        tracked.Name = "Renamed";
+        await Db.SaveChangesAsync();
+
+        (await NewContext().Groups.FirstAsync(g => g.Id == group.Id)).SequenceCounter.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task An_unknown_group_is_rejected()
         => await Should.ThrowAsync<InvalidOperationException>(
             () => new GroupSequenceAllocator(Db).NextAsync(Guid.NewGuid()));
