@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { db, resetDatabase } from '@/offline/db'
 import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
-import { settle } from '../support/viewHarness'
+import { settle, waitFor } from '../support/viewHarness'
 
 /**
  * A local write has to reach the server on its own.
@@ -107,9 +107,8 @@ describe('a local write syncs itself', () => {
     const store = storeWith()
 
     await store.add(draft)
-    await settle()
+    await waitFor(() => api.push.mock.calls.length > 0)
 
-    expect(api.push).toHaveBeenCalled()
     expect(api.push.mock.calls[0][0].operations).toHaveLength(1)
   })
 
@@ -117,7 +116,9 @@ describe('a local write syncs itself', () => {
     const store = storeWith()
 
     const expense = await store.add(draft)
-    await settle()
+    // The store's own copy, not the queue: the queue empties first and the store
+    // catches up when the drain rehydrates it.
+    await waitFor(() => store.pendingCount === 0 && store.forGroup(groupId)[0]?.pending === false)
 
     expect((await db.expenses.get(expense.id))!.pending).toBe(false)
     expect(store.forGroup(groupId)[0].pending).toBe(false)
@@ -146,6 +147,7 @@ describe('a local write syncs itself', () => {
     const store = storeWith(true, { failPush: true })
 
     const expense = await store.add(draft)
+    await waitFor(() => api.push.mock.calls.length > 0)
     await settle()
 
     expect(await db.outbox.count()).toBe(1)
@@ -170,10 +172,9 @@ describe('a local write syncs itself', () => {
     api.push.mockClear()
 
     await store.edit(expense.id, { description: 'Late dinner' })
-    await settle()
+    await waitFor(async () => (await db.expenses.get(expense.id))?.pending === false)
 
     expect(api.push).toHaveBeenCalled()
-    expect((await db.expenses.get(expense.id))!.pending).toBe(false)
   })
 
   it('pushes a delete', async () => {
@@ -183,10 +184,9 @@ describe('a local write syncs itself', () => {
     api.push.mockClear()
 
     await store.remove(expense.id)
-    await settle()
+    await waitFor(async () => (await db.outbox.count()) === 0)
 
     expect(api.push).toHaveBeenCalled()
-    expect(await db.outbox.count()).toBe(0)
   })
 
   it('pushes a settlement', async () => {
@@ -199,10 +199,9 @@ describe('a local write syncs itself', () => {
       amount: 30,
       currency: 'CAD',
     })
-    await settle()
+    await waitFor(async () => (await db.settlements.get(settlement.id))?.pending === false)
 
     expect(api.push).toHaveBeenCalled()
-    expect((await db.settlements.get(settlement.id))!.pending).toBe(false)
   })
 
   it('pushes a comment', async () => {
@@ -212,10 +211,9 @@ describe('a local write syncs itself', () => {
     api.push.mockClear()
 
     const comment = await store.comment(expense.id, 'Was this the taxi too?', alice)
-    await settle()
+    await waitFor(async () => (await db.comments.get(comment.id))?.pending === false)
 
     expect(api.push).toHaveBeenCalled()
-    expect((await db.comments.get(comment.id))!.pending).toBe(false)
   })
 
   it('does not send the same operation twice when writes come back to back', async () => {
@@ -223,7 +221,7 @@ describe('a local write syncs itself', () => {
 
     await store.add(draft)
     await store.add({ ...draft, description: 'Taxi' })
-    await settle()
+    await waitFor(async () => (await db.outbox.count()) === 0)
 
     const sent = api.push.mock.calls.flatMap((call: any[]) =>
       call[0].operations.map((operation: any) => operation.operationId),

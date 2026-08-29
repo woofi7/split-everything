@@ -29,6 +29,25 @@ export const USER_ID = 'user-1'
  * fake-indexeddb resolves its transactions on a macrotask, so a microtask flush
  * alone never sees the mounted state of a view that reads the local replica.
  */
+/**
+ * Waits for a condition rather than a fixed number of turns.
+ *
+ * A background drain crosses several macrotasks and fake-indexeddb resolves on a
+ * macrotask, so counting turns is a race that only shows up under load.
+ */
+export async function waitFor(
+  condition: () => boolean | Promise<boolean>,
+  turns = 200,
+): Promise<void> {
+  for (let i = 0; i < turns; i++) {
+    if (await condition()) return
+    await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  throw new Error('Timed out waiting for the expected state.')
+}
+
 export async function settle(turns = 5): Promise<void> {
   for (let i = 0; i < turns; i++) {
     await flushPromises()

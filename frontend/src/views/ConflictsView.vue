@@ -49,8 +49,9 @@ async function resolve(conflict: LocalConflict, resolution: 'KeepLocal' | 'KeepR
 }
 
 async function discard(operationId: string): Promise<void> {
-  await db.outbox.delete(operationId)
-  await expenses.refreshPendingCount()
+  // Through the store, so the local row stops claiming to be unsent. Deleting only
+  // the queue entry would leave a row nothing can ever sync.
+  await expenses.discardRejected(operationId)
   await load()
 }
 </script>
