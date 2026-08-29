@@ -62,6 +62,8 @@ async function discard(operationId: string): Promise<void> {
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-syncing="expenses.isSyncing"
+    :back-to="{ name: 'profile' }"
+    back-label="Profile"
   >
     <section v-if="conflicts.length > 0" class="mb-6">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">

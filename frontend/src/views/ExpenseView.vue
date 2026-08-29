@@ -27,6 +27,8 @@ const expense = computed(() =>
   expenses.expenses.find((candidate) => candidate.id === expenseId.value),
 )
 
+const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
+
 const comments = computed(() => expenses.commentsFor(expenseId.value))
 
 const memberName = (memberId: string) =>
@@ -63,7 +65,11 @@ async function remove(): Promise<void> {
 </script>
 
 <template>
-  <AppShell :title="expense?.description ?? 'Expense'">
+  <AppShell
+    :title="expense?.description ?? 'Expense'"
+    :back-to="{ name: 'group', params: { groupId } }"
+    :back-label="group?.name ?? 'Group'"
+  >
     <div v-if="expense" class="flex flex-col gap-5">
       <section class="surface-card p-4">
         <div class="flex items-baseline justify-between gap-3">

@@ -2,17 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import ExpenseView from '@/views/ExpenseView.vue'
 import { db } from '@/offline/db'
-import {
-  ALICE,
-  BOB,
-  GROUP_ID,
-  fakeApi,
-  mountView,
-  settle,
-  testExpense,
-  testGroup,
-  textOf,
-} from '../support/viewHarness'
+import { ALICE, BOB, GROUP_ID, fakeApi, mountView, settle, testExpense, testGroup, textOf, waitFor } from '../support/viewHarness'
 
 const replace = vi.fn()
 
@@ -130,7 +120,7 @@ describe('ExpenseView', () => {
 
     await wrapper.find('input[type="text"]').setValue('Was this the taxi?')
     await wrapper.find('form').trigger('submit')
-    await settle()
+    await waitFor(() => textOf(wrapper).includes('Was this the taxi?'))
 
     expect(textOf(wrapper)).toContain('Was this the taxi?')
     expect(textOf(wrapper)).toContain('Comments (1)')
@@ -145,7 +135,9 @@ describe('ExpenseView', () => {
     const input = wrapper.find('input[type="text"]')
     await input.setValue('Noted')
     await wrapper.find('form').trigger('submit')
-    await settle()
+    // Posting queues the comment and kicks a background drain, so the box clears
+    // a few turns later. Waiting on the box itself rather than counting turns.
+    await waitFor(() => (input.element as HTMLInputElement).value === '')
 
     expect((input.element as HTMLInputElement).value).toBe('')
   })
@@ -172,7 +164,9 @@ describe('ExpenseView', () => {
 
     const remove = wrapper.findAll('button').find((button) => button.text().includes('Delete'))
     await remove!.trigger('click')
-    await settle()
+    // The redirect is the last thing to happen, so it is the only safe signal
+    // that the whole action finished.
+    await waitFor(() => replace.mock.calls.length > 0)
 
     expect((await db.expenses.get('expense-1'))?.isDeleted).toBe(true)
     expect(replace).toHaveBeenCalledWith({ name: 'group', params: { groupId: GROUP_ID } })

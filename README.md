@@ -69,6 +69,24 @@ ConnectionStrings__Postgres='Host=localhost;Port=5433;Database=split_everything;
   ASPNETCORE_URLS=http://localhost:5080 dotnet run --project src/SplitEverything.Api
 ```
 
+### Testing on a phone
+
+`npm run dev` binds every interface, so a phone on the same network can open the
+app at the machine's LAN address, for example `http://192.168.2.48:5173`. Vite
+prints the address on start.
+
+Only that port needs to be reachable: the API stays on localhost and the dev
+server proxies `/api` and `/hubs` to it, so requests from the phone are
+same-origin and no CORS setup is involved.
+
+The `--host` flag lives on the dev script rather than in `vite.config.ts` because
+Vite 8.2.2 ignores `server.host` from the config file.
+
+Two things do not work over a plain LAN address, both because the browser reserves
+them for secure contexts: the service worker, so no PWA install or offline shell,
+and Web Push. Sign in with the development form; a Google OAuth client cannot list
+an IP address as an authorised origin.
+
 ### Signing in locally
 
 `appsettings.Development.json` sets `Auth:AllowDevelopmentSignIn`, so the sign-in
