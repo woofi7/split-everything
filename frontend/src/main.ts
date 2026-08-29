@@ -46,6 +46,11 @@ async function bootstrap(): Promise<void> {
   expenses.attachSync(engine)
   await expenses.hydrate()
 
+  // Repairs anything a previous session stranded: a change the server refused and
+  // nothing retried, or a row left marked unsent with nothing queued for it. Both
+  // read as "waiting to sync" forever otherwise.
+  await expenses.reconcile()
+
   // Live sync when connected; the delta pull covers everything a dropped
   // connection missed, so this is an optimisation rather than a requirement.
   createRealtimeConnection({

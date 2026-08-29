@@ -6,6 +6,7 @@ import {
   type LocalExpense,
   type LocalItem,
   type LocalSettlement,
+  type OutboxOperation,
 } from '@/offline/db'
 import { calculateItemizedSplit, calculateSplit, type SplitType } from '@/domain/splitting'
 import { netBalances, simplifyDebts, pairwiseDebts, type MemberBalance, type Transfer } from '@/domain/balances'
@@ -297,13 +298,7 @@ export const useExpensesStore = defineStore('expenses', () => {
       entityId: entity.id,
       operation: 'Create',
       groupId: entity.groupId,
-      payload: {
-        id: entity.id,
-        expenseId: entity.expenseId,
-        groupId: entity.groupId,
-        authorMemberId: entity.authorMemberId,
-        body: entity.body,
-      },
+      payload: toCommentPayload(entity),
     })
 
     await refreshPendingCount()
@@ -347,17 +342,7 @@ export const useExpensesStore = defineStore('expenses', () => {
       entityId: entity.id,
       operation: 'Create',
       groupId: entity.groupId,
-      payload: {
-        id: entity.id,
-        groupId: entity.groupId,
-        fromMemberId: entity.fromMemberId,
-        toMemberId: entity.toMemberId,
-        amount: entity.amount,
-        currency: entity.currency,
-        amountInBaseCurrency: entity.amountInBaseCurrency,
-        settledAt: entity.settledAt,
-        note: entity.note,
-      },
+      payload: toSettlementPayload(entity),
     })
 
     await refreshPendingCount()
@@ -415,6 +400,122 @@ export const useExpensesStore = defineStore('expenses', () => {
     }))
 
     return pairwiseDebts(groupExpenses, groupSettlements)
+  }
+
+  /**
+   * Repairs a replica whose queue and pending markers have drifted apart.
+   *
+   * Two ordinary things strand a change, and both leave a row reading "waiting to
+   * sync" with no way out:
+   *
+   * - A parked operation. It was refused once and nothing retries it, yet a
+   *   refusal describes the server as it was, not as it is: a fixed server
+   *   accepts what it used to reject.
+   * - A row marked unsent with nothing queued for it. A conflict drops the
+   *   operation, and an accepted operation can leave the marker behind when a
+   *   later operation for the same row is refused in the same push. Nothing will
+   *   send it, and a pull skips it because it looks like unsent local work, so
+   *   the row is invisible in both directions.
+   *
+   * Run once at startup. A change that really is unacceptable is simply parked
+   * again, which costs one push.
+   */
+  async function reconcile(): Promise<void> {
+    const parked = await db.outbox.where('status').equals('rejected').toArray()
+    for (const operation of parked) await requireSync().retry(operation.operationId)
+
+    const queued = new Set((await db.outbox.toArray()).map((operation) => operation.entityId))
+
+    for (const expense of await db.expenses.toArray()) {
+      if (!expense.pending || queued.has(expense.id)) continue
+
+      await requireSync().enqueue({
+        entityType: 'Expense',
+        entityId: expense.id,
+        operation: expense.isDeleted ? 'Delete' : 'Update',
+        groupId: expense.groupId,
+        payload: expense.isDeleted ? { id: expense.id } : toWirePayload(expense),
+      })
+    }
+
+    for (const settlement of await db.settlements.toArray()) {
+      if (!settlement.pending || queued.has(settlement.id)) continue
+
+      await requireSync().enqueue({
+        entityType: 'Settlement',
+        entityId: settlement.id,
+        operation: settlement.isDeleted ? 'Delete' : 'Update',
+        groupId: settlement.groupId,
+        payload: settlement.isDeleted ? { id: settlement.id } : toSettlementPayload(settlement),
+      })
+    }
+
+    for (const entry of await db.comments.toArray()) {
+      if (!entry.pending || queued.has(entry.id)) continue
+
+      await requireSync().enqueue({
+        entityType: 'ExpenseComment',
+        entityId: entry.id,
+        operation: entry.isDeleted ? 'Delete' : 'Update',
+        groupId: entry.groupId,
+        payload: entry.isDeleted ? { id: entry.id } : toCommentPayload(entry),
+      })
+    }
+
+    await refreshPendingCount()
+    syncSoon()
+  }
+
+  /**
+   * Abandons a change the server refused.
+   *
+   * The marker has to go with it. Leaving a row marked unsent with nothing queued
+   * puts it straight back into the state reconcile exists to repair, so discarding
+   * would appear to do nothing. A refused creation never existed on the server, so
+   * there is nothing to fall back to and the row goes; anything else keeps the row
+   * and lets the next pull replace it with the server's version.
+   */
+  async function discardRejected(operationId: string): Promise<void> {
+    const operation = await db.outbox.get(operationId)
+    if (!operation) return
+
+    await requireSync().discard(operationId)
+
+    const stillQueued = await db.outbox.where('entityId').equals(operation.entityId).count()
+    if (stillQueued === 0) {
+      if (operation.operation === 'Create') await removeLocalRow(operation)
+      else await clearPendingMarker(operation)
+    }
+
+    await hydrate()
+  }
+
+  async function removeLocalRow(operation: OutboxOperation): Promise<void> {
+    switch (operation.entityType) {
+      case 'Expense':
+        await db.expenses.delete(operation.entityId)
+        break
+      case 'Settlement':
+        await db.settlements.delete(operation.entityId)
+        break
+      case 'ExpenseComment':
+        await db.comments.delete(operation.entityId)
+        break
+    }
+  }
+
+  async function clearPendingMarker(operation: OutboxOperation): Promise<void> {
+    switch (operation.entityType) {
+      case 'Expense':
+        await db.expenses.update(operation.entityId, { pending: false })
+        break
+      case 'Settlement':
+        await db.settlements.update(operation.entityId, { pending: false })
+        break
+      case 'ExpenseComment':
+        await db.comments.update(operation.entityId, { pending: false })
+        break
+    }
   }
 
   /**
@@ -478,6 +579,8 @@ export const useExpensesStore = defineStore('expenses', () => {
     unsyncedExpenses,
     attachSync,
     hydrate,
+    reconcile,
+    discardRejected,
     forGroup,
     settlementsForGroup,
     commentsFor,
@@ -523,6 +626,30 @@ function computeShares(draft: ExpenseDraft) {
 }
 
 /** The shape the server's sync endpoint expects for an expense operation. */
+function toSettlementPayload(entity: LocalSettlement) {
+  return {
+    id: entity.id,
+    groupId: entity.groupId,
+    fromMemberId: entity.fromMemberId,
+    toMemberId: entity.toMemberId,
+    amount: entity.amount,
+    currency: entity.currency,
+    amountInBaseCurrency: entity.amountInBaseCurrency,
+    settledAt: entity.settledAt,
+    note: entity.note,
+  }
+}
+
+function toCommentPayload(entity: LocalComment) {
+  return {
+    id: entity.id,
+    expenseId: entity.expenseId,
+    groupId: entity.groupId,
+    authorMemberId: entity.authorMemberId,
+    body: entity.body,
+  }
+}
+
 function toWirePayload(expense: LocalExpense) {
   return {
     id: expense.id,
