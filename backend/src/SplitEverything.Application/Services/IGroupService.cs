@@ -25,6 +25,14 @@ public interface IGroupService
     /// People with an account who could be added to a group: everyone but the
     /// caller and the group's current members. Pass a null group for a group that
     /// does not exist yet.
+    ///
+    /// Every account on the instance, deliberately, not only people the caller
+    /// already shares a group with. The point of this list is to add someone who
+    /// has just signed up, and they share nothing yet; narrowing it would leave
+    /// that case with no route in but an invite link. The spec scopes this app to
+    /// the owner and the people they invited, so an account existing already means
+    /// the owner let that person in. Confirmed as intended, so it is not a leak to
+    /// be tightened later without changing that scope first.
     /// </summary>
     Task<IReadOnlyList<AddableUserDto>> ListAddableUsersAsync(Guid userId, Guid? groupId, CancellationToken ct = default);
 
