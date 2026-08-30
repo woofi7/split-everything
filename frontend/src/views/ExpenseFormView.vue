@@ -9,6 +9,7 @@ import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { calculateSplit, type SplitType } from '@/domain/splitting'
 import { parseAmountInput } from '@/domain/money'
+import { memberColor, memberColors } from '@/domain/memberColors'
 
 const groups = useGroupsStore()
 const categories = useCategoriesStore()
@@ -23,6 +24,11 @@ const router = useRouter()
  * Editing asks exactly the same questions as adding, so this view does both rather
  * than a second copy of the split logic drifting from this one the first time
  * either changed. The route decides: an expense id in the path means edit.
+ *
+ * Neither mode asks which group. The app is on one group at a time, so an expense
+ * belongs to the one being looked at, and the group name sits in the subtitle so
+ * that is never in doubt. Changing group is a tap in the picker; moving an existing
+ * expense is the transfer feature, which carries its history with it.
  */
 const editingId = computed(() => {
   const id = route.params.expenseId
@@ -43,11 +49,12 @@ const splitValues = ref<Record<string, number>>({})
 const error = ref<string | null>(null)
 const isSaving = ref(false)
 
+/** Short, so all four fit one row on a phone without wrapping. */
 const splitTypes: Array<{ value: SplitType; label: string }> = [
   { value: 'Equal', label: 'Equally' },
-  { value: 'Percentage', label: 'By percentage' },
-  { value: 'Shares', label: 'By shares' },
-  { value: 'ExactAmount', label: 'Exact amounts' },
+  { value: 'Percentage', label: 'Percent' },
+  { value: 'Shares', label: 'Shares' },
+  { value: 'ExactAmount', label: 'Exact' },
 ]
 
 onMounted(async () => {
@@ -177,8 +184,29 @@ const backTarget = computed(() =>
     : undefined,
 )
 
-const memberName = (memberId: string) =>
-  members.value.find((member) => member.id === memberId)?.displayName ?? 'Unknown'
+const colours = computed(() => memberColors(members.value.map((member) => member.id)))
+
+const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
+
+/** What this person owes as the form stands, or null when there is nothing to show. */
+function shareOf(memberId: string): number | null {
+  if (!participantIds.value.includes(memberId)) return null
+  return preview.value.find((share) => share.memberId === memberId)?.amount ?? null
+}
+
+/** Selected chips carry the person's colour, the way their expenses do. */
+function chipStyle(memberId: string) {
+  if (!participantIds.value.includes(memberId)) {
+    return { borderColor: 'var(--border)' }
+  }
+
+  const colour = colourOf(memberId)
+
+  return {
+    backgroundColor: `color-mix(in oklab, ${colour} 16%, var(--surface-raised))`,
+    borderColor: `color-mix(in oklab, ${colour} 45%, transparent)`,
+  }
+}
 
 function toggleParticipant(memberId: string): void {
   const index = participantIds.value.indexOf(memberId)
@@ -234,31 +262,48 @@ async function save(): Promise<void> {
 <template>
   <AppShell
     :title="isEditing ? 'Edit expense' : 'Add expense'"
+    :subtitle="group?.name"
     :back-to="backTarget"
     :back-label="isEditing ? 'Expense' : 'Dashboard'"
   >
-    <form class="flex flex-col gap-5" @submit.prevent="save">
-      <!--
-        Only when adding. Moving an expense between groups has to carry its
-        history, comments and audit trail with it, which is what the transfer
-        feature is for; a dropdown here would look like it did that and would not.
-      -->
-      <label v-if="!isEditing" class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Group</span>
-        <select
-          :value="groupId"
-          class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
-          style="border-color: var(--border)"
-          @change="selectGroup(($event.target as HTMLSelectElement).value)"
-        >
-          <option v-for="option in groups.visibleGroups" :key="option.id" :value="option.id">
-            {{ option.name }}
-          </option>
-        </select>
-      </label>
+    <!--
+      Built to fit one screen without scrolling.
+      
+      Adding an expense is the thing people open this app to do, usually standing
+      up with one hand, so a form that scrolls hides half the decision. Three
+      things bought the room: the amount and date share the top row, the split
+      preview lives inside each person's chip rather than in a section of its own,
+      and everyone in the group is a chip rather than a list row.
+    -->
+    <form class="flex flex-col gap-3" @submit.prevent="save">
+      <!-- The amount leads: it is the one field nobody can leave blank. -->
+      <div class="flex items-end gap-3">
+        <label class="flex min-w-0 flex-1 flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Amount ({{ currency }})</span>
+          <input
+            v-model="amountInput"
+            type="text"
+            inputmode="decimal"
+            required
+            placeholder="0.00"
+            class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-3 text-2xl font-semibold tabular-nums"
+            style="border-color: var(--border)"
+          />
+        </label>
+
+        <label class="flex shrink-0 flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Date</span>
+          <input
+            v-model="spentAt"
+            type="date"
+            class="tap-target rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
+            style="border-color: var(--border)"
+          />
+        </label>
+      </div>
 
       <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">What was it</span>
+        <span class="text-xs text-[var(--text-muted)]">What was it</span>
         <input
           v-model="description"
           type="text"
@@ -270,74 +315,45 @@ async function save(): Promise<void> {
         />
       </label>
 
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Category</span>
-        <!--
-          Offered at last: the API has served these from the start and nothing
-          asked, so every expense was uncategorised and the by-category breakdown
-          in stats read "Uncategorised, 100%".
-        -->
-        <select
-          v-model="categoryId"
-          data-testid="category"
-          class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
-          style="border-color: var(--border)"
-        >
-          <option :value="null">No category</option>
-          <option v-for="category in categories.all" :key="category.id" :value="category.id">
-            {{ category.name }}
-          </option>
-        </select>
-      </label>
-
       <div class="grid grid-cols-2 gap-3">
-        <label class="flex flex-col gap-1">
-          <span class="text-sm text-[var(--text-muted)]">Amount ({{ currency }})</span>
-          <input
-            v-model="amountInput"
-            type="text"
-            inputmode="decimal"
-            required
-            placeholder="0.00"
-            class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3 text-lg tabular-nums"
+        <label class="flex min-w-0 flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Category</span>
+          <select
+            v-model="categoryId"
+            data-testid="category"
+            class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
             style="border-color: var(--border)"
-          />
+          >
+            <option :value="null">No category</option>
+            <option v-for="category in categories.all" :key="category.id" :value="category.id">
+              {{ category.name }}
+            </option>
+          </select>
         </label>
 
-        <label class="flex flex-col gap-1">
-          <span class="text-sm text-[var(--text-muted)]">Date</span>
-          <input
-            v-model="spentAt"
-            type="date"
-            class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
+        <label class="flex min-w-0 flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Who paid</span>
+          <select
+            v-model="paidByMemberId"
+            class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
             style="border-color: var(--border)"
-          />
+          >
+            <option v-for="member in members" :key="member.id" :value="member.id">
+              {{ member.displayName }}
+            </option>
+          </select>
         </label>
       </div>
 
-      <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Who paid</span>
-        <select
-          v-model="paidByMemberId"
-          class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
-          style="border-color: var(--border)"
-        >
-          <option v-for="member in members" :key="member.id" :value="member.id">
-            {{ member.displayName }}
-          </option>
-        </select>
-      </label>
-
       <fieldset class="flex flex-col gap-2">
-        <legend class="text-sm text-[var(--text-muted)]">Split</legend>
-        <div class="flex flex-wrap gap-2">
+        <legend class="text-xs text-[var(--text-muted)]">Split</legend>
+        <div class="flex gap-1.5">
           <button
             v-for="option in splitTypes"
             :key="option.value"
             type="button"
-            class="tap-target rounded-full border px-3 text-sm"
-            :class="splitType === option.value ? 'border-brand-500 text-brand-400' : ''"
-            :style="splitType === option.value ? undefined : 'border-color: var(--border)'"
+            class="btn btn-press min-h-0 flex-1 px-1 py-1.5 text-xs"
+            :class="splitType === option.value ? 'btn-primary' : 'btn-secondary'"
             @click="splitType = option.value"
           >
             {{ option.label }}
@@ -346,20 +362,34 @@ async function save(): Promise<void> {
       </fieldset>
 
       <fieldset class="flex flex-col gap-2">
-        <legend class="text-sm text-[var(--text-muted)]">Between</legend>
-        <ul class="flex flex-col gap-2">
+        <legend class="text-xs text-[var(--text-muted)]">Between</legend>
+
+        <!--
+          Each person carries their own share, so the preview that used to sit in a
+          section below is here where the decision is made.
+        -->
+        <ul class="flex flex-wrap gap-2">
           <li
             v-for="member in members"
             :key="member.id"
-            class="flex items-center justify-between gap-3"
+            class="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors"
+            :style="chipStyle(member.id)"
           >
-            <label class="tap-target flex flex-1 items-center gap-2 text-sm">
+            <label class="flex cursor-pointer items-center gap-2">
               <input
                 type="checkbox"
+                class="sr-only"
                 :checked="participantIds.includes(member.id)"
                 @change="toggleParticipant(member.id)"
               />
-              {{ member.displayName }}
+              <span
+                class="h-2 w-2 shrink-0 rounded-full"
+                :style="{ backgroundColor: participantIds.includes(member.id) ? colourOf(member.id) : 'var(--border)' }"
+                aria-hidden="true"
+              />
+              <span :class="participantIds.includes(member.id) ? '' : 'text-[var(--text-muted)]'">
+                {{ member.displayName }}
+              </span>
             </label>
 
             <input
@@ -368,14 +398,14 @@ async function save(): Promise<void> {
               type="number"
               inputmode="decimal"
               step="0.01"
-              class="w-24 rounded-lg border bg-[var(--surface-raised)] px-2 py-1 text-right tabular-nums"
+              class="w-16 rounded border bg-[var(--surface)] px-1 py-0.5 text-right text-xs tabular-nums"
               style="border-color: var(--border)"
               :aria-label="`${splitType} for ${member.displayName}`"
             />
 
             <MoneyAmount
-              v-else-if="preview.length > 0 && participantIds.includes(member.id)"
-              :amount="preview.find((share) => share.memberId === member.id)?.amount ?? 0"
+              v-else-if="shareOf(member.id) !== null"
+              :amount="shareOf(member.id)!"
               :currency="currency"
               size="sm"
             />
@@ -383,34 +413,23 @@ async function save(): Promise<void> {
         </ul>
       </fieldset>
 
-      <section
-        v-if="preview.length > 0"
-        class="surface-card p-3 text-sm"
-        aria-live="polite"
-      >
-        <p class="mb-2 text-[var(--text-muted)]">Each person owes</p>
-        <ul class="flex flex-col gap-1">
-          <li v-for="share in preview" :key="share.memberId" class="flex justify-between">
-            <span>{{ memberName(share.memberId) }}</span>
-            <MoneyAmount :amount="share.amount" :currency="currency" size="sm" />
-          </li>
-        </ul>
-      </section>
-
-      <p v-if="previewProblem" class="text-sm text-[var(--text-muted)]">{{ previewProblem }}</p>
+      <p v-if="previewProblem" class="text-xs text-[var(--text-muted)]" aria-live="polite">
+        {{ previewProblem }}
+      </p>
       <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
 
+      <p class="text-center text-[11px] text-[var(--text-muted)]">
+        Saved on this device straight away, and synced when you are back online.
+      </p>
+
+      <!-- Reachable whatever the group size does to the height above it. -->
       <button
         type="submit"
-        class="btn btn-press btn-primary w-full"
+        class="btn btn-press btn-primary sticky bottom-2 mt-1 w-full"
         :disabled="isSaving || preview.length === 0"
       >
         {{ isSaving ? 'Saving' : isEditing ? 'Save changes' : 'Save expense' }}
       </button>
-
-      <p class="text-center text-xs text-[var(--text-muted)]">
-        Saved on this device straight away, and synced when you are back online.
-      </p>
     </form>
   </AppShell>
 </template>
