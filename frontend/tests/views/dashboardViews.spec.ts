@@ -21,11 +21,16 @@ describe('ActivityView', () => {
     expect(textOf(wrapper)).toContain('Activity')
   })
 
-  it('offers the group menu, since the feed is about a group', async () => {
-    const { wrapper } = await mountView(ActivityView, { api: fakeApi({ '/activity': () => ({ items: [] }) }) })
+  it('offers the group controls, since the feed is about a group', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({ '/activity': () => ({ items: [] }), '/groups': () => [testGroup()] }),
+    })
     await settle()
 
-    expect(wrapper.find('[data-testid="group-menu"]').exists()).toBe(true)
+    // The mark changes group, the gear opens its settings: the same pair on every
+    // screen scoped to a group.
+    expect(wrapper.find('[data-testid="group-mark"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="group-settings-link"]').exists()).toBe(true)
   })
 
   const feed = (items: unknown[]) =>
@@ -122,11 +127,12 @@ describe('StatsView', () => {
     expect(textOf(wrapper)).toContain('Stats')
   })
 
-  it('offers the group menu, since the screen is about a group', async () => {
+  it('offers the group controls, since the screen is about a group', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
     await settle()
 
-    expect(wrapper.find('[data-testid="group-menu"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="group-mark"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="group-settings-link"]').exists()).toBe(true)
   })
 
   const dashboard = (overrides: Record<string, unknown> = {}) => ({

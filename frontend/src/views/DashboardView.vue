@@ -3,10 +3,10 @@ import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vu
 import { RouterLink, useRoute } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
-import GroupMenu from '@/components/groups/GroupMenu.vue'
+import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SpendPie from '@/components/ui/SpendPie.vue'
-import { memberColor, memberColors } from '@/domain/memberColors'
+import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
@@ -69,7 +69,7 @@ const groupExpenses = computed(() =>
 )
 
 const colours = computed(() =>
-  memberColors((group.value?.members ?? []).map((member) => member.id)),
+  group.value ? groups.colorsOf(group.value.id) : {},
 )
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
@@ -223,7 +223,7 @@ const spentOn = (iso: string) =>
     </template>
 
     <template #header-action>
-      <GroupMenu />
+      <GroupSettingsButton />
     </template>
 
     <template v-if="group">

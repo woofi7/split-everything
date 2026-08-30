@@ -1,5 +1,6 @@
 import { computed, ref, toRaw } from 'vue'
 import { defineStore } from 'pinia'
+import { memberColors } from '@/domain/memberColors'
 import { db, type LocalGroup, type LocalMember } from '@/offline/db'
 import type { ApiClient } from '@/api/client'
 import type { AddableUser } from '@/api/types'
@@ -312,6 +313,19 @@ export const useGroupsStore = defineStore('groups', () => {
     return groups.value.find((group) => group.id === groupId)?.members ?? []
   }
 
+  /**
+   * The colour of every member of a group.
+   *
+   * Defined once, from the roster, because the palette resolves a clash by walking
+   * to the next free colour in the order it is given: hand it a different set of
+   * people, or the same people in a different order, and the same person comes out
+   * a different colour. Every screen was building its own list, so the activity
+   * feed and the charts disagreed with the expense cards about who was orange.
+   */
+  function colorsOf(groupId: string): Record<string, string> {
+    return memberColors(membersOf(groupId).map((member) => member.id))
+  }
+
   function myMemberId(groupId: string, userId: string): string | null {
     return membersOf(groupId).find((member) => member.userId === userId)?.id ?? null
   }
@@ -347,6 +361,7 @@ export const useGroupsStore = defineStore('groups', () => {
     addableUsers,
     removeMember,
     membersOf,
+    colorsOf,
     myMemberId,
   }
 })

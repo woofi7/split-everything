@@ -114,17 +114,18 @@ describe('DashboardView on the main group', () => {
     expect(wrapper.findAll('[data-testid="your-balance"]')).toHaveLength(1)
   })
 
-  it('keeps what is about the group behind one icon', async () => {
+  it('changes group from the mark on the left', async () => {
     const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
     })
     await settle()
 
-    // Nothing on show until asked: both items were competing with the page title
-    // for the corner of every visit.
-    expect(wrapper.find('[data-testid="group-menu"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="group-menu-items"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="change-group"]').exists()).toBe(false)
+    // The mark is the group's own icon, so it was already the thing on screen
+    // that stood for which group. Pressing it is the shortest way to say so.
+    const mark = wrapper.find('[data-testid="group-mark"]')
+    expect(mark.exists()).toBe(true)
+    expect(mark.element.tagName).toBe('BUTTON')
+    expect(mark.attributes('aria-label')).toContain('Change group')
   })
 
   it('offers a way to change group even with only one', async () => {
@@ -132,67 +133,34 @@ describe('DashboardView on the main group', () => {
       api: fakeApi({ '/groups': () => testGroup() }),
     })
     await settle()
-    await wrapper.find('[data-testid="group-menu"]').trigger('click')
-    await settle(1)
 
     // With one group this is still how you reach creating the next.
-    expect(wrapper.find('[data-testid="change-group"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="group-mark"]').exists()).toBe(true)
   })
 
-  it('opens the picker when asked', async () => {
+  it('opens the picker when the mark is pressed', async () => {
     const { wrapper } = await mountView(DashboardView, { api: twoGroups(), groups: [] })
     await settle()
 
-    await wrapper.find('[data-testid="group-menu"]').trigger('click')
-    await settle(1)
-    await wrapper.find('[data-testid="change-group"]').trigger('click')
+    await wrapper.find('[data-testid="group-mark"]').trigger('click')
     await settle(1)
 
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
     expect(textOf(wrapper)).toContain('Ski trip')
   })
 
-  it('closes the menu on the way to the picker', async () => {
-    const { wrapper } = await mountView(DashboardView, { api: twoGroups(), groups: [] })
-    await settle()
-
-    await wrapper.find('[data-testid="group-menu"]').trigger('click')
-    await settle(1)
-    await wrapper.find('[data-testid="change-group"]').trigger('click')
-    await settle(1)
-
-    // Otherwise it sits open behind the dialog and is there again on the way back.
-    expect(wrapper.find('[data-testid="group-menu-items"]').exists()).toBe(false)
-  })
-
-  it('closes the menu on Escape', async () => {
+  it('sends the gear straight to the settings, with no menu in between', async () => {
     const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
     })
     await settle()
-    await wrapper.find('[data-testid="group-menu"]').trigger('click')
-    await settle(1)
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    await settle(1)
-
-    // A menu that only closes by choosing something is a trap on a phone.
-    expect(wrapper.find('[data-testid="group-menu-items"]').exists()).toBe(false)
-  })
-
-  it('closes the menu when something else is clicked', async () => {
-    const { wrapper } = await mountView(DashboardView, {
-      api: fakeApi({ '/groups': () => testGroup() }),
-      attachTo: document.body,
-    })
-    await settle()
-    await wrapper.find('[data-testid="group-menu"]').trigger('click')
-    await settle(1)
-
-    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await settle(1)
-
-    expect(wrapper.find('[data-testid="group-menu-items"]').exists()).toBe(false)
+    const gear = wrapper.find('[data-testid="group-settings-link"]')
+    expect(gear.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="group-menu"]').exists()).toBe(false)
+    expect(JSON.stringify(
+      wrapper.findAllComponents(RouterLinkStub).map((link) => link.props().to),
+    )).toContain('group-settings')
   })
 
   it('follows the group that was picked', async () => {
@@ -218,21 +186,7 @@ describe('DashboardView on the main group', () => {
     expect(textOf(wrapper)).toContain('No groups yet')
   })
 
-  it('links to the group settings of the group it is showing', async () => {
-    const { wrapper } = await mountView(DashboardView, {
-      api: fakeApi({ '/groups': () => testGroup() }),
-    })
-    await settle()
-    await wrapper.find('[data-testid="group-menu"]').trigger('click')
-    await settle(1)
 
-    const target = wrapper.find('[data-testid="menu-group-settings"]')
-    expect(target.exists()).toBe(true)
-    expect(JSON.stringify(
-      wrapper.findAllComponents(RouterLinkStub)
-        .map((link) => link.props().to),
-    )).toContain('group-settings')
-  })
 
   it('links to settling up for that group', async () => {
     const { wrapper } = await mountView(DashboardView, {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faCodeMerge } from '@fortawesome/free-solid-svg-icons'
@@ -11,6 +11,7 @@ import { useGroupsStore } from '@/stores/groups'
 import { useAuthStore } from '@/stores/auth'
 import { useApi } from '@/api/provider'
 import type { AddableUser } from '@/api/types'
+import type { SplitType } from '@/domain/splitting'
 
 interface InviteDto {
   id: string
@@ -28,6 +29,104 @@ const groups = useGroupsStore()
 const auth = useAuthStore()
 
 const groupId = computed(() => String(route.params.groupId))
+
+/**
+ * How this group splits an expense unless someone says otherwise.
+ *
+ * Shown here because it is a fact about the household rather than about one
+ * expense: it was only settable as a side effect of adding one, which meant you
+ * could not see what it was, let alone change it, without pretending to spend
+ * money.
+ *
+ * Equal, shares and percentage only. An exact amount is a fact about a particular
+ * expense, so as a standing rule it would be wrong the moment the total changed.
+ * A group already set to one keeps it until someone picks another, rather than
+ * being quietly rewritten by opening this screen.
+ */
+const SPLIT_CHOICES = [
+  { value: 'Equal' as SplitType, label: 'Equally', hint: 'Everyone taking part pays the same.' },
+  { value: 'Shares' as SplitType, label: 'By shares', hint: 'Two shares against one pays twice as much.' },
+  { value: 'Percentage' as SplitType, label: 'By percentage', hint: 'Has to add up to 100.' },
+]
+
+const splitType = ref<SplitType>('Equal')
+const splitValues = ref<Record<string, number>>({})
+const isSavingSplit = ref(false)
+const splitError = ref<string | null>(null)
+const splitMessage = ref<string | null>(null)
+
+/** Only the people who could be on an expense. */
+const activeMembers = computed(() =>
+  (group.value?.members ?? []).filter((member) => member.status === 'Active'),
+)
+
+const splitNeedsValues = computed(() => splitType.value !== 'Equal')
+
+const splitTotal = computed(() =>
+  activeMembers.value.reduce((sum, member) => sum + (Number(splitValues.value[member.id]) || 0), 0),
+)
+
+/** What is wrong with the numbers as they stand, or null. */
+const splitProblem = computed(() => {
+  if (!splitNeedsValues.value) return null
+  if (splitTotal.value <= 0) return 'Give at least one person a number.'
+  if (splitType.value === 'Percentage' && Math.abs(splitTotal.value - 100) > 0.01) {
+    return `Percentages add up to ${splitTotal.value.toFixed(2)}, not 100.`
+  }
+  return null
+})
+
+/** The current setting, put into the form. Called whenever the group arrives. */
+function readSplitFromGroup(): void {
+  const current = group.value
+  splitType.value = current?.defaultSplitType ?? 'Equal'
+
+  const stored = current?.defaultSplitValues ?? {}
+  const seeded: Record<string, number> = {}
+  for (const member of activeMembers.value) {
+    seeded[member.id] = stored[member.id] ?? (splitType.value === 'Percentage' ? 0 : 1)
+  }
+  splitValues.value = seeded
+}
+
+/** Seeds sensible numbers when the type changes, rather than leaving them blank. */
+function changeSplitType(next: SplitType): void {
+  splitType.value = next
+  splitMessage.value = null
+  splitError.value = null
+
+  if (next === 'Equal') return
+
+  const people = activeMembers.value
+  const seeded: Record<string, number> = {}
+  for (const member of people) {
+    seeded[member.id] = next === 'Percentage'
+      ? Math.round((100 / Math.max(people.length, 1)) * 100) / 100
+      : 1
+  }
+  splitValues.value = seeded
+}
+
+async function saveSplit(): Promise<void> {
+  if (splitProblem.value) return
+
+  splitError.value = null
+  splitMessage.value = null
+  isSavingSplit.value = true
+
+  try {
+    await groups.setDefaultSplit(
+      groupId.value,
+      splitType.value,
+      splitNeedsValues.value ? splitValues.value : null,
+    )
+    splitMessage.value = 'Saved.'
+  } catch (caught) {
+    splitError.value = caught instanceof Error ? caught.message : 'Could not save that split.'
+  } finally {
+    isSavingSplit.value = false
+  }
+}
 
 /**
  * Which of these people is the one reading the list.
@@ -152,15 +251,21 @@ async function confirmMerge(): Promise<void> {
 
 
 onMounted(async () => {
-  const group = await groups.get(groupId.value)
-  name.value = group?.name ?? ''
-  iconName.value = group?.iconName ?? null
+  const loaded = await groups.get(groupId.value)
+  name.value = loaded?.name ?? ''
+  iconName.value = loaded?.iconName ?? null
+  readSplitFromGroup()
   await loadAddable()
 })
 
 const icon = computed(() => resolveIcon(iconName.value))
 
 const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
+
+// The group arrives from the cache first and the server a moment later, and the
+// second one is the one worth showing. Declared after the group it watches: watch
+// reads it during setup, so above it this is a const in its dead zone.
+watch(group, readSplitFromGroup)
 
 async function save(): Promise<void> {
   error.value = null
@@ -310,6 +415,106 @@ async function unarchive(): Promise<void> {
         Save
       </button>
     </form>
+
+    <!--
+      A fact about the household rather than about one expense, so it belongs on
+      the group's own screen. It used to be settable only as a side effect of
+      adding an expense, which meant you could not see what it was.
+    -->
+    <section class="surface-card mb-4 p-4">
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">
+        How a new expense is split
+      </h2>
+
+      <div class="flex flex-col gap-2" role="radiogroup" aria-label="How a new expense is split">
+        <label
+          v-for="choice in SPLIT_CHOICES"
+          :key="choice.value"
+          class="flex cursor-pointer items-start gap-3 rounded-lg p-2"
+          :class="splitType === choice.value ? 'bg-[var(--surface-sunken)]' : ''"
+        >
+          <input
+            type="radio"
+            name="default-split"
+            :value="choice.value"
+            :checked="splitType === choice.value"
+            :data-testid="`split-${choice.value}`"
+            :disabled="!canAdminister"
+            class="mt-1"
+            @change="changeSplitType(choice.value)"
+          />
+          <span class="min-w-0">
+            <span class="block text-sm">{{ choice.label }}</span>
+            <span class="block text-xs text-[var(--text-muted)]">{{ choice.hint }}</span>
+          </span>
+        </label>
+      </div>
+
+      <!--
+        An exact amount is a fact about a particular expense, so it is not offered
+        as a standing rule. A group already set to one keeps it until someone picks
+        another rather than being rewritten by opening this screen.
+      -->
+      <p
+        v-if="!SPLIT_CHOICES.some((choice) => choice.value === splitType)"
+        class="mt-2 text-xs text-[var(--text-muted)]"
+      >
+        Currently set to {{ splitType }}, which is not offered here. Picking one
+        above replaces it.
+      </p>
+
+      <ul v-if="splitNeedsValues" class="mt-3 flex flex-col gap-2">
+        <li
+          v-for="member in activeMembers"
+          :key="member.id"
+          class="flex items-center justify-between gap-3 text-sm"
+        >
+          <label class="min-w-0 flex-1 truncate" :for="`split-value-${member.id}`">
+            {{ member.displayName }}
+          </label>
+          <span class="flex shrink-0 items-center gap-1">
+            <input
+              :id="`split-value-${member.id}`"
+              v-model.number="splitValues[member.id]"
+              type="number"
+              min="0"
+              :step="splitType === 'Percentage' ? '0.01' : '1'"
+              :disabled="!canAdminister"
+              class="tap-target w-24 rounded-lg border bg-[var(--surface)] px-2 text-right"
+              style="border-color: var(--border)"
+            />
+            <span class="w-4 text-xs text-[var(--text-muted)]">
+              {{ splitType === 'Percentage' ? '%' : 'x' }}
+            </span>
+          </span>
+        </li>
+      </ul>
+
+      <p v-if="splitNeedsValues" class="mt-2 text-xs text-[var(--text-muted)]">
+        Total {{ splitType === 'Percentage' ? splitTotal.toFixed(2) + '%' : splitTotal + ' shares' }}
+      </p>
+
+      <p v-if="splitProblem" class="mt-2 text-xs text-owing" role="alert">{{ splitProblem }}</p>
+
+      <button
+        v-if="canAdminister"
+        type="button"
+        data-testid="save-split"
+        class="btn btn-press btn-secondary mt-3"
+        style="border-color: var(--border)"
+        :disabled="isSavingSplit || splitProblem !== null"
+        @click="saveSplit"
+      >
+        {{ isSavingSplit ? 'Saving' : 'Save how expenses split' }}
+      </button>
+
+      <p v-else class="mt-3 text-xs text-[var(--text-muted)]">
+        Only an owner or an admin can change this.
+      </p>
+
+      <p v-if="splitMessage" class="mt-2 text-sm text-owed" role="status">{{ splitMessage }}</p>
+      <p v-if="splitError" class="mt-2 text-sm text-owing" role="alert">{{ splitError }}</p>
+    </section>
 
     <section class="surface-card mb-4 p-4">
       <div class="mb-2 flex items-center justify-between gap-2">

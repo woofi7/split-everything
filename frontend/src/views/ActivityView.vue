@@ -3,11 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
-import GroupMenu from '@/components/groups/GroupMenu.vue'
+import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
-import { memberColor, memberColors } from '@/domain/memberColors'
+import { memberColor } from '@/domain/memberColors'
 
 interface ActivityEntry {
   id: number
@@ -61,9 +61,7 @@ async function load(): Promise<void> {
 const when = (iso: string) => new Date(iso).toLocaleString()
 
 const colours = computed(() =>
-  memberColors(
-    [...new Set(entries.value.map((entry) => entry.actorMemberId).filter((id): id is string => !!id))],
-  ),
+  groups.mainGroupId ? groups.colorsOf(groups.mainGroupId) : {},
 )
 
 /**
@@ -125,7 +123,7 @@ function targetOf(entry: ActivityEntry) {
     </template>
 
     <template #header-action>
-      <GroupMenu />
+      <GroupSettingsButton />
     </template>
 
     <ul v-if="entries.length > 0" class="flex flex-col gap-2">

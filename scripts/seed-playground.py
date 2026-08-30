@@ -217,6 +217,9 @@ CAMPING = [
 ]
 
 
+cast_by_name = {}
+
+
 def find_group(api, name):
     for group in api.request("GET", "/groups?includeArchived=true") or []:
         if group["name"] == name:
@@ -277,12 +280,27 @@ def seed_group(api, name, currency, cast, rows, icon=None, colour=None):
 
     group = api.request("GET", f"/groups/{group['id']}")
     members = [m["id"] for m in group["members"]]
+
+    # Whose session records each expense, keyed by their member id in this group.
+    # The payer adds their own, because that is who would have: everything filed
+    # by one person leaves an activity feed with a single author, which is both
+    # untrue and useless for anything that colours by who did it.
+    sessions = {}
+    for member in group["members"]:
+        if member["userId"] == api.user["id"]:
+            sessions[member["id"]] = api
+        else:
+            match = next((p for n, p in cast_by_name.items() if p.user["id"] == member["userId"]), None)
+            if match:
+                sessions[member["id"]] = match
+
     print(f"  {name}: created with {len(members)} people, {len(rows)} expenses")
 
     for index, row in enumerate(rows):
         # Rotated rather than random, so everyone pays a fair share of the months
         # and the stacked chart has more than one colour in every bar.
-        add_expense(api, group, members[index % len(members)], members, row, currency)
+        payer = members[index % len(members)]
+        add_expense(sessions.get(payer, api), group, payer, members, row, currency)
 
     return api.request("GET", f"/groups/{group['id']}"), True
 
@@ -292,7 +310,17 @@ def settle(api, group, from_index, to_index, amount, months_ago, day, note):
     if len(members) <= max(from_index, to_index):
         return
 
-    api.request("POST", "/settlements", {
+    # Recorded by whoever paid, which is who would have opened the app to do it.
+    payer = next(
+        (m for m in group["members"] if m["id"] == members[from_index]),
+        None,
+    )
+    session = next(
+        (p for p in cast_by_name.values() if payer and p.user["id"] == payer["userId"]),
+        api,
+    )
+
+    session.request("POST", "/settlements", {
         "groupId": group["id"],
         "fromMemberId": members[from_index],
         "toMemberId": members[to_index],
@@ -341,6 +369,7 @@ def main():
         person = Api(args.api, email, name, f"seed-person-{index}")
         person.sign_in()
         cast[name] = person
+    cast_by_name.update(cast)
     print("Cast: " + ", ".join(f"{n} <{p.email}>" for n, p in cast.items()) + "\n")
 
     flat, fresh = seed_group(owner, "Colocation Mile End", "CAD",
