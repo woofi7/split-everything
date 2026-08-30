@@ -112,9 +112,23 @@ async function registerWebPush(api: ApiClient, deviceId: string): Promise<PushOu
   const { publicKey } = await api.get<{ publicKey: string }>('/notifications/vapid-key')
   if (!publicKey) return 'unconfigured'
 
+  // A key that is not a key. The server should not serve one, but a deployed
+  // server that does would otherwise surface atob's own complaint - "the string to
+  // be decoded is not correctly encoded" - which reads as a broken browser rather
+  // than a setting in the wrong slot.
+  let applicationServerKey: Uint8Array<ArrayBuffer>
+  try {
+    applicationServerKey = decodeVapidKey(publicKey)
+  } catch {
+    return 'unconfigured'
+  }
+
+  // The uncompressed P-256 point Web Push wants: anything else is not one.
+  if (applicationServerKey.length !== 65) return 'unconfigured'
+
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: decodeVapidKey(publicKey),
+    applicationServerKey,
   })
 
   const json = subscription.toJSON()

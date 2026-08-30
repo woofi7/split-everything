@@ -35,6 +35,10 @@ describe('VAPID key decoding', () => {
  * people into their browser's site settings to fix something that was not there.
  */
 describe('registering for notifications', () => {
+  /** A real uncompressed P-256 point, which is the only shape Web Push accepts. */
+  const REAL_KEY =
+    'BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw'
+
   const api = (publicKey: string) => ({
     get: vi.fn(async () => ({ publicKey })),
     post: vi.fn(async () => ({})),
@@ -85,7 +89,7 @@ describe('registering for notifications', () => {
 
   it('subscribes and registers the device when everything is in place', async () => {
     browserThat('granted')
-    const client = api('aGVsbG8')
+    const client = api(REAL_KEY)
 
     expect(await registerForPush(client as unknown as ApiClient, 'device-7')).toBe('on')
     expect(client.post).toHaveBeenCalledWith('/notifications', {
@@ -95,6 +99,26 @@ describe('registering for notifications', () => {
       auth: 'auth',
       deviceId: 'device-7',
     })
+  })
+
+  it('refuses a key that is not one, rather than failing inside atob', async () => {
+    browserThat('granted')
+
+    // What a server served in production once: the contact address in the slot
+    // meant for the public key. The browser's own message for this names atob and
+    // says nothing about a setting being wrong.
+    expect(
+      await registerForPush(api('mailto:someone@example.com') as unknown as ApiClient, 'device'),
+    ).toBe('unconfigured')
+  })
+
+  it('refuses a key of the wrong length, which decodes cleanly and still is not one', async () => {
+    browserThat('granted')
+
+    // "hello" is valid base64url and five bytes. Web Push wants sixty-five.
+    expect(await registerForPush(api('aGVsbG8') as unknown as ApiClient, 'device')).toBe(
+      'unconfigured',
+    )
   })
 
   it('says unsupported when the browser has no push at all', async () => {

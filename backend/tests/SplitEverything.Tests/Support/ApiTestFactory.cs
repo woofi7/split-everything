@@ -40,7 +40,10 @@ public sealed class ApiTestFactory(string connectionString) : WebApplicationFact
         ["Auth__AppBaseUrl"] = "https://split.test",
         // The API layer is under test, not the schedulers.
         ["Database__MigrateOnStartup"] = "false",
-        ["Push__VapidPublicKey"] = "test-public-key",
+        // A real uncompressed P-256 point. A made-up string used to do, until the
+        // API stopped serving a public key that is not one: a malformed key only
+        // fails once it reaches the browser, inside atob.
+        ["Push__VapidPublicKey"] = "BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw",
         // Deliberately on, to prove the startup guard forces it off outside
         // Development. The factory runs as "Testing".
         ["Auth__AllowDevelopmentSignIn"] = "true"
