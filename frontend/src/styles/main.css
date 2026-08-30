@@ -67,6 +67,26 @@ body {
   overflow-x: hidden;
 }
 
+/*
+ * What a finger is allowed to do to the page: scroll it up and down, and pinch
+ * to zoom. Never pan it sideways.
+ *
+ * Said out loud because a swipe across the screen changes group. Left to guess,
+ * a browser takes a horizontal drag for its own back-and-forward gesture, and it
+ * decides that when the finger lands rather than when the app has had a look, so
+ * the page cannot always get the gesture back afterwards. The two directions are
+ * not equally likely to be taken either, since there is usually somewhere to go
+ * back to and nowhere to go forward to.
+ *
+ * Only needed on the body: what a gesture may do is the narrowest of the values
+ * on everything under the finger, so this settles it for the whole page, buttons
+ * that ask for their own included.
+ */
+body {
+  touch-action: pan-y pinch-zoom;
+  overscroll-behavior-x: none;
+}
+
 @utility surface-card {
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -97,7 +117,13 @@ body {
   user-select: none;
   /* The browser's own grey flash is slower and uglier than the one below. */
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  /*
+   * Same as the page: no double-tap delay, and no sideways panning either. It
+   * said "manipulation", which allows panning in both directions, and the
+   * buttons on these screens sit down the right-hand side - exactly where a
+   * finger lands to swipe left.
+   */
+  touch-action: pan-y pinch-zoom;
   transition:
     transform 80ms ease,
     filter 120ms ease,
