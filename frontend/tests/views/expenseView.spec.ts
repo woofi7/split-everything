@@ -156,20 +156,77 @@ describe('ExpenseView', () => {
     expect(textOf(wrapper)).toContain('Comments (0)')
   })
 
-  it('deletes the expense and goes back to the group', async () => {
+  it('asks before deleting the expense', async () => {
     const { wrapper } = await mountView(ExpenseView, {
       api: api(),
       expenses: [testExpense()],
     })
 
-    const remove = wrapper.findAll('button').find((button) => button.text().includes('Delete'))
-    await remove!.trigger('click')
+    await wrapper.find('[data-testid="delete-expense"]').trigger('click')
+    await settle(1)
+
+    // An expense is somebody else's balance as well as yours, and the only way
+    // back is to add it again from memory.
+    expect((await db.expenses.get('expense-1'))?.isDeleted).toBe(false)
+    expect(replace).not.toHaveBeenCalled()
+    expect(textOf(wrapper)).toContain('Delete this expense?')
+  })
+
+  it('names the expense in the question, so it is clear which one', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense({ description: 'Groceries at Metro' })],
+    })
+
+    await wrapper.find('[data-testid="delete-expense"]').trigger('click')
+    await settle(1)
+
+    expect(textOf(wrapper)).toContain('Groceries at Metro')
+  })
+
+  it('says what it does to the balances', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    await wrapper.find('[data-testid="delete-expense"]').trigger('click')
+    await settle(1)
+
+    expect(textOf(wrapper)).toContain("everyone's balance")
+  })
+
+  it('deletes the expense once confirmed and goes back to the group', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    await wrapper.find('[data-testid="delete-expense"]').trigger('click')
+    await settle(1)
+    await wrapper.find('[data-testid="confirm-delete"]').trigger('click')
     // The redirect is the last thing to happen, so it is the only safe signal
     // that the whole action finished.
     await waitFor(() => replace.mock.calls.length > 0)
 
     expect((await db.expenses.get('expense-1'))?.isDeleted).toBe(true)
     expect(replace).toHaveBeenCalledWith({ name: 'group', params: { groupId: GROUP_ID } })
+  })
+
+  it('can back out of deleting', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    await wrapper.find('[data-testid="delete-expense"]').trigger('click')
+    await settle(1)
+    await wrapper.find('[data-testid="cancel-delete"]').trigger('click')
+    await settle(1)
+
+    expect((await db.expenses.get('expense-1'))?.isDeleted).toBe(false)
+    expect(wrapper.find('[data-testid="confirm-delete"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="delete-expense"]').exists()).toBe(true)
   })
 
   it('says so when the expense is not on this device', async () => {

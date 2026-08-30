@@ -19,6 +19,10 @@ public sealed record ActivityEntryDto(
     string? GroupName,
     ActivityKind Kind,
     Guid? ActorUserId,
+    // The membership, not just the account. The app colours people by member id,
+    // so without this the same person would get one colour on an expense card and
+    // another in the feed.
+    Guid? ActorMemberId,
     string? ActorName,
     string? ActorAvatarUrl,
     SyncEntityType? SubjectType,
