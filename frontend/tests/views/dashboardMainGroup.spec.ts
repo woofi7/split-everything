@@ -74,44 +74,70 @@ describe('DashboardView on the main group', () => {
     expect(textOf(wrapper)).toMatch(/14 Mar|Mar 14/)
   })
 
-  it('shows what is still owed, as a pie', async () => {
+  it('shows this month\'s spending, as a pie', async () => {
+    const thisMonth = new Date()
+    thisMonth.setDate(4)
+
     const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
-      // Alice put 100 on her card for the two of them, so Bob owes her 50 and is
-      // the only one owing anything.
       expenses: [
         testExpense({
+          id: 'now',
           amount: 100,
           amountInBaseCurrency: 100,
-          splits: [
-            { memberId: ALICE, amount: 50, amountInBaseCurrency: 50, inputValue: null },
-            { memberId: BOB, amount: 50, amountInBaseCurrency: 50, inputValue: null },
+          spentAt: thisMonth.toISOString(),
+        }),
+        // Last year, so it is spending but not this month's.
+        testExpense({
+          id: 'old',
+          amount: 500,
+          amountInBaseCurrency: 500,
+          spentAt: '2025-02-02T12:00:00Z',
+        }),
+      ],
+    })
+    await settle()
+
+    // The month, not all time: a group two years old should not read as busy
+    // because of what it spent two years ago.
+    expect(wrapper.find('[data-testid="centre-total"]').text()).toContain('$100.00')
+  })
+
+  it('counts each payer of a shared expense for what they put in', async () => {
+    const thisMonth = new Date()
+    thisMonth.setDate(4)
+
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [
+        testExpense({
+          amount: 65,
+          amountInBaseCurrency: 65,
+          spentAt: thisMonth.toISOString(),
+          payers: [
+            { memberId: ALICE, amount: 40, amountInBaseCurrency: 40 },
+            { memberId: BOB, amount: 25, amountInBaseCurrency: 25 },
           ],
         }),
       ],
     })
     await settle()
 
-    expect(textOf(wrapper)).toContain('Still to settle')
-    // The debt, not the till: 100 was spent and 50 of it has to move.
-    expect(wrapper.find('[data-testid="centre-total"]').text()).toContain('$50.00')
-    expect(wrapper.find('[data-testid="legend-row"]').text()).toContain('Bob')
+    // Two slices, not one under whoever's name is on the card.
+    expect(wrapper.findAll('[data-testid="legend-row"]')).toHaveLength(2)
+    expect(wrapper.find('[data-testid="centre-total"]').text()).toContain('$65.00')
   })
 
-  it('leaves the pie empty once the group is square', async () => {
+  it('says nothing was spent this month rather than nothing at all', async () => {
     const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
-      expenses: [testExpense()],
-      // Bob's half of the 60, paid back. Nothing left to split.
-      settlements: [
-        testSettlement({ fromMemberId: BOB, toMemberId: ALICE, amount: 30, amountInBaseCurrency: 30 }),
+      expenses: [
+        testExpense({ spentAt: '2025-02-02T12:00:00Z', amount: 40, amountInBaseCurrency: 40 }),
       ],
     })
     await settle()
 
-    // A chart of debts on a settled group is empty for a good reason, and says so
-    // rather than reading as a group that has never spent anything.
-    expect(wrapper.find('[data-testid="pie-empty"]').text()).toContain('settled up')
+    expect(wrapper.find('[data-testid="pie-empty"]').text()).toContain('this month')
   })
 
   it('totals the expenses beside their heading', async () => {
@@ -261,14 +287,18 @@ describe('DashboardView on the main group', () => {
    */
   describe('the order of the dashboard', () => {
     it('runs pie, then balances, then expenses', async () => {
+      const thisMonth = new Date()
+      thisMonth.setDate(4)
+
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
-        expenses: [testExpense({ paidByMemberId: ALICE })],
+        // Dated this month, because the chart covers this month.
+        expenses: [testExpense({ paidByMemberId: ALICE, spentAt: thisMonth.toISOString() })],
       })
       await settle()
 
       const html = wrapper.html()
-      const pie = html.indexOf('Still to settle')
+      const pie = html.indexOf('data-testid="centre-total"')
       const balances = html.indexOf('>Balances<')
       const expensesHeading = html.indexOf('>Expenses<')
 
