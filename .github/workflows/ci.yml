@@ -188,20 +188,57 @@ jobs:
             exit 0
           fi
 
-          status=$(curl --silent --show-error --output /dev/stderr \
+          # The deploy is a job: this call queues it and answers 200 with an id
+          # while the work happens afterwards. A 200 here means "accepted", not
+          # "deployed" - the first version of this took it for the second, got a
+          # jobId for a request whose environment it had misnamed, and reported a
+          # release deployed while the box carried on running the old images.
+          accepted=$(mktemp)
+          status=$(curl --silent --show-error --output "$accepted" \
             --write-out '%{http_code}' \
             --request POST \
-            --max-time 300 \
+            --max-time 60 \
             --header "Authorization: Bearer $DOCKHAND_TOKEN" \
             --header 'Content-Type: application/json' \
             --data '{"pull": true}' \
-            "$DOCKHAND_URL/api/stacks/$STACK/deploy?envId=$ENVIRONMENT_ID")
+            "$DOCKHAND_URL/api/stacks/$STACK/deploy?env=$ENVIRONMENT_ID")
 
-          echo "Dockhand answered ${status}"
+          cat "$accepted"
 
           case "$status" in
-            2*) echo "Redeployed ${STACK}." ;;
+            2*) ;;
             401|403) echo "The token was refused. Generate a new one in Dockhand under Profile." >&2; exit 1 ;;
             404) echo "No stack called ${STACK} in environment ${ENVIRONMENT_ID}." >&2; exit 1 ;;
-            *) echo "Dockhand refused the redeploy." >&2; exit 1 ;;
+            *) echo "Dockhand refused the redeploy (HTTP ${status})." >&2; exit 1 ;;
           esac
+
+          job=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["jobId"])' "$accepted")
+          echo "Dockhand queued job ${job}; waiting for it to finish."
+
+          # Pulling two images and recreating takes well under a minute on that box;
+          # five is generous enough that a timeout means something is actually wrong.
+          for _ in $(seq 1 60); do
+            sleep 5
+
+            state=$(curl --silent --show-error --max-time 30 \
+              --header "Authorization: Bearer $DOCKHAND_TOKEN" \
+              "$DOCKHAND_URL/api/jobs/$job")
+
+            phase=$(printf '%s' "$state" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status","unknown"))')
+
+            case "$phase" in
+              complete)
+                printf '%s' "$state" | python3 -c 'import json,sys; [print(line) for line in json.load(sys.stdin).get("lines", [])]'
+                echo "Redeployed ${STACK}."
+                exit 0
+                ;;
+              error|failed)
+                printf '%s' "$state" | python3 -c 'import json,sys; [print(line) for line in json.load(sys.stdin).get("lines", [])]' >&2
+                echo "Dockhand could not redeploy ${STACK}." >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "Job ${job} had not finished after five minutes." >&2
+          exit 1
