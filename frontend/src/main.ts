@@ -7,12 +7,17 @@ import { setApiClient } from './api/provider'
 import { apiBaseUrl } from './api/config'
 import { SyncEngine } from './offline/syncEngine'
 import { HttpSyncApi } from './api/syncApi'
-import { deviceIdNow, getDeviceId, onDatabaseBlocked } from './offline/db'
+import { deviceIdNow, getDeviceId, isReplicaResponsive, onDatabaseBlocked } from './offline/db'
 import { useAuthStore } from './stores/auth'
 import { useGroupsStore } from './stores/groups'
 import { useExpensesStore } from './stores/expenses'
 import { createRealtimeConnection } from './offline/realtime'
-import { BLOCKED_MESSAGE, settleWithin, showStartupProblem } from './startup'
+import {
+  BLOCKED_MESSAGE,
+  WEDGED_MESSAGE,
+  settleWithin,
+  showStartupProblem,
+} from './startup'
 import './styles/main.css'
 
 async function bootstrap(): Promise<void> {
@@ -53,8 +58,16 @@ async function bootstrap(): Promise<void> {
   // A replica another tab is holding at an older schema version is a wait with no
   // end, so it is raced rather than waited out, and the app stops there: every
   // screen reads from that replica, so none of them would work.
+  //
+  // Listened for throughout, not only during startup. The browser can report this
+  // after the app is already up, and an app running over a replica that will never
+  // answer is every screen stuck on its own spinner: a stopped clock rather than
+  // an error, which is exactly what it looked like.
   const blocked = new Promise<'blocked'>((resolve) => {
-    onDatabaseBlocked(() => resolve('blocked'))
+    onDatabaseBlocked(() => {
+      resolve('blocked')
+      showStartupProblem(BLOCKED_MESSAGE)
+    })
   })
 
   const started = prepare(auth, expenses).catch((error: unknown) => {
@@ -82,6 +95,17 @@ async function bootstrap(): Promise<void> {
 
   app.use(router)
   app.mount('#app')
+
+  // Nothing above proves the replica is answering: startup has a budget, so it
+  // reaches here either way. Asked once the app is up, because a screen that
+  // spins forever needs a reason on it and there is no other way to notice.
+  void watchReplica()
+}
+
+async function watchReplica(): Promise<void> {
+  if (await isReplicaResponsive()) return
+
+  showStartupProblem(WEDGED_MESSAGE)
 }
 
 /**

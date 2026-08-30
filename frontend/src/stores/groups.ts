@@ -124,11 +124,13 @@ export const useGroupsStore = defineStore('groups', () => {
   async function loadAll(): Promise<void> {
     isLoading.value = true
 
-    // Cache first, so the screen has content before the network answers.
-    groups.value = await db.groups.toArray()
-    settleMainGroup()
-
     try {
+      // Cache first, so the screen has content before the network answers. Inside
+      // the try with everything else: it was outside, so a replica that failed to
+      // answer left "Loading your groups" on screen for good.
+      groups.value = await db.groups.toArray()
+      settleMainGroup()
+
       const summaries = await requireApi().get<GroupSummaryDto[]>('/groups', {
         includeArchived: true,
       })
