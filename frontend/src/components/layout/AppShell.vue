@@ -69,29 +69,13 @@ const hasSyncNews = computed(
         the title. It is the way out of every screen a tab cannot reach, so it
         should not have to be found.
       -->
-      <RouterLink
-        v-if="props.backTo"
-        :to="props.backTo"
-        data-testid="back"
-        class="btn btn-press btn-secondary mb-3 h-10 w-10 shrink-0 rounded-full px-0"
-        :aria-label="`Back to ${props.backLabel}`"
-      >
-        <svg
-          class="h-5 w-5"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          aria-hidden="true"
-        >
-          <path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </RouterLink>
-
       <!--
-        The page action sits on the title's line rather than on a row of its own:
-        it acts on this page, so reading the two together is the point. Aligned to
-        the top of the block so it tracks the title and not the subtitle under it.
+        Title on the left, everything that acts on the page on the right, all on one
+        line. Aligned to the top of the block so they track the title rather than
+        drifting to the middle when there is a subtitle under it.
+
+        Back sits furthest right, in the corner: it is the one control that is not
+        about this page but about leaving it.
       -->
       <div class="mb-4 flex items-start justify-between gap-3">
         <div class="min-w-0">
@@ -101,6 +85,25 @@ const hasSyncNews = computed(
 
         <div class="flex shrink-0 items-center gap-2">
           <slot name="header-action" />
+
+          <RouterLink
+            v-if="props.backTo"
+            :to="props.backTo"
+            data-testid="back"
+            class="btn btn-press btn-secondary h-10 w-10 shrink-0 rounded-full px-0"
+            :aria-label="`Back to ${props.backLabel}`"
+          >
+            <svg
+              class="h-5 w-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              aria-hidden="true"
+            >
+              <path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </RouterLink>
         </div>
       </div>
 
