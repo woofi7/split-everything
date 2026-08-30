@@ -67,11 +67,16 @@ export const router = createRouter({
   scrollBehavior: (_to, _from, saved) => saved ?? { top: 0 },
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
   if (to.meta.public) return true
   if (auth.isSignedIn) return true
+
+  // Asked here rather than only at startup, so a session that ended mid-visit is
+  // picked up again in place. A device that already belongs to someone gets
+  // itself back in; the sign-in page is for devices that do not.
+  if (await auth.resumeSession()) return true
 
   // Remember where they were headed, so an invite or a deep link survives the
   // detour through sign-in.

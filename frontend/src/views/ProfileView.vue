@@ -151,8 +151,8 @@ async function deleteAccount(): Promise<void> {
         Disconnect this device
       </button>
       <p class="-mt-1 text-xs text-[var(--text-muted)]">
-        Signs you out here and asks for an account again. Your data stays on the
-        server, and this device still remembers who you are.
+        Signs you out here and stops this device reconnecting on its own, so the
+        next start asks for an account. Your data stays on the server.
       </p>
 
       <button
