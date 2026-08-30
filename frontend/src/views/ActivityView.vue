@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useGroupsStore } from '@/stores/groups'
@@ -28,8 +28,21 @@ const isOffline = ref(false)
 
 
 onMounted(async () => {
+  await groups.loadAll()
+  await load()
+})
+
+// Follows the group the rest of the app is on, and reloads when that changes.
+watch(() => groups.mainGroupId, () => void load())
+
+async function load(): Promise<void> {
+  isLoading.value = true
+
   try {
-    const page = await useApi().get<{ items: ActivityEntry[] }>('/activity', { pageSize: 100 })
+    const page = await useApi().get<{ items: ActivityEntry[] }>('/activity', {
+      pageSize: 100,
+      groupId: groups.mainGroupId ?? undefined,
+    })
     entries.value = page.items
     isOffline.value = false
   } catch {
@@ -38,30 +51,39 @@ onMounted(async () => {
   } finally {
     isLoading.value = false
   }
-})
+}
 
 const when = (iso: string) => new Date(iso).toLocaleString()
 
 /**
- * Where an entry leads, when it leads anywhere.
+ * Where an entry leads.
  *
  * The feed is where you notice something, and noticing it is useless if you cannot
- * then look at it. An expense entry opens the expense; the rest have no single
- * thing to open, so they stay as text rather than pretending to be links.
+ * then look at it. An expense entry opens that expense. Everything else opens the
+ * group it happened in, which is the nearest thing there is to look at: a member
+ * being added has no screen of its own, but the roster does.
+ *
+ * Only an entry with no group at all stays as plain text, rather than being a card
+ * that looks tappable and does nothing.
  */
 function targetOf(entry: ActivityEntry) {
-  if (entry.subjectType !== 'Expense' || !entry.subjectId || !entry.groupId) return null
+  if (!entry.groupId) return null
 
-  return {
-    name: 'expense',
-    params: { groupId: entry.groupId, expenseId: entry.subjectId },
+  if (entry.subjectType === 'Expense' && entry.subjectId) {
+    return {
+      name: 'expense',
+      params: { groupId: entry.groupId, expenseId: entry.subjectId },
+    }
   }
+
+  return { name: 'group', params: { groupId: entry.groupId } }
 }
 </script>
 
 <template>
   <AppShell
     title="Activity"
+    :subtitle="groups.mainGroup?.name"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-offline="isOffline || groups.isOffline"
