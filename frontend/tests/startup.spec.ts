@@ -2,10 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BLOCKED_MESSAGE,
   STARTUP_BUDGET_MS,
+  WEDGED_MESSAGE,
   settleWithin,
   showStartupProblem,
 } from '@/startup'
-import { db, onDatabaseBlocked, resetBlockedState } from '@/offline/db'
+import {
+  db,
+  isReplicaResponsive,
+  onDatabaseBlocked,
+  resetBlockedState,
+  resetDatabase,
+} from '@/offline/db'
 
 /**
  * Getting on screen when startup does not go to plan.
@@ -133,5 +140,47 @@ describe('a replica another tab is holding open', () => {
     // The event fires while startup is still wiring itself up, so a listener
     // attached a moment later must not miss it and wait forever.
     expect(listener).toHaveBeenCalled()
+  })
+})
+
+/**
+ * A replica that has stopped answering.
+ *
+ * IndexedDB waits rather than failing, and every screen holds a loading flag it
+ * clears after its read, so one wedged read is a spinner that never stops. It
+ * reads as a stopped clock rather than an error, which is what made it so hard
+ * to see: the app was up and looked busy.
+ */
+describe('isReplicaResponsive', () => {
+  it('says yes when the replica answers', async () => {
+    await resetDatabase()
+
+    expect(await isReplicaResponsive(1_000)).toBe(true)
+  })
+
+  it('counts a refusal as an answer', async () => {
+    const get = vi.spyOn(db.meta, 'get').mockRejectedValue(new Error('QuotaExceededError'))
+
+    // Reachable and saying no is a different problem, with its own error path.
+    // This check is only about whether anything comes back at all.
+    expect(await isReplicaResponsive(1_000)).toBe(true)
+    get.mockRestore()
+  })
+
+  it('says no when nothing comes back', async () => {
+    vi.useFakeTimers()
+    const get = vi.spyOn(db.meta, 'get').mockReturnValue(new Promise(() => {}) as never)
+
+    const answer = isReplicaResponsive(8_000)
+    await vi.advanceTimersByTimeAsync(8_100)
+
+    expect(await answer).toBe(false)
+    get.mockRestore()
+    vi.useRealTimers()
+  })
+
+  it('tells someone what to do about it', () => {
+    expect(WEDGED_MESSAGE).toContain('not responding')
+    expect(WEDGED_MESSAGE).toContain('Close the other tabs')
   })
 })

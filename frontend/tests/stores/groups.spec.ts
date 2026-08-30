@@ -307,3 +307,40 @@ describe('groups store', () => {
     await expect(store.create({ name: '', baseCurrency: 'CAD' })).rejects.toThrow()
   })
 })
+
+/**
+ * A loading flag has to be cleared by the same path that sets it.
+ *
+ * The cached read sat outside the try, so a replica that would not answer left
+ * "Loading your groups" on screen for the life of the page: not an error, not a
+ * retry, just a spinner. That is what a phone holding the local data open in
+ * another tab looks like from here.
+ */
+describe('loading the group list when the replica will not answer', () => {
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    await resetDatabase()
+  })
+
+  it('stops loading when the cached read fails', async () => {
+    const store = useGroupsStore()
+    store.attachApi({ get: vi.fn(async () => []) } as never)
+    const toArray = vi.spyOn(db.groups, 'toArray').mockRejectedValue(new Error('InvalidStateError'))
+
+    await store.loadAll()
+
+    expect(store.isLoading).toBe(false)
+    toArray.mockRestore()
+  })
+
+  it('says it is offline rather than saying nothing', async () => {
+    const store = useGroupsStore()
+    store.attachApi({ get: vi.fn(async () => []) } as never)
+    const toArray = vi.spyOn(db.groups, 'toArray').mockRejectedValue(new Error('InvalidStateError'))
+
+    await store.loadAll()
+
+    expect(store.isOffline).toBe(true)
+    toArray.mockRestore()
+  })
+})

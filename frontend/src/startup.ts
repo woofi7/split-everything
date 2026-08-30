@@ -77,6 +77,17 @@ export function showStartupProblem(message: string, actionLabel = 'Reload'): voi
   host.append(panel)
 }
 
+/**
+ * A replica that is not answering, for a reason we cannot name from here.
+ *
+ * The same instruction, because the same thing cures nearly all of it: another
+ * page on this device holding the local data. Hedged rather than asserted,
+ * because a browser can also refuse storage outright.
+ */
+export const WEDGED_MESSAGE =
+  'The data stored on this device is not responding. This usually means the app ' +
+  'is open in another tab. Close the other tabs, then reload.'
+
 /** What a replica held open by another tab needs the person to do. */
 export const BLOCKED_MESSAGE =
   'It is open in another tab running an older version. Close the other tabs, ' +

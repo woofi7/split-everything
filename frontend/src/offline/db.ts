@@ -309,3 +309,34 @@ export async function resetDatabase(): Promise<void> {
     db.meta.clear(),
   ])
 }
+
+/**
+ * Whether the replica is answering at all.
+ *
+ * IndexedDB has no timeout: a request that cannot proceed waits, silently and
+ * forever. Every screen reads from here, and each one holds a loading flag that
+ * is cleared after the read, so one wedged read is a spinner that never stops.
+ *
+ * Asked rather than inferred, because the reasons differ and the symptom does
+ * not: an upgrade another tab is blocking, a browser that has revoked storage
+ * access, a private window that has run out of quota.
+ */
+export async function isReplicaResponsive(timeoutMs = 8000): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const answered = db.meta.get(DEVICE_ID_KEY).then(
+    () => true,
+    // A refusal is an answer: the replica is reachable and said no.
+    () => true,
+  )
+
+  const timedOut = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), timeoutMs)
+  })
+
+  try {
+    return await Promise.race([answered, timedOut])
+  } finally {
+    clearTimeout(timer)
+  }
+}
