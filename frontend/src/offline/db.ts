@@ -295,6 +295,28 @@ export async function getAllCursors(): Promise<Record<string, number>> {
   )
 }
 
+/**
+ * Empties every replicated table and every sync cursor, keeping the device id.
+ *
+ * Told apart from resetDatabase on purpose: that one hands the install to another
+ * account and the device id goes with it. This one keeps the same device and asks
+ * the server for its history again, so the vector clocks stay continuous.
+ */
+export async function clearReplica(): Promise<void> {
+  await Promise.all([
+    db.groups.clear(),
+    db.expenses.clear(),
+    db.settlements.clear(),
+    db.comments.clear(),
+    db.outbox.clear(),
+    db.conflicts.clear(),
+  ])
+
+  // Cursors, but not the device id: asking from zero is the point.
+  const cursors = await db.meta.filter((row) => row.key.startsWith(CURSOR_PREFIX)).toArray()
+  await db.meta.bulkDelete(cursors.map((row) => row.key))
+}
+
 export async function resetDatabase(): Promise<void> {
   // The cache mirrors a row that is about to go, so it goes too.
   cachedDeviceId = null

@@ -11,6 +11,7 @@ import {
 import { calculateItemizedSplit, calculateSplit, type SplitType } from '@/domain/splitting'
 import { netBalances, simplifyDebts, pairwiseDebts, type MemberBalance, type Transfer } from '@/domain/balances'
 import { roundMoney } from '@/domain/money'
+import { clearReplica } from '@/offline/db'
 import type { SyncEngine } from '@/offline/syncEngine'
 import { newId } from '@/domain/ids'
 import { useAuthStore } from '@/stores/auth'
@@ -585,6 +586,29 @@ export const useExpensesStore = defineStore('expenses', () => {
     }
   }
 
+  /**
+   * Throws the local replica away and takes the server's version of everything.
+   *
+   * The escape hatch for a device whose replica has diverged: rows the server no
+   * longer has, changes that will never send, a cursor past something that was
+   * missed. Every screen reads from the replica, so when it is wrong there is
+   * nothing else to look at and no way to argue with it.
+   *
+   * Destructive on purpose, and only where the caller has said so: unsent local
+   * work goes with it, because unsent work is the thing that cannot be recovered
+   * from the server.
+   */
+  async function resetToServer(): Promise<void> {
+    await clearReplica()
+    await hydrate()
+    await sync()
+  }
+
+  /** How much would be lost by starting over: work the server has never seen. */
+  async function unsentCount(): Promise<number> {
+    return db.outbox.count()
+  }
+
   async function refreshPendingCount(): Promise<void> {
     pendingCount.value = await requireSync().pendingCount()
     rejectedCount.value = await requireSync().rejectedCount()
@@ -621,6 +645,8 @@ export const useExpensesStore = defineStore('expenses', () => {
     hydrate,
     reconcile,
     discardRejected,
+    resetToServer,
+    unsentCount,
     forGroup,
     settlementsForGroup,
     commentsFor,

@@ -9,7 +9,11 @@ const expenses = useExpensesStore()
 
 const conflicts = ref<LocalConflict[]>([])
 const rejected = ref<OutboxOperation[]>([])
+/** Queued and not sent yet. What the "waiting to sync" count is actually counting. */
+const waiting = ref<OutboxOperation[]>([])
 const error = ref<string | null>(null)
+const isResetting = ref(false)
+const confirmingReset = ref(false)
 
 
 onMounted(load)
@@ -17,6 +21,30 @@ onMounted(load)
 async function load(): Promise<void> {
   conflicts.value = await db.conflicts.toArray()
   rejected.value = await db.outbox.where('status').equals('rejected').toArray()
+  // Anything not refused is still on its way, or trying to be. The count in the
+  // header said three and this screen showed nothing, which is not an answer.
+  waiting.value = await db.outbox.filter((row) => row.status !== 'rejected').toArray()
+}
+
+/**
+ * Takes the server's version of everything.
+ *
+ * For a replica that has diverged past arguing with: every screen reads from it,
+ * so when it is wrong there is nothing else to look at.
+ */
+async function resetToServer(): Promise<void> {
+  error.value = null
+  isResetting.value = true
+
+  try {
+    await expenses.resetToServer()
+    confirmingReset.value = false
+    await load()
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not reload from the server.'
+  } finally {
+    isResetting.value = false
+  }
 }
 
 /** Reads a payload field for display without trusting its shape. */
@@ -130,12 +158,92 @@ async function discard(operationId: string): Promise<void> {
       </ul>
     </section>
 
+    <section v-if="waiting.length > 0" class="mt-4">
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">
+        Changes waiting to be sent
+      </h2>
+
+      <ul class="flex flex-col gap-3">
+        <li
+          v-for="operation in waiting"
+          :key="operation.operationId"
+          data-testid="waiting-operation"
+          class="surface-card p-4"
+        >
+          <p class="text-sm">{{ operation.operation }} {{ operation.entityType }}</p>
+          <p class="mt-1 text-xs text-[var(--text-muted)]">
+            Queued, attempt {{ operation.attempts + 1 }}.
+          </p>
+          <!--
+            The reason it has not gone, when there is one. Without it a count of
+            three sits in the header with nothing behind it.
+          -->
+          <p v-if="operation.lastError" class="mt-1 text-xs text-owing">
+            {{ operation.lastError }}
+          </p>
+        </li>
+      </ul>
+    </section>
+
     <p
-      v-if="conflicts.length === 0 && rejected.length === 0"
+      v-if="conflicts.length === 0 && rejected.length === 0 && waiting.length === 0"
       class="surface-card p-6 text-center text-sm text-[var(--text-muted)]"
     >
       Nothing needs your attention.
     </p>
+
+    <!--
+      Last resort, and named as one. Every screen reads from the local replica, so
+      a replica that has gone wrong cannot be worked around from anywhere else.
+    -->
+    <section class="mt-6">
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">This device</h2>
+
+      <div v-if="!confirmingReset" class="surface-card p-4">
+        <p class="text-sm text-[var(--text-muted)]">
+          If this device is showing something the others are not, it can throw away
+          what it has stored and ask the server for all of it again.
+        </p>
+        <button
+          type="button"
+          data-testid="reset-replica"
+          class="btn btn-press btn-secondary mt-3"
+          style="border-color: var(--border)"
+          @click="confirmingReset = true"
+        >
+          Reload everything from the server
+        </button>
+      </div>
+
+      <div v-else class="surface-card flex flex-col gap-3 p-4">
+        <p class="text-sm">
+          Everything stored on this device is replaced by the server's version.
+        </p>
+        <p v-if="waiting.length > 0 || rejected.length > 0" class="text-sm text-owing">
+          {{ waiting.length + rejected.length }} change(s) that have not reached the
+          server will be lost. Nothing else can bring them back.
+        </p>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="btn btn-press btn-secondary flex-1"
+            style="border-color: var(--border)"
+            @click="confirmingReset = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid="reset-replica-confirm"
+            class="btn btn-press btn-danger flex-1"
+            :disabled="isResetting"
+            @click="resetToServer"
+          >
+            {{ isResetting ? 'Reloading' : 'Reload from the server' }}
+          </button>
+        </div>
+      </div>
+    </section>
 
     <p v-if="error" class="mt-4 text-sm text-owing" role="alert">{{ error }}</p>
   </AppShell>

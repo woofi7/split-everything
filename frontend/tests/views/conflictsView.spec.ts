@@ -156,12 +156,92 @@ describe('ConflictsView', () => {
     expect(textOf(wrapper)).toContain('Nothing needs your attention')
   })
 
-  it('leaves a still-queued change alone', async () => {
+  it('shows a still-queued change as waiting, not as a problem', async () => {
     const { wrapper } = await mountView(ConflictsView, {
       outbox: [testRejectedOperation({ status: 'pending', lastError: null })],
     })
 
-    // Pending work is not a problem to solve; it will drain on its own.
+    // It used to say nothing needs attention while the header counted it as
+    // waiting to sync. A number with nothing behind it is not an answer.
+    expect(textOf(wrapper)).not.toContain('Nothing needs your attention')
+    expect(wrapper.findAll('[data-testid="waiting-operation"]')).toHaveLength(1)
+    expect(textOf(wrapper)).toContain('waiting to be sent')
+
+    // Still not presented as a refusal: there is nothing to discard.
+    expect(textOf(wrapper)).not.toContain('the server refused')
+  })
+
+  it('says why a queued change has not gone, when it knows', async () => {
+    const { wrapper } = await mountView(ConflictsView, {
+      outbox: [testRejectedOperation({ status: 'pending', lastError: 'Could not reach the server.' })],
+    })
+
+    expect(wrapper.find('[data-testid="waiting-operation"]').text())
+      .toContain('Could not reach the server.')
+  })
+
+  it('says nothing needs attention when the queue is empty', async () => {
+    const { wrapper } = await mountView(ConflictsView, { outbox: [] })
+
     expect(textOf(wrapper)).toContain('Nothing needs your attention')
+  })
+
+  /**
+   * The last resort for a replica that has diverged.
+   *
+   * Every screen reads from the local replica, so when it is wrong there is
+   * nothing else to look at and no way to argue with it from inside the app.
+   */
+  describe('reloading everything from the server', () => {
+    it('does not throw the replica away on one tap', async () => {
+      const { wrapper, expensesStore } = await mountView(ConflictsView)
+      const reset = vi.spyOn(expensesStore, 'resetToServer')
+
+      await wrapper.find('[data-testid="reset-replica"]').trigger('click')
+      await settle(1)
+
+      expect(reset).not.toHaveBeenCalled()
+      expect(wrapper.find('[data-testid="reset-replica-confirm"]').exists()).toBe(true)
+    })
+
+    it('says how much unsent work would be lost', async () => {
+      const { wrapper } = await mountView(ConflictsView, {
+        outbox: [
+          testRejectedOperation({ status: 'pending', lastError: null }),
+          testRejectedOperation({ operationId: 'op-2', status: 'pending', lastError: null }),
+        ],
+      })
+
+      await wrapper.find('[data-testid="reset-replica"]').trigger('click')
+      await settle(1)
+
+      // The one thing the server cannot give back.
+      expect(textOf(wrapper)).toContain('2 change(s) that have not reached the server')
+    })
+
+    it('reloads once confirmed', async () => {
+      const { wrapper, expensesStore } = await mountView(ConflictsView)
+      const reset = vi.spyOn(expensesStore, 'resetToServer').mockResolvedValue()
+
+      await wrapper.find('[data-testid="reset-replica"]').trigger('click')
+      await settle(1)
+      await wrapper.find('[data-testid="reset-replica-confirm"]').trigger('click')
+      await settle()
+
+      expect(reset).toHaveBeenCalled()
+    })
+
+    it('can be backed out of', async () => {
+      const { wrapper, expensesStore } = await mountView(ConflictsView)
+      const reset = vi.spyOn(expensesStore, 'resetToServer')
+
+      await wrapper.find('[data-testid="reset-replica"]').trigger('click')
+      await settle(1)
+      await wrapper.findAll('button').find((b) => b.text() === 'Cancel')!.trigger('click')
+      await settle(1)
+
+      expect(reset).not.toHaveBeenCalled()
+      expect(wrapper.find('[data-testid="reset-replica-confirm"]').exists()).toBe(false)
+    })
   })
 })
