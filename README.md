@@ -215,8 +215,11 @@ cp .env.example .env              # fill it in; nothing has a default
 docker compose pull && docker compose up -d
 ```
 
-`APP_TAG` decides what runs: `latest`, or a pinned `v1.0.0` when a rollback needs
-to be exact. The images publish their own health endpoints and the compose file
+`APP_TAG` decides what runs: `latest`, or a pinned `0.1.1` when a rollback needs to
+be exact. Note the missing `v`: the git tag is `v0.1.1` and the images it publishes
+are `0.1.1`, `0.1`, `0` and `latest`, since that is what `docker/metadata-action`
+makes of a semver ref. `APP_TAG=v0.1.1` fails the pull with "manifest unknown" and
+leaves the running container alone, which looks like a deploy that did nothing. The images publish their own health endpoints and the compose file
 checks them, so a wedged API is restarted rather than left serving nothing.
 
 Traefik reaches both containers over its own network, `proxy`, which its stack
