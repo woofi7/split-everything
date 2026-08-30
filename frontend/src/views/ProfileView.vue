@@ -29,20 +29,26 @@ const isLight = computed(() => auth.theme === 'light')
  * the next free one, because two people the same colour in one group defeats the
  * point. Saved on the tap, since there is nothing else to fill in.
  */
-const preferredColour = computed(() => auth.user?.preferredColorHex ?? null)
-const colourError = ref<string | null>(null)
+const stored = computed(() => auth.user?.preferredColorHex ?? null)
 
-async function pickColour(colorHex: string): Promise<void> {
-  colourError.value = null
+/**
+ * Picked but not saved, like the name and the currency beside it.
+ *
+ * Undefined means untouched, and null means asked to be cleared, which is not the
+ * same thing: this screen has a Save, so a colour should wait for it rather than
+ * committing on a tap.
+ */
+const pickedColour = ref<string | null | undefined>(undefined)
 
-  try {
-    // Tapping the one already chosen clears it, which is the only way back to
-    // having no preference.
-    const next = preferredColour.value?.toLowerCase() === colorHex.toLowerCase() ? '' : colorHex
-    await auth.updateProfile({ preferredColorHex: next })
-  } catch (caught) {
-    colourError.value = caught instanceof Error ? caught.message : 'Could not save that colour.'
-  }
+const preferredColour = computed(() =>
+  pickedColour.value === undefined ? stored.value : pickedColour.value,
+)
+
+function pickColour(colorHex: string): void {
+  // Tapping the one already showing clears it, which is the only way back to
+  // having no preference.
+  const next = preferredColour.value?.toLowerCase() === colorHex.toLowerCase() ? null : colorHex
+  pickedColour.value = next === stored.value ? undefined : next
 }
 
 async function save(): Promise<void> {
@@ -53,7 +59,13 @@ async function save(): Promise<void> {
     await auth.updateProfile({
       displayName: displayName.value,
       defaultCurrency: defaultCurrency.value,
+      // Only when it was touched. The API reads null as "not supplied" and an
+      // empty string as an explicit clear.
+      ...(pickedColour.value === undefined
+        ? {}
+        : { preferredColorHex: pickedColour.value ?? '' }),
     })
+    pickedColour.value = undefined
     message.value = 'Saved.'
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not save your profile.'
@@ -146,7 +158,9 @@ async function deleteAccount(): Promise<void> {
         @pick="pickColour"
       />
 
-      <p v-if="colourError" class="mt-2 text-xs text-owing" role="alert">{{ colourError }}</p>
+      <p class="mt-2 text-xs text-[var(--text-muted)]">
+        Saved with the rest of your profile, above.
+      </p>
     </section>
 
     <section class="surface-card mb-4 flex items-center justify-between p-4">

@@ -202,7 +202,16 @@ const labelFor = (member: { displayName: string; status: string; isPlaceholder: 
 
 /** Which member's colour row is open, since twelve swatches each is a wall. */
 const colouring = ref<string | null>(null)
-const colourError = ref<string | null>(null)
+
+/**
+ * Colours picked but not saved, by member.
+ *
+ * Staged like the rest of the screen, so one button saves everything and a colour
+ * is not committed by a stray tap. Which colour another person ends up with when
+ * one is taken from them is the server's to work out, so this only records what
+ * was asked for; the answer arrives with the group.
+ */
+const pendingColours = ref<Record<string, string>>({})
 
 /** Whose colour this person may change: their own, or anyone's if they run the group. */
 function canRecolour(memberId: string): boolean {
@@ -212,22 +221,39 @@ function canRecolour(memberId: string): boolean {
 /** The colours in use, so the row can show which are spoken for. */
 const takenColours = computed(() =>
   (group.value?.members ?? [])
-    .map((member) => member.colorHex)
+    .map((member) => colourOf(member.id))
     .filter((colour): colour is string => !!colour),
 )
 
 const colourOf = (memberId: string) =>
-  (group.value?.members ?? []).find((member) => member.id === memberId)?.colorHex ?? null
+  pendingColours.value[memberId]
+  ?? (group.value?.members ?? []).find((member) => member.id === memberId)?.colorHex
+  ?? null
 
-async function pickColour(memberId: string, colorHex: string): Promise<void> {
-  colourError.value = null
+function pickColour(memberId: string, colorHex: string): void {
+  const stored = (group.value?.members ?? []).find((member) => member.id === memberId)?.colorHex
+  const staged = { ...pendingColours.value }
 
-  try {
-    await groups.setMemberColor(groupId.value, memberId, colorHex)
+  // Back to what the group holds is not a change, so it stops being one.
+  if (stored && stored.toLowerCase() === colorHex.toLowerCase()) {
+    delete staged[memberId]
+    pendingColours.value = staged
     colouring.value = null
-  } catch (caught) {
-    colourError.value = caught instanceof Error ? caught.message : 'Could not set that colour.'
+    return
   }
+
+  // The swap, shown rather than waited for. The server does this when a colour is
+  // taken from somebody, and a preview that leaves two people the same colour is
+  // showing the one thing this feature exists to prevent.
+  const displaced = (group.value?.members ?? []).find(
+    (member) => member.id !== memberId && colourOf(member.id)?.toLowerCase() === colorHex.toLowerCase(),
+  )
+  const mine = colourOf(memberId)
+  if (displaced && mine) staged[displaced.id] = mine
+
+  staged[memberId] = colorHex
+  pendingColours.value = staged
+  colouring.value = null
 }
 
 function openMerge(): void {
@@ -302,6 +328,11 @@ const isDirty = computed(() => {
   )
 })
 
+/** Anything at all to save, colours included. */
+const hasChanges = computed(
+  () => isDirty.value || Object.keys(pendingColours.value).length > 0,
+)
+
 /**
  * Saves the lot in one request.
  *
@@ -316,12 +347,22 @@ async function save(): Promise<void> {
   isSaving.value = true
 
   try {
-    await groups.update(groupId.value, {
-      name: name.value,
-      iconName: iconName.value,
-      defaultSplitType: splitType.value,
-      defaultSplitValues: splitNeedsValues.value ? splitValues.value : null,
-    })
+    if (isDirty.value) {
+      await groups.update(groupId.value, {
+        name: name.value,
+        iconName: iconName.value,
+        defaultSplitType: splitType.value,
+        defaultSplitValues: splitNeedsValues.value ? splitValues.value : null,
+      })
+    }
+
+    // One at a time, and each its own request: a colour is a change to one
+    // member, and the server may move somebody else to make room for it.
+    for (const [memberId, colorHex] of Object.entries(pendingColours.value)) {
+      await groups.setMemberColor(groupId.value, memberId, colorHex)
+    }
+    pendingColours.value = {}
+
     message.value = 'Saved.'
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not save the group.'
@@ -659,9 +700,6 @@ async function unarchive(): Promise<void> {
             Taking a colour someone else has swaps the two, so nobody ends up
             without one.
           </p>
-          <p v-if="colourError" class="mt-1 text-xs text-owing" role="alert">
-            {{ colourError }}
-          </p>
         </li>
       </ul>
 
@@ -831,7 +869,7 @@ async function unarchive(): Promise<void> {
       Clear of the tab bar and of the add button in the middle of it.
     -->
     <div
-      v-if="isDirty && canAdminister"
+      v-if="hasChanges && canAdminister"
       data-testid="save-bar"
       class="fixed right-4 z-40"
       style="bottom: calc(6rem + env(safe-area-inset-bottom))"
