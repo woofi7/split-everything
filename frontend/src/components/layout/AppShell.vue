@@ -77,10 +77,26 @@ const hasSyncNews = computed(
         Back sits furthest right, in the corner: it is the one control that is not
         about this page but about leaving it.
       -->
-      <div class="mb-4 flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <h1 class="truncate text-xl font-semibold">{{ title }}</h1>
-          <p v-if="subtitle" class="truncate text-sm text-[var(--text-muted)]">{{ subtitle }}</p>
+      <div data-testid="title-row" class="mb-4 flex items-start justify-between gap-3">
+        <div class="flex min-w-0 items-start gap-3">
+          <!--
+            The app's mark, top left, where a person looks to know what they have
+            open. Decorative: the title beside it already says the name, so a
+            screen reader announcing both would say it twice.
+          -->
+          <img
+            src="/icons/icon.svg"
+            alt=""
+            width="32"
+            height="32"
+            data-testid="app-icon"
+            class="mt-0.5 h-8 w-8 shrink-0 rounded-lg"
+          />
+
+          <div class="min-w-0">
+            <h1 class="truncate text-xl font-semibold">{{ title }}</h1>
+            <p v-if="subtitle" class="truncate text-sm text-[var(--text-muted)]">{{ subtitle }}</p>
+          </div>
         </div>
 
         <div class="flex shrink-0 items-center gap-2">

@@ -127,12 +127,13 @@ async function handleCredential(credential?: string): Promise<void> {
 <template>
   <AppShell title="Split Everything" :show-nav="false">
     <div class="mx-auto flex max-w-sm flex-col items-center gap-6 py-12 text-center">
-      <div
-        class="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-600 text-2xl font-semibold text-white"
-        aria-hidden="true"
-      >
-        SE
-      </div>
+      <img
+        src="/icons/icon.svg"
+        alt=""
+        width="64"
+        height="64"
+        class="h-16 w-16 rounded-2xl"
+      />
 
       <!--
         No "welcome back, continue as you" step. Being asked to confirm who you

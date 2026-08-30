@@ -71,17 +71,10 @@
       }
 
       .boot-tile {
-        display: grid;
         width: 3.75rem;
         height: 3.75rem;
-        place-items: center;
         border-radius: 1.1rem;
-        background: #4f46e5;
         box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.55);
-        color: #fff;
-        font-size: 1.05rem;
-        font-weight: 600;
-        letter-spacing: 0.02em;
         animation: boot-breathe 2.4s ease-in-out infinite;
       }
 
@@ -162,7 +155,12 @@
       <div class="boot" role="status" aria-live="polite">
         <div class="boot-mark">
           <div class="boot-ring"></div>
-          <div class="boot-tile">SE</div>
+          <svg class="boot-tile" viewBox="0 0 64 64" aria-hidden="true">
+          <rect width="64" height="64" rx="14" fill="#4f46e5" />
+          <path d="M 33.04 15.03 A 17 17 0 0 1 40.16 46.91" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" />
+          <path d="M 38.29 47.80 A 17 17 0 0 1 15.30 35.16" fill="none" stroke="#c7d2fe" stroke-width="9" stroke-linecap="round" />
+          <path d="M 15.04 33.10 A 17 17 0 0 1 30.96 15.03" fill="none" stroke="#34d399" stroke-width="9" stroke-linecap="round" />
+        </svg>
         </div>
         <p class="boot-text">Loading Split Everything</p>
         <div class="boot-dots" aria-hidden="true">

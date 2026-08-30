@@ -18,6 +18,26 @@ describe('AppShell', () => {
     expect(wrapper.text()).toContain('Body content')
   })
 
+  it('carries the app mark at the top left', () => {
+    const wrapper = mountShell({})
+
+    const icon = wrapper.find('[data-testid="app-icon"]')
+    expect(icon.exists()).toBe(true)
+    // Vite inlines a file this small as a data URI, so the source is checked
+    // for being the mark rather than for a literal path.
+    expect(icon.attributes('src')).toMatch(/svg/)
+    // Decorative: the title beside it already says the name, and a screen reader
+    // announcing both would say it twice.
+    expect(icon.attributes('alt')).toBe('')
+  })
+
+  it('puts the mark before the title', () => {
+    const wrapper = mountShell({})
+
+    const html = wrapper.html()
+    expect(html.indexOf('app-icon')).toBeLessThan(html.indexOf('<h1'))
+  })
+
   it('shows a subtitle when given one', () => {
     const wrapper = mountShell({ subtitle: '2 members' })
 
@@ -45,8 +65,8 @@ describe('AppShell', () => {
     expect(back.classes()).toContain('rounded-full')
 
     // On the title's own row, not a row of its own above it.
-    const row = wrapper.find('h1').element.parentElement?.parentElement
-    expect(row?.querySelector('[data-testid="back"]')).not.toBeNull()
+    const row = wrapper.find('[data-testid="title-row"]')
+    expect(row.find('[data-testid="back"]').exists()).toBe(true)
   })
 
   it('puts back furthest right, past the page action', () => {
@@ -72,8 +92,8 @@ describe('AppShell', () => {
     const wrapper = mountShell({}, { 'header-action': '<button>Change</button>' })
 
     // It acts on this page, so the two are read together.
-    const row = wrapper.find('h1').element.parentElement?.parentElement
-    expect(row?.querySelector('button')?.textContent).toBe('Change')
+    const row = wrapper.find('[data-testid="title-row"]')
+    expect(row.find('button').text()).toBe('Change')
   })
 
   it('keeps the action on the title line beside back', () => {
@@ -82,9 +102,9 @@ describe('AppShell', () => {
       { 'header-action': '<button>Change</button>' },
     )
 
-    const row = wrapper.find('h1').element.parentElement?.parentElement
-    expect(row?.querySelector('button')?.textContent).toBe('Change')
-    expect(row?.querySelector('[data-testid="back"]')).not.toBeNull()
+    const row = wrapper.find('[data-testid="title-row"]')
+    expect(row.find('button').text()).toBe('Change')
+    expect(row.find('[data-testid="back"]').exists()).toBe(true)
   })
 
   it('has no fixed chrome at the top', () => {
