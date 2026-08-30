@@ -4,7 +4,13 @@ import vue from '@vitejs/plugin-vue';
 export default defineConfig({
     plugins: [vue()],
     resolve: {
-        alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+        alias: {
+            '@': fileURLToPath(new URL('./src', import.meta.url)),
+            // The PWA plugin generates this module at build time, so nothing here can
+            // resolve it. The stub also gives a test the only handle on "a new version
+            // is waiting", which is otherwise the plugin's own business.
+            'virtual:pwa-register': fileURLToPath(new URL('./tests/support/pwaRegister.ts', import.meta.url)),
+        },
     },
     test: {
         environment: 'jsdom',

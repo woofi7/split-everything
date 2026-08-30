@@ -104,8 +104,23 @@ function mountGoogleButton(): void {
       theme: 'filled_black',
       size: 'large',
       shape: 'pill',
-      text: 'continue_with',
-      width: 280,
+      // "Sign in with Google" rather than "Continue with", because it is the
+      // longest label that fits the width below: Google keeps a min-width of
+      // min-content, and "Continue with Google" pushes the button back over 200.
+      text: 'signin_with',
+      // Deliberately under 200, which is the documented point below which Google
+      // stops showing its personalized "Continue as <name>" button.
+      //
+      // That button is not HTML like this one. It is a cross-origin iframe whose
+      // document has a transparent background, so the browser paints its canvas
+      // with the base colour - opaque white - and there is no reaching it: a
+      // background on the iframe, a background behind it, color-scheme: only dark
+      // and allowtransparency all leave it white (measured, all four). On a
+      // coloured app that reads as a white slab where the button should be. So the
+      // choice is a themed button in every state or a personalized one that goes
+      // white for anyone with a Google session, and matching the app wins. Raising
+      // this number past 199 brings the white back.
+      width: 199,
     })
   }
 }

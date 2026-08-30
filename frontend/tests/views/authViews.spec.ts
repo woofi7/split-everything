@@ -231,6 +231,20 @@ describe('SignInView', () => {
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 
+  it('asks for a button too narrow for Google to personalize', async () => {
+    const { renderButton } = withGoogle()
+
+    await mountView(SignInView, { signedIn: false })
+
+    // Not a stylistic width. At 200 and above Google swaps this HTML button for a
+    // cross-origin iframe whose canvas paints opaque white on our coloured page,
+    // and nothing on this side can recolour it. Widening this puts the white slab
+    // back for everyone who has a Google session.
+    const options = renderButton.mock.calls[0][1] as { width: number; theme: string }
+    expect(options.width).toBeLessThan(200)
+    expect(options.theme).toBe('filled_black')
+  })
+
   it('says so when the client id is not configured', async () => {
     withGoogle()
     mockClientId = ''
