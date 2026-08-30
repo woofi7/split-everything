@@ -5,7 +5,7 @@ import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
-import ColorChoice from '@/components/ui/ColorChoice.vue'
+import AccentChoice from '@/components/ui/AccentChoice.vue'
 
 const auth = useAuthStore()
 const expenses = useExpensesStore()
@@ -27,17 +27,16 @@ const isSaving = ref(false)
  * Whether anything here differs from the account as it stands.
  *
  * The same shape as the group's settings: these are settings, edited and then
- * kept, so one button saves them and one puts them back. The theme is not among
- * them, because it is applied as it is switched and there is nothing to preview.
+ * kept, so one button saves them and one puts them back. Neither the accent nor
+ * the light switch is among them, because both are applied as they are chosen -
+ * the whole application changes, and there is nothing left to preview.
  */
 const isDirty = computed(() => {
   const user = auth.user
   if (!user) return false
 
   if (displayName.value.trim() !== user.displayName) return true
-  if (defaultCurrency.value !== user.defaultCurrency) return true
-
-  return pickedColour.value !== undefined
+  return defaultCurrency.value !== user.defaultCurrency
 })
 
 /** Puts the form back to the account, so a change can be abandoned. */
@@ -45,38 +44,16 @@ function revert(): void {
   const user = auth.user
   displayName.value = user?.displayName ?? ''
   defaultCurrency.value = user?.defaultCurrency ?? 'CAD'
-  pickedColour.value = undefined
   message.value = null
   error.value = null
 }
 
-/**
- * The colour this person would like in the groups they join.
- *
- * A wish rather than a setting: a group where somebody already has it gives them
- * the next free one, because two people the same colour in one group defeats the
- * point. Saved on the tap, since there is nothing else to fill in.
- */
-const stored = computed(() => auth.user?.preferredColorHex ?? null)
+/** The accent the app is wearing, which is an account setting like the rest. */
+const accent = computed(() => auth.accent.name)
 
-/**
- * Picked but not saved, like the name and the currency beside it.
- *
- * Undefined means untouched, and null means asked to be cleared, which is not the
- * same thing: this screen has a Save, so a colour should wait for it rather than
- * committing on a tap.
- */
-const pickedColour = ref<string | null | undefined>(undefined)
-
-const preferredColour = computed(() =>
-  pickedColour.value === undefined ? stored.value : pickedColour.value,
-)
-
-function pickColour(colorHex: string): void {
-  // Tapping the one already showing clears it, which is the only way back to
-  // having no preference.
-  const next = preferredColour.value?.toLowerCase() === colorHex.toLowerCase() ? null : colorHex
-  pickedColour.value = next === stored.value ? undefined : next
+async function pickAccent(name: string): Promise<void> {
+  error.value = null
+  await auth.setAccent(name)
 }
 
 async function save(): Promise<void> {
@@ -88,13 +65,7 @@ async function save(): Promise<void> {
     await auth.updateProfile({
       displayName: displayName.value,
       defaultCurrency: defaultCurrency.value,
-      // Only when it was touched. The API reads null as "not supplied" and an
-      // empty string as an explicit clear.
-      ...(pickedColour.value === undefined
-        ? {}
-        : { preferredColorHex: pickedColour.value ?? '' }),
     })
-    pickedColour.value = undefined
     message.value = 'Saved.'
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not save your profile.'
@@ -177,21 +148,12 @@ async function deleteAccount(): Promise<void> {
     </form>
 
     <section class="surface-card mb-4 p-4">
-      <p class="text-sm">Your colour</p>
+      <p class="text-sm">App colour</p>
       <p class="mb-3 text-xs text-[var(--text-muted)]">
-        Used in the groups you join, when nobody there has it already. Tap the one
-        you have to go back to no preference.
+        Applies everywhere, and follows your account onto any device you sign in on.
       </p>
 
-      <ColorChoice
-        :value="preferredColour"
-        label="Your preferred colour"
-        @pick="pickColour"
-      />
-
-      <p class="mt-2 text-xs text-[var(--text-muted)]">
-        Saved with the rest of your profile, above.
-      </p>
+      <AccentChoice :value="accent" label="App colour" @pick="pickAccent" />
     </section>
 
     <section class="surface-card mb-4 flex items-center justify-between p-4">

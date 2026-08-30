@@ -42,13 +42,12 @@ describe('ProfileView', () => {
       expect(wrapper.find('[data-testid="cancel-changes"]').exists()).toBe(true)
     })
 
-    it('saves the name, the currency and the colour together', async () => {
+    it('saves the name and the currency together', async () => {
       const api = fakeApi({ '/auth/me': () => testUser })
       const { wrapper } = await mountView(ProfileView, { api })
 
       await wrapper.find('input[type="text"]').setValue('Alice A')
       await wrapper.find('select').setValue('EUR')
-      await wrapper.find('[data-testid="colour-84cc16"]').trigger('click')
       await settle(1)
       await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle()
@@ -57,7 +56,6 @@ describe('ProfileView', () => {
       expect(api.patch).toHaveBeenCalledWith('/auth/me', expect.objectContaining({
         displayName: 'Alice A',
         defaultCurrency: 'EUR',
-        preferredColorHex: '#84cc16',
       }))
     })
 
@@ -67,7 +65,6 @@ describe('ProfileView', () => {
 
       await wrapper.find('input[type="text"]').setValue('Alice A')
       await wrapper.find('select').setValue('EUR')
-      await wrapper.find('[data-testid="colour-84cc16"]').trigger('click')
       await settle(1)
       await wrapper.find('[data-testid="cancel-changes"]').trigger('click')
       await settle(1)
@@ -124,105 +121,85 @@ describe('ProfileView', () => {
   })
 
   /**
-   * The colour this person would like in the groups they join.
+   * The colour the whole application wears.
    *
-   * A wish rather than a setting: a group where somebody already has it gives them
-   * the next free one, because two the same in one group defeats the point.
+   * On the account rather than on the device, because somebody who picks a colour
+   * means it wherever they sign in. There is no personal colour on this screen any
+   * more: a member's colour belongs to the group, and that is where it is edited.
    */
-  describe('a preferred colour', () => {
-    it('offers the palette the groups actually store', async () => {
+  describe('the app colour', () => {
+    it('offers the eight themes', async () => {
       const { wrapper } = await mountView(ProfileView)
 
-      // Twelve, matching the server's list: a colour a group cannot store is not
-      // worth offering.
-      expect(wrapper.findAll('[data-testid^="colour-"]')).toHaveLength(12)
+      expect(wrapper.findAll('[data-testid^="accent-"]')).toHaveLength(8)
     })
 
-    it('waits for Save, like the name beside it', async () => {
-      const api = fakeApi({ '/auth/me': () => ({ ...testUser, preferredColorHex: '#f97316' }) })
-      const { wrapper } = await mountView(ProfileView, { api })
-
-      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
-      await settle()
-
-      expect(api.patch).not.toHaveBeenCalled()
-      // Shown as chosen while it waits, or there is nothing to say it worked.
-      expect(wrapper.find('[data-testid="colour-f97316"]').attributes('aria-pressed')).toBe('true')
-    })
-
-    it('saves the one that is tapped, with the profile', async () => {
-      const api = fakeApi({ '/auth/me': () => ({ ...testUser, preferredColorHex: '#f97316' }) })
-      const { wrapper } = await mountView(ProfileView, { api })
-
-      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
-      await settle(1)
-      await wrapper.find('form').trigger('submit')
-      await settle()
-
-      expect(api.patch).toHaveBeenCalledWith(
-        '/auth/me',
-        expect.objectContaining({ preferredColorHex: '#f97316' }),
-      )
-    })
-
-    it('says nothing about a colour that was not touched', async () => {
-      const api = fakeApi({ '/auth/me': () => testUser })
-      const { wrapper } = await mountView(ProfileView, { api })
-
-      await wrapper.find('form').trigger('submit')
-      await settle()
-
-      // Null would read as "not supplied" anyway, but sending nothing is honest.
-      expect(api.patch).toHaveBeenCalledWith(
-        '/auth/me',
-        expect.not.objectContaining({ preferredColorHex: expect.anything() }),
-      )
-    })
-
-    it('shows which one is chosen', async () => {
-      const { wrapper, auth } = await mountView(ProfileView)
-      // Set on the store the way a sign-in would have.
-      auth.user = { ...testUser, preferredColorHex: '#14b8a6' } as never
-      await settle(1)
+    it('starts on the default when nobody has said', async () => {
+      const { wrapper } = await mountView(ProfileView)
 
       const pressed = wrapper
-        .findAll('[data-testid^="colour-"]')
+        .findAll('[data-testid^="accent-"]')
         .filter((swatch) => swatch.attributes('aria-pressed') === 'true')
         .map((swatch) => swatch.attributes('data-testid'))
 
-      expect(pressed).toEqual(['colour-14b8a6'])
+      expect(pressed).toEqual(['accent-indigo'])
     })
 
-    it('clears it when the chosen one is tapped again', async () => {
-      const api = fakeApi({ '/auth/me': () => testUser })
+    it('wears the one that is tapped straight away', async () => {
+      const api = fakeApi({ '/auth/me': () => ({ ...testUser, themeName: 'teal' }) })
       const { wrapper, auth } = await mountView(ProfileView, { api })
-      auth.user = { ...testUser, preferredColorHex: '#f97316' } as never
-      await settle(1)
 
-      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
-      await settle(1)
-      await wrapper.find('form').trigger('submit')
+      await wrapper.find('[data-testid="accent-teal"]').trigger('click')
       await settle()
 
-      // The only way back to having no preference, and an empty string is how the
-      // API is told to clear rather than to leave alone.
+      // The whole application changes colour on the tap: a Save button over a
+      // change you are already looking at would have nothing to do.
+      expect(auth.accent.name).toBe('teal')
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+    })
+
+    it('tells the account, so it follows onto another device', async () => {
+      const api = fakeApi({ '/auth/me': () => ({ ...testUser, themeName: 'rose' }) })
+      const { wrapper } = await mountView(ProfileView, { api })
+
+      await wrapper.find('[data-testid="accent-rose"]').trigger('click')
+      await settle()
+
       expect(api.patch).toHaveBeenCalledWith(
         '/auth/me',
-        expect.objectContaining({ preferredColorHex: '' }),
+        expect.objectContaining({ themeName: 'rose' }),
       )
     })
 
-    it('reports a colour the server will not take', async () => {
+    it('keeps the colour on when the server cannot be told', async () => {
       const api = fakeApi()
-      api.patch.mockRejectedValue(new Error('That is not one of the colours to choose from.'))
-      const { wrapper } = await mountView(ProfileView, { api })
+      api.patch.mockRejectedValue(new Error('offline'))
+      const { wrapper, auth } = await mountView(ProfileView, { api })
 
-      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
-      await settle(1)
-      await wrapper.find('form').trigger('submit')
+      await wrapper.find('[data-testid="accent-amber"]').trigger('click')
       await settle()
 
-      expect(textOf(wrapper)).toContain('not one of the colours')
+      // The same bargain the light switch makes: it is a preference, not a
+      // transaction, and it is already on screen.
+      expect(auth.accent.name).toBe('amber')
+      expect(textOf(wrapper)).not.toContain('offline')
+    })
+
+    it('shows the one the account already wears', async () => {
+      const { wrapper, auth } = await mountView(ProfileView)
+      auth.user = { ...testUser, themeName: 'violet' } as never
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="accent-violet"]').attributes('aria-pressed')).toBe('true')
+      expect(wrapper.find('[data-testid="accent-indigo"]').attributes('aria-pressed')).toBe('false')
+    })
+
+    it('has no colour of your own on it any more', async () => {
+      const { wrapper } = await mountView(ProfileView)
+
+      // A member's colour belongs to the group, and is edited in its settings.
+      expect(wrapper.findAll('[data-testid^="colour-"]')).toHaveLength(0)
+      expect(textOf(wrapper)).not.toContain('Your colour')
     })
   })
 

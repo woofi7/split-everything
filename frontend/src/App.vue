@@ -6,15 +6,24 @@ import { useExpensesStore } from '@/stores/expenses'
 import { useGroupsStore } from '@/stores/groups'
 import NavigationProgress from '@/components/ui/NavigationProgress.vue'
 import { isNavigating } from '@/router'
+import { accentVariables } from '@/domain/themes'
 
 const auth = useAuthStore()
 const expenses = useExpensesStore()
 const groups = useGroupsStore()
 
 // The theme is an attribute on the root element, so CSS tokens swap without any
-// component knowing which theme is active.
+// component knowing which theme is active. The accent is the same idea by another
+// route: the brand tokens themselves, set on the root, because every utility built
+// from them reads them through var() and follows without being told.
 watchEffect(() => {
-  document.documentElement.dataset.theme = auth.theme
+  const root = document.documentElement
+  root.dataset.theme = auth.theme
+  root.dataset.accent = auth.accent.name
+
+  for (const [token, value] of Object.entries(accentVariables(auth.accent))) {
+    root.style.setProperty(token, value)
+  }
 })
 
 onMounted(() => {

@@ -145,6 +145,89 @@ describe('auth store', () => {
     expect(store.theme).toBe('light')
   })
 
+  /**
+   * The accent the whole application wears.
+   *
+   * On the account, so it follows the person onto any device they sign in on, and
+   * applied the moment it is tapped: the app changes colour there and then, and a
+   * spinner over a swatch while a server agrees would be absurd.
+   */
+  describe('the app accent', () => {
+    it('wears the default until somebody says otherwise', async () => {
+      const store = useAuthStore()
+      store.attachApi(fakeApi() as never)
+      await store.signInWithGoogle('google-credential')
+
+      expect(store.accent.name).toBe('indigo')
+    })
+
+    it('wears what the account asked for', async () => {
+      const api = fakeApi({ post: vi.fn(async () => ({
+        user: { ...user, themeName: 'teal' },
+        tokens,
+        isNewUser: false,
+        autoJoinedGroupIds: [],
+      })) })
+      const store = useAuthStore()
+      store.attachApi(api as never)
+      await store.signInWithGoogle('google-credential')
+
+      expect(store.accent.name).toBe('teal')
+      expect(store.accent.shades[2]).toBe('#0d9488')
+    })
+
+    it('applies a new one at once and tells the account', async () => {
+      const api = fakeApi({ patch: vi.fn(async () => ({ ...user, themeName: 'rose' })) })
+      const store = useAuthStore()
+      store.attachApi(api as never)
+      await store.signInWithGoogle('google-credential')
+
+      await store.setAccent('rose')
+
+      expect(store.accent.name).toBe('rose')
+      expect(api.patch).toHaveBeenCalledWith('/auth/me', { themeName: 'rose' })
+    })
+
+    it('keeps it on when the account cannot be told', async () => {
+      const api = fakeApi({ patch: vi.fn(async () => { throw new Error('offline') }) })
+      const store = useAuthStore()
+      store.attachApi(api as never)
+      await store.signInWithGoogle('google-credential')
+
+      await store.setAccent('amber')
+
+      // A preference, not a transaction, and it is already on screen.
+      expect(store.accent.name).toBe('amber')
+    })
+
+    it('survives a reload with the session', async () => {
+      const api = fakeApi({ patch: vi.fn(async () => ({ ...user, themeName: 'sky' })) })
+      const store = useAuthStore()
+      store.attachApi(api as never)
+      await store.signInWithGoogle('google-credential')
+      await store.setAccent('sky')
+
+      setActivePinia(createPinia())
+      const revived = useAuthStore()
+      revived.restore()
+
+      // Right on the first paint, without waiting for the profile to come back.
+      expect(revived.accent.name).toBe('sky')
+    })
+
+    it('ignores a colour it does not have', async () => {
+      const api = fakeApi()
+      const store = useAuthStore()
+      store.attachApi(api as never)
+      await store.signInWithGoogle('google-credential')
+
+      await store.setAccent('chartreuse')
+
+      expect(store.accent.name).toBe('indigo')
+      expect(api.patch).not.toHaveBeenCalled()
+    })
+  })
+
   it('remembers the theme without being signed in', async () => {
     const store = useAuthStore()
 

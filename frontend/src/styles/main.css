@@ -24,13 +24,25 @@
   --color-owing: #fb7185;
 }
 
+/*
+ * The surfaces carry the accent too.
+ *
+ * Choosing a colour changes the whole background, not just the buttons: a tint of
+ * the brand fill mixed into the neutral ink underneath. Mixed here rather than
+ * worked out in script and set from there, because the brand token is the only
+ * thing that changes and everything built on it follows on its own.
+ *
+ * The tint is deliberately weak. It has to be enough to see the app is wearing a
+ * colour and not enough to eat the contrast the text needs against it, and the
+ * neutral theme has to still read as neutral.
+ */
 :root {
   color-scheme: dark;
 
-  --surface: var(--color-ink-900);
-  --surface-raised: var(--color-ink-800);
-  --surface-sunken: var(--color-ink-950);
-  --border: color-mix(in oklab, var(--color-ink-700) 70%, transparent);
+  --surface: color-mix(in oklab, var(--color-brand-600) 16%, var(--color-ink-900));
+  --surface-raised: color-mix(in oklab, var(--color-brand-600) 18%, var(--color-ink-800));
+  --surface-sunken: color-mix(in oklab, var(--color-brand-600) 14%, var(--color-ink-950));
+  --border: color-mix(in oklab, var(--color-brand-600) 26%, var(--color-ink-700));
   --text: var(--color-ink-50);
   --text-muted: var(--color-ink-400);
 }
@@ -38,10 +50,11 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --surface: #ffffff;
-  --surface-raised: #f8fafc;
-  --surface-sunken: #eef2f7;
-  --border: #dbe2ea;
+  /* Lighter still: the same tint that reads as a wash on white would be a stain. */
+  --surface: color-mix(in oklab, var(--color-brand-600) 6%, #ffffff);
+  --surface-raised: color-mix(in oklab, var(--color-brand-600) 9%, #f8fafc);
+  --surface-sunken: color-mix(in oklab, var(--color-brand-600) 12%, #eef2f7);
+  --border: color-mix(in oklab, var(--color-brand-600) 22%, #dbe2ea);
   --text: var(--color-ink-900);
   --text-muted: var(--color-ink-500);
 }

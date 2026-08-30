@@ -242,6 +242,18 @@ public sealed class AuthService(
             else throw new ValidationException("That is not one of the colours to choose from.");
         }
 
+        if (request.ThemeName is not null)
+        {
+            var wanted = request.ThemeName.Trim();
+
+            // Empty means back to the default, as with the colour above. Anything
+            // else has to be a theme this app offers, or a client would be told to
+            // wear something it cannot draw.
+            if (wanted.Length == 0) user.ThemeName = null;
+            else if (AppThemes.IsKnown(wanted)) user.ThemeName = AppThemes.Normalize(wanted);
+            else throw new ValidationException("That is not one of the themes to choose from.");
+        }
+
         if (request.Locale is not null)
             user.Locale = request.Locale.Trim();
 
@@ -427,5 +439,5 @@ public sealed class AuthService(
 
     private static AuthenticatedUser Map(User user)
         => new(user.Id, user.Email, user.DisplayName, user.AvatarUrl,
-            user.DefaultCurrency, user.PrefersLightTheme, user.PreferredColorHex);
+            user.DefaultCurrency, user.PrefersLightTheme, user.PreferredColorHex, user.ThemeName);
 }
