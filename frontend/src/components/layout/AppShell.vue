@@ -60,7 +60,13 @@ const hasSyncNews = computed(
       the tab bar at the bottom. What the header used to hold now scrolls with the
       content, so it takes no room once you are reading.
     -->
+    <!--
+      Named so a gesture can move it. Changing group is a swipe across the screen
+      on the group screens, and the page it is leaving slides out with the finger;
+      the shell holds the page, so the shell has to be the thing that can be moved.
+    -->
     <main
+      data-swipe-page
       class="flex-1 px-4 pt-[max(1rem,env(safe-area-inset-top))]"
       :class="props.showNav ? 'pb-28' : 'pb-8'"
     >

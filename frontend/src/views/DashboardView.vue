@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
+import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SpendPie from '@/components/ui/SpendPie.vue'
 import { memberColor } from '@/domain/memberColors'
@@ -23,6 +24,7 @@ import { useExpensesStore } from '@/stores/expenses'
  */
 
 const route = useRoute()
+const router = useRouter()
 const groups = useGroupsStore()
 const auth = useAuthStore()
 const expenses = useExpensesStore()
@@ -48,7 +50,18 @@ async function loadMainGroup(): Promise<void> {
   if (groups.mainGroupId) await groups.get(groups.mainGroupId)
 }
 
-watch(() => groups.mainGroupId, () => void loadMainGroup())
+watch(() => groups.mainGroupId, (id) => {
+  void loadMainGroup()
+
+  // Keeps the address honest when the group changes under a group's own URL,
+  // however it changed: from the picker, from a swipe. Without this, reloading a
+  // page reached at /groups/A after moving on to B lands back on A, because a
+  // group's URL is what makes it the group the app is on.
+  const named = route.params.groupId
+  if (id && typeof named === 'string' && named && named !== id) {
+    void router.replace({ name: 'group', params: { groupId: id } })
+  }
+})
 
 const group = computed(() => groups.mainGroup)
 const currency = computed(() => group.value?.baseCurrency ?? 'CAD')
@@ -225,6 +238,12 @@ const spentOn = (iso: string) =>
     <template #header-action>
       <GroupSettingsButton />
     </template>
+
+    <!--
+      Renders nothing but a moment's confirmation: swiping across the screen moves
+      to the next group, which is the navigation this app does most.
+    -->
+    <GroupSwipe />
 
     <template v-if="group">
       <!-- The shape of the group's spending, first: it is what the screen is for. -->

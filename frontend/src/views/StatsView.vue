@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
+import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
@@ -183,6 +184,12 @@ const bucketLabel = (bucket: string) =>
     <template #header-action>
       <GroupSettingsButton />
     </template>
+
+    <!--
+      Renders nothing but a moment's confirmation: swiping across the screen moves
+      to the next group, which is the navigation this app does most.
+    -->
+    <GroupSwipe />
 
     <div class="mb-4 flex gap-2">
       <select
