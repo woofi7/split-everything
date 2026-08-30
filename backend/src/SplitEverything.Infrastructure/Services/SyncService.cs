@@ -381,7 +381,6 @@ public sealed class SyncService(
         stored.AmountInBaseCurrency = payload.AmountInBaseCurrency ?? payload.Amount.Value;
         stored.ExchangeRate = payload.ExchangeRate ?? 1m;
         stored.SpentAt = payload.SpentAt ?? operation.ClientTimestamp;
-        stored.CategoryId = payload.CategoryId;
         stored.SplitType = payload.SplitType ?? SplitType.Equal;
         stored.ReceiptId = payload.ReceiptId;
         stored.Notes = payload.Notes?.Trim();

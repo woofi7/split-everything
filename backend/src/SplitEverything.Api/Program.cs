@@ -11,7 +11,6 @@ using SplitEverything.Application.Abstractions;
 using SplitEverything.Infrastructure;
 using SplitEverything.Infrastructure.Auth;
 using SplitEverything.Infrastructure.Persistence;
-using SplitEverything.Infrastructure.Persistence.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -146,14 +145,13 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<SyncHub>("/hubs/sync");
 
-// Migrate and seed on start: this is a single-instance homelab deployment, so the
-// simple path is the right one, and the category seed has to run for a fresh volume.
+// Migrate on start: this is a single-instance homelab deployment, so the simple
+// path is the right one.
 if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
-    await SeedRunner.RunAsync(db);
 }
 
 app.Run();

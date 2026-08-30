@@ -63,22 +63,6 @@ public sealed class ImportController(
         SplitSuggestionRequest request, CancellationToken ct)
         => Ok(await imports.GetSplitSuggestionsAsync(UserId, request, ct));
 
-    [HttpGet("category-rules")]
-    public async Task<ActionResult<IReadOnlyList<CategoryRuleDto>>> CategoryRules(CancellationToken ct)
-        => Ok(await imports.GetCategoryRulesAsync(UserId, ct));
-
-    [HttpPut("category-rules")]
-    public async Task<ActionResult<CategoryRuleDto>> UpsertCategoryRule(
-        UpsertCategoryRuleRequest request, CancellationToken ct)
-        => Ok(await imports.UpsertCategoryRuleAsync(UserId, request, ct));
-
-    [HttpDelete("category-rules/{ruleId:guid}")]
-    public async Task<IActionResult> DeleteCategoryRule(Guid ruleId, CancellationToken ct)
-    {
-        await imports.DeleteCategoryRuleAsync(UserId, ruleId, ct);
-        return NoContent();
-    }
-
     [HttpPost("batches/{batchId:guid}/rollback")]
     public async Task<IActionResult> Rollback(Guid batchId, CancellationToken ct)
     {

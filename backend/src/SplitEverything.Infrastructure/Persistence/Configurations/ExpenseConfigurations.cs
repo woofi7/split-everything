@@ -24,7 +24,6 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.HasIndex(e => new { e.GroupId, e.SpentAt });
         builder.HasIndex(e => new { e.GroupId, e.ServerSeq });
         builder.HasIndex(e => e.PaidByMemberId);
-        builder.HasIndex(e => e.CategoryId);
         // Import dedupe looks up by fingerprint across the user's groups.
         builder.HasIndex(e => e.ImportFingerprint);
         builder.HasIndex(e => e.ImportBatchId);
@@ -39,11 +38,6 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .WithMany()
             .HasForeignKey(e => e.PaidByMemberId)
             .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(e => e.Category)
-            .WithMany()
-            .HasForeignKey(e => e.CategoryId)
-            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasOne(e => e.Receipt)
             .WithMany()

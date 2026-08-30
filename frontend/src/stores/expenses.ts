@@ -26,7 +26,6 @@ export interface ExpenseDraft {
   /** Per-member input for percentage, shares and exact splits. */
   splitValues?: Record<string, number>
   items?: LocalItem[]
-  categoryId?: string | null
   receiptId?: string | null
   notes?: string | null
 }
@@ -132,7 +131,6 @@ export const useExpensesStore = defineStore('expenses', () => {
       amountInBaseCurrency: roundMoney(draft.amount, draft.currency),
       exchangeRate: 1,
       spentAt: draft.spentAt.toISOString(),
-      categoryId: draft.categoryId ?? null,
       splitType: draft.splitType,
       receiptId: draft.receiptId ?? null,
       notes: draft.notes ?? null,
@@ -172,7 +170,7 @@ export const useExpensesStore = defineStore('expenses', () => {
 
   async function edit(
     expenseId: string,
-    changes: Partial<Pick<ExpenseDraft, 'description' | 'amount' | 'currency' | 'spentAt' | 'splitType' | 'participantIds' | 'splitValues' | 'items' | 'categoryId' | 'notes' | 'receiptId' | 'paidByMemberId'>>,
+    changes: Partial<Pick<ExpenseDraft, 'description' | 'amount' | 'currency' | 'spentAt' | 'splitType' | 'participantIds' | 'splitValues' | 'items' | 'notes' | 'receiptId' | 'paidByMemberId'>>,
   ): Promise<LocalExpense> {
     const existing = await db.expenses.get(expenseId)
     if (!existing) throw new Error('That expense is not on this device.')
@@ -218,7 +216,6 @@ export const useExpensesStore = defineStore('expenses', () => {
       amountInBaseCurrency: roundMoney(amount, changes.currency ?? existing.currency),
       spentAt: (changes.spentAt ?? new Date(existing.spentAt)).toISOString(),
       splitType: changes.splitType ?? existing.splitType,
-      categoryId: changes.categoryId ?? existing.categoryId,
       receiptId: changes.receiptId ?? existing.receiptId,
       notes: changes.notes ?? existing.notes,
       items: changes.items ?? existing.items,
@@ -698,7 +695,6 @@ function toWirePayload(expense: LocalExpense) {
     amountInBaseCurrency: expense.amountInBaseCurrency,
     exchangeRate: expense.exchangeRate,
     spentAt: expense.spentAt,
-    categoryId: expense.categoryId,
     splitType: expense.splitType,
     receiptId: expense.receiptId,
     notes: expense.notes,

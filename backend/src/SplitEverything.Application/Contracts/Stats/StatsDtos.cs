@@ -12,8 +12,6 @@ public sealed record SpendPointDto(
     // information.
     IReadOnlyList<SpendPointMemberDto> ByMember);
 
-public sealed record CategorySpendDto(Guid? CategoryId, string CategoryKey, string CategoryName, string IconName, string ColorHex, decimal Amount, int ExpenseCount, decimal Share);
-
 public sealed record MemberSpendDto(Guid MemberId, string MemberName, decimal Paid, decimal Owed, decimal Net);
 
 public sealed record DebtTrendPointDto(DateOnly Bucket, Guid MemberId, string MemberName, decimal Net);
@@ -35,6 +33,5 @@ public sealed record StatsDashboardDto(
     DateTimeOffset? From,
     DateTimeOffset? To,
     IReadOnlyList<SpendPointDto> SpendOverTime,
-    IReadOnlyList<CategorySpendDto> ByCategory,
     IReadOnlyList<MemberSpendDto> ByMember,
     IReadOnlyList<DebtTrendPointDto> DebtTrends);

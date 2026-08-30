@@ -16,8 +16,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<GroupInvite> GroupInvites => Set<GroupInvite>();
     public DbSet<GroupLineageLink> GroupLineageLinks => Set<GroupLineageLink>();
 
-    public DbSet<Category> Categories => Set<Category>();
-    public DbSet<CategoryRule> CategoryRules => Set<CategoryRule>();
 
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<ExpenseSplit> ExpenseSplits => Set<ExpenseSplit>();

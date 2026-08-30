@@ -39,7 +39,6 @@ interface PreviewRow {
   description: string
   amount: number | null
   currency: string | null
-  categoryName: string | null
   paidByName: string | null
   participantNames: string[]
   isDuplicate: boolean
@@ -139,7 +138,6 @@ function mapping() {
     descriptionColumn: at('description', 1) ?? 1,
     amountColumn: at('amount', 2) ?? 2,
     currencyColumn: at('currency'),
-    categoryColumn: at('category'),
     paidByColumn: at('paidBy'),
     participantColumns: null,
     dateFormat: null,

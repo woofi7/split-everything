@@ -7,7 +7,6 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using SplitEverything.Application.Abstractions;
 using SplitEverything.Infrastructure.Persistence;
-using SplitEverything.Infrastructure.Persistence.Seed;
 
 namespace SplitEverything.Tests.Support;
 
@@ -76,7 +75,6 @@ public sealed class ApiTestFactory(string connectionString) : WebApplicationFact
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.EnsureCreatedAsync();
-        await SeedRunner.RunAsync(db);
     }
 
     private static void Replace<T>(IServiceCollection services, T instance) where T : class

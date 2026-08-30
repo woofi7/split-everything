@@ -393,7 +393,7 @@ public sealed class GroupLifecycleService(
                 .Select(e => new
                 {
                     e.Id, e.PaidByMemberId, e.Description, e.Amount, e.Currency,
-                    e.AmountInBaseCurrency, e.SpentAt, e.CategoryId, e.Revision,
+                    e.AmountInBaseCurrency, e.SpentAt, e.Revision,
                     Splits = e.Splits.Where(s => !s.IsDeleted)
                         .Select(s => new { s.MemberId, s.Amount, s.AmountInBaseCurrency }).ToList()
                 })

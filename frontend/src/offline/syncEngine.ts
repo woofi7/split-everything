@@ -455,7 +455,6 @@ function toLocalExpense(payload: Record<string, any>, entry: SyncLogEntry): Loca
     amountInBaseCurrency: Number(payload.amountInBaseCurrency ?? payload.amount ?? 0),
     exchangeRate: Number(payload.exchangeRate ?? 1),
     spentAt: String(payload.spentAt ?? entry.createdAt),
-    categoryId: payload.categoryId ?? null,
     splitType: readSplitType(payload.splitType),
     receiptId: payload.receiptId ?? null,
     notes: payload.notes ?? null,

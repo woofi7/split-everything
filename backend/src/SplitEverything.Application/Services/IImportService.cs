@@ -17,9 +17,6 @@ public interface IImportService
 
     Task<DuplicateCheckResult> CheckDuplicatesAsync(Guid userId, DuplicateCheckRequest request, CancellationToken ct = default);
 
-    Task<IReadOnlyList<CategoryRuleDto>> GetCategoryRulesAsync(Guid userId, CancellationToken ct = default);
-    Task<CategoryRuleDto> UpsertCategoryRuleAsync(Guid userId, UpsertCategoryRuleRequest request, CancellationToken ct = default);
-    Task DeleteCategoryRuleAsync(Guid userId, Guid ruleId, CancellationToken ct = default);
 
     /// <summary>Prior splits per merchant, so the client can suggest what was used last time.</summary>
     Task<SplitSuggestionResult> GetSplitSuggestionsAsync(Guid userId, SplitSuggestionRequest request, CancellationToken ct = default);

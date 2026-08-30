@@ -4,7 +4,7 @@ Fills a development database with data that looks like a group in use.
 
 Everything goes through the API rather than into the tables, so the result is
 indistinguishable from a group people actually used: activity entries, sync log
-rows, vector clocks, categories, exchange rates and balances all come out of the
+rows, vector clocks, exchange rates and balances all come out of the
 same code paths the app runs. Inserting rows directly would produce a database
 that looks right and a feed that is empty, which is the exact failure this
 project already hit once.
@@ -20,7 +20,6 @@ creating another.
 import argparse
 import json
 import random
-import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -92,41 +91,41 @@ def spread(months_ago, day, hour=19):
     return min(when, now - timedelta(hours=1)).isoformat()
 
 
-# Enough variety that the by-category breakdown and the stacked chart both have
-# something to show, with amounts that read as real money rather than round numbers.
+# Enough variety that the stacked chart has something to show, with amounts that
+# read as real money rather than round numbers.
 FLAT_EXPENSES = [
-    ("Rent", 1450.00, "housing", 3, 1),
-    ("Hydro", 96.42, "utilities", 3, 4),
-    ("Groceries at Metro", 184.19, "groceries", 3, 6),
-    ("Internet", 79.99, "utilities", 3, 8),
-    ("Groceries at IGA", 121.55, "groceries", 3, 15),
-    ("Dinner at Schwartz", 68.40, "dining", 3, 21),
-    ("Rent", 1450.00, "housing", 2, 1),
-    ("Hydro", 88.13, "utilities", 2, 4),
-    ("Groceries at Metro", 203.87, "groceries", 2, 5),
-    ("Cleaning supplies", 43.28, "other", 2, 9),
-    ("Cinema", 34.00, "entertainment", 2, 14),
-    ("Groceries at Costco", 288.64, "groceries", 2, 18),
-    ("Taxi home", 27.35, "transport", 2, 23),
-    ("Rent", 1450.00, "housing", 1, 1),
-    ("Hydro", 102.77, "utilities", 1, 4),
-    ("Groceries at Metro", 167.02, "groceries", 1, 7),
-    ("Internet", 79.99, "utilities", 1, 8),
-    ("Brunch", 82.15, "dining", 1, 12),
-    ("Pharmacy", 38.90, "health", 1, 16),
-    ("Groceries at IGA", 145.33, "groceries", 1, 22),
-    ("Rent", 1450.00, "housing", 0, 1),
-    ("Groceries at Metro", 176.48, "groceries", 0, 5),
-    ("Dinner out", 94.70, "dining", 0, 9),
+    ("Rent", 1450.00, 3, 1),
+    ("Hydro", 96.42, 3, 4),
+    ("Groceries at Metro", 184.19, 3, 6),
+    ("Internet", 79.99, 3, 8),
+    ("Groceries at IGA", 121.55, 3, 15),
+    ("Dinner at Schwartz", 68.40, 3, 21),
+    ("Rent", 1450.00, 2, 1),
+    ("Hydro", 88.13, 2, 4),
+    ("Groceries at Metro", 203.87, 2, 5),
+    ("Cleaning supplies", 43.28, 2, 9),
+    ("Cinema", 34.00, 2, 14),
+    ("Groceries at Costco", 288.64, 2, 18),
+    ("Taxi home", 27.35, 2, 23),
+    ("Rent", 1450.00, 1, 1),
+    ("Hydro", 102.77, 1, 4),
+    ("Groceries at Metro", 167.02, 1, 7),
+    ("Internet", 79.99, 1, 8),
+    ("Brunch", 82.15, 1, 12),
+    ("Pharmacy", 38.90, 1, 16),
+    ("Groceries at IGA", 145.33, 1, 22),
+    ("Rent", 1450.00, 0, 1),
+    ("Groceries at Metro", 176.48, 0, 5),
+    ("Dinner out", 94.70, 0, 9),
 ]
 
 TRIP_EXPENSES = [
-    ("Chalet, three nights", 720.00, "travel", 1, 5),
-    ("Lift passes", 456.00, "entertainment", 1, 5),
-    ("Petrol", 88.25, "transport", 1, 5),
-    ("Groceries for the chalet", 162.90, "groceries", 1, 6),
-    ("Dinner in the village", 178.40, "dining", 1, 6),
-    ("Ski hire", 240.00, "entertainment", 1, 7),
+    ("Chalet, three nights", 720.00, 1, 5),
+    ("Lift passes", 456.00, 1, 5),
+    ("Petrol", 88.25, 1, 5),
+    ("Groceries for the chalet", 162.90, 1, 6),
+    ("Dinner in the village", 178.40, 1, 6),
+    ("Ski hire", 240.00, 1, 7),
 ]
 
 
@@ -137,11 +136,7 @@ def find_group(api, name):
     return None
 
 
-def category_ids(api):
-    return {c["key"]: c["id"] for c in api.request("GET", "/categories") or []}
-
-
-def add_expense(api, group_id, payer_id, participants, description, amount, category_id, spent_at):
+def add_expense(api, group_id, payer_id, participants, description, amount, spent_at):
     api.request(
         "POST",
         "/expenses",
@@ -154,7 +149,6 @@ def add_expense(api, group_id, payer_id, participants, description, amount, cate
             "spentAt": spent_at,
             "splitType": "Equal",
             "splits": [{"memberId": member, "value": None} for member in participants],
-            "categoryId": category_id,
             "items": None,
             "receiptId": None,
             "notes": None,
@@ -165,7 +159,7 @@ def add_expense(api, group_id, payer_id, participants, description, amount, cate
     )
 
 
-def seed_group(api, name, currency, people, expenses, categories):
+def seed_group(api, name, currency, people, expenses):
     existing = find_group(api, name)
     if existing:
         print(f"  {name}: already there, left alone")
@@ -187,17 +181,12 @@ def seed_group(api, name, currency, people, expenses, categories):
     members = [m["id"] for m in group["members"]]
     print(f"  {name}: created with {len(members)} people")
 
-    for index, (description, amount, key, months_ago, day) in enumerate(expenses):
+    for index, (description, amount, months_ago, day) in enumerate(expenses):
         # Rotated rather than random, so every person pays a fair share of the
         # months and the stacked chart has more than one colour in each bar.
         payer = members[index % len(members)]
-
-        if key not in categories:
-            print(f"    unknown category key {key!r}, leaving that expense uncategorised")
-
         add_expense(
-            api, group["id"], payer, members, description, amount,
-            categories.get(key), spread(months_ago, day),
+            api, group["id"], payer, members, description, amount, spread(months_ago, day),
         )
 
     print(f"  {name}: {len(expenses)} expenses added")
@@ -249,19 +238,15 @@ def main():
     user = api.sign_in()
     print(f"Signed in as {user['email']}")
 
-    categories = category_ids(api)
-    if not categories:
-        print("No categories came back; expenses will be uncategorised.", file=sys.stderr)
-
     flat = seed_group(
-        api, "Colocation", "CAD", ["Emma", "Chloe"], FLAT_EXPENSES, categories,
+        api, "Colocation", "CAD", ["Emma", "Chloe"], FLAT_EXPENSES,
     )
     if flat:
         settle_some(api, flat, "Rent catch-up", months_ago=2, day=26)
         comment_on_first_expense(api, flat, "Split three ways from the joint account.")
 
     trip = seed_group(
-        api, "Ski trip", "CAD", ["Emma", "Luc", "Sarah"], TRIP_EXPENSES, categories,
+        api, "Ski trip", "CAD", ["Emma", "Luc", "Sarah"], TRIP_EXPENSES,
     )
     if trip:
         comment_on_first_expense(api, trip, "Booked on my card, everyone owes a quarter.")

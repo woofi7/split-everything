@@ -1,6 +1,5 @@
 import { db } from '@/offline/db'
 import { computeFingerprint } from '@/domain/fingerprint'
-import { categoriseRow, learnFromCorrection, type CategoryRule } from './categorisation'
 import type { StatementRow } from './statementParser'
 import type { SplitType } from '@/domain/splitting'
 
@@ -18,7 +17,6 @@ export interface SplitSuggestion {
   splitType: SplitType
   splits: SplitAssignment[]
   paidByMemberId: string
-  categoryId: string | null
   timesUsed: number
   lastUsedAt: string
 }
@@ -45,8 +43,6 @@ export interface ReviewRow {
   paidByMemberId: string | null
   splitType: SplitType
   splits: SplitAssignment[]
-  categoryKey: string | null
-  categoryId: string | null
   fingerprint: string | null
   isDuplicate: boolean
   duplicateOf: DuplicateMatch | null
@@ -55,7 +51,6 @@ export interface ReviewRow {
 }
 
 export interface ReviewContext {
-  rules: CategoryRule[]
   suggestions: SplitSuggestion[]
   duplicates: DuplicateMatch[]
   statementCurrency?: string
@@ -68,7 +63,6 @@ export interface CommitRow {
   amount: number
   currency: string
   spentAt: string
-  categoryId: string | null
   splitType: SplitType
   splits: SplitAssignment[]
   fingerprint: string
@@ -96,7 +90,6 @@ const STAGING_KEYS = ['statement:staging', 'statement:ocr', 'statement:text']
  */
 export class StatementReviewSession {
   readonly rows: ReviewRow[]
-  readonly learnedRules: CategoryRule[] = []
 
   private readonly context: ReviewContext
   private sourceLabel: string | null
@@ -108,7 +101,6 @@ export class StatementReviewSession {
   }
 
   private toReviewRow(row: StatementRow): ReviewRow {
-    const category = categoriseRow(row.description, this.context.rules)
     const suggestion = this.findSuggestion(row.description)
 
     const statementCurrency = this.context.statementCurrency
@@ -130,8 +122,6 @@ export class StatementReviewSession {
       paidByMemberId: suggestion?.paidByMemberId ?? null,
       splitType: suggestion?.splitType ?? 'Equal',
       splits: suggestion ? [...suggestion.splits] : [],
-      categoryKey: category?.categoryKey ?? null,
-      categoryId: suggestion?.categoryId ?? category?.categoryId ?? null,
       fingerprint: null,
       isDuplicate: false,
       duplicateOf: null,
@@ -177,13 +167,6 @@ export class StatementReviewSession {
     for (const rowNumber of rowNumbers) this.setAction(rowNumber, action)
   }
 
-  setCategoryForMany(rowNumbers: number[], categoryKey: string, categoryId = categoryKey): void {
-    for (const rowNumber of rowNumbers) {
-      const row = this.require(rowNumber)
-      row.categoryKey = categoryKey
-      row.categoryId = categoryId
-    }
-  }
 
   assignGroup(
     rowNumber: number,
@@ -200,26 +183,6 @@ export class StatementReviewSession {
     row.action = 'split'
   }
 
-  /**
-   * Records a category correction and remembers it, so the next statement gets it
-   * right without being asked again.
-   */
-  correctCategory(rowNumber: number, categoryKey: string, categoryId = categoryKey): void {
-    const row = this.require(rowNumber)
-    row.categoryKey = categoryKey
-    row.categoryId = categoryId
-
-    const learned = learnFromCorrection(
-      row.description,
-      categoryKey,
-      [...this.context.rules, ...this.learnedRules],
-      categoryId,
-    )
-
-    const existingIndex = this.learnedRules.findIndex((rule) => rule.id === learned.id)
-    if (existingIndex >= 0) this.learnedRules[existingIndex] = learned
-    else this.learnedRules.push(learned)
-  }
 
   summary(): { toCommit: number; ignored: number; personal: number; duplicates: number; problems: number } {
     return {
@@ -270,7 +233,6 @@ export class StatementReviewSession {
         amount: Math.abs(row.amount!),
         currency,
         spentAt: row.date!.toISOString(),
-        categoryId: row.categoryId,
         splitType: row.splitType,
         splits: row.splits,
         fingerprint,
@@ -284,7 +246,6 @@ export class StatementReviewSession {
   /** Clears everything the parsing staged on-device. Safe to call twice. */
   async dispose(): Promise<void> {
     this.rows.length = 0
-    this.learnedRules.length = 0
     this.sourceLabel = null
     await db.meta.bulkDelete(STAGING_KEYS)
   }

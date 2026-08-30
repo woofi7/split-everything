@@ -1,12 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using SplitEverything.Infrastructure.Persistence;
-using SplitEverything.Infrastructure.Persistence.Seed;
 
 namespace SplitEverything.Tests.Support;
 
 /// <summary>
 /// Base for tests that touch the database. Each test starts from an empty schema
-/// with the system categories seeded, so no test can depend on another's leftovers.
+/// so no test can depend on another's leftovers.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public abstract class DatabaseTestBase : IAsyncLifetime
@@ -26,7 +25,6 @@ public abstract class DatabaseTestBase : IAsyncLifetime
     {
         Db = _fixture.CreateContext();
         await ResetAsync();
-        await SeedCategoriesAsync();
     }
 
     public virtual Task DisposeAsync()
@@ -45,7 +43,7 @@ public abstract class DatabaseTestBase : IAsyncLifetime
             "expense_revisions", "expenses", "recurring_expenses", "settlements",
             "sync_log", "sync_snapshots", "sync_conflicts", "activity_log",
             "group_invites", "group_lineage_links", "group_members", "groups",
-            "category_rules", "categories", "import_batches", "receipts",
+            "import_batches", "receipts",
             "push_subscriptions", "devices", "refresh_tokens", "users", "exchange_rates"
         };
 
@@ -53,10 +51,4 @@ public abstract class DatabaseTestBase : IAsyncLifetime
             $"TRUNCATE TABLE {string.Join(", ", tables)} RESTART IDENTITY CASCADE;");
     }
 
-    private async Task SeedCategoriesAsync()
-    {
-        Db.Categories.AddRange(CategorySeed.BuildSystemCategories());
-        await Db.SaveChangesAsync();
-        Db.ChangeTracker.Clear();
-    }
 }

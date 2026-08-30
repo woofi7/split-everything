@@ -198,7 +198,7 @@ public class InviteServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
             group.Id, owner.Id, "Dinner", 100m, "CAD", TestData.Jan1, SplitType.Equal,
             [new SplitEverything.Application.Contracts.Expenses.SplitInputDto(owner.Id, null),
              new SplitEverything.Application.Contracts.Expenses.SplitInputDto(placeholder.Id, null)],
-            null, null, null, null, null, null, null));
+            null, null, null, null, null, null));
 
         var invite = await Invites.CreateAsync(ownerId, group.Id, Request(claims: placeholder.Id));
         var joiner = await TestData.SeedUserAsync(Db, "Bob");

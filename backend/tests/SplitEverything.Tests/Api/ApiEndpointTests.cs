@@ -255,8 +255,7 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var created = await Client.PostAsJsonAsync("/api/expenses", new CreateExpenseRequest(
             group.Id, alice, "Dinner", 60m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null), new SplitInputDto(bob, null)],
-            null, null, null, null, null, null, null), Json);
+            [new SplitInputDto(alice, null), new SplitInputDto(bob, null)], null, null, null, null, null, null), Json);
 
         created.StatusCode.ShouldBe(HttpStatusCode.Created);
         var expense = await created.Content.ReadFromJsonAsync<ExpenseDto>(Json);
@@ -275,7 +274,7 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var created = await Client.PostAsJsonAsync("/api/expenses", new CreateExpenseRequest(
             group.Id, alice, "Dinner", 60m, "CAD", TestData.Jan1, SplitType.Percentage,
-            [new SplitInputDto(alice, 100m)], null, null, null, null, null, null, null), Json);
+            [new SplitInputDto(alice, 100m)], null, null, null, null, null, null), Json);
 
         (await created.Content.ReadAsStringAsync()).ShouldContain("\"Percentage\"");
     }
@@ -305,8 +304,7 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         var expense = await CreateExpenseAsync(group.Id, alice, 40m, "Original");
 
         var response = await Client.PatchAsJsonAsync($"/api/expenses/{expense.Id}",
-            new UpdateExpenseRequest(null, "Renamed", null, null, null, null, null,
-                null, null, null, null, null), Json);
+            new UpdateExpenseRequest(null, "Renamed", null, null, null, null, null, null, null, null, null), Json);
 
         response.EnsureSuccessStatusCode();
         (await response.Content.ReadFromJsonAsync<ExpenseDto>(Json))!.Revision.ShouldBe(2);
@@ -566,16 +564,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
     }
 
     [Fact]
-    public async Task The_category_list_includes_the_seeded_categories()
-    {
-        await SignInAsync();
-
-        var categories = await Client.GetFromJsonAsync<List<CategoryDto>>("/api/categories", Json);
-
-        categories!.ShouldContain(c => c.Key == "groceries");
-    }
-
-    [Fact]
     public async Task The_vapid_public_key_is_public()
     {
         var anonymous = Factory.CreateClient();
@@ -676,26 +664,13 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
             new SplitEverything.Application.Contracts.Import.StatementCommitRequest([
                 new SplitEverything.Application.Contracts.Import.ConfirmedStatementRow(
                     group.Id, alice, "UBER EATS", 42.50m, "CAD", TestData.Jan1,
-                    null, SplitType.Equal, [new SplitInputDto(alice, null)], "fp-1", null)
+                    SplitType.Equal, [new SplitInputDto(alice, null)], "fp-1", null)
             ], true, "visa.csv"), Json);
 
         response.EnsureSuccessStatusCode();
         (await response.Content.ReadFromJsonAsync<
             SplitEverything.Application.Contracts.Import.ImportCommitResult>(Json))!.CreatedExpenses.ShouldBe(1);
     }
-
-    [Fact]
-    public async Task The_built_in_category_rules_are_readable_over_http()
-    {
-        await SignInAsync();
-
-        var rules = await Client.GetFromJsonAsync<List<SplitEverything.Application.Contracts.Import.CategoryRuleDto>>(
-            "/api/import/category-rules", Json);
-
-        rules!.ShouldContain(r => r.Keyword == "UBER EATS");
-    }
-
-    // ---- lifecycle -------------------------------------------------------
 
     [Fact]
     public async Task Two_groups_can_be_merged_over_http()
@@ -752,7 +727,7 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var response = await Client.PostAsJsonAsync("/api/expenses/recurring",
             new CreateRecurringExpenseRequest(
-                group.Id, alice, "Rent", 1200m, "CAD", null, SplitType.Equal,
+                group.Id, alice, "Rent", 1200m, "CAD", SplitType.Equal,
                 [new SplitInputDto(alice, null)], RecurrenceUnit.Month, 1, 1, null,
                 TestData.Jan1, null, null), Json);
 
@@ -778,7 +753,7 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var response = await Client.PostAsJsonAsync("/api/expenses", new CreateExpenseRequest(
             groupId, payer, description, amount, "CAD", TestData.Jan1, SplitType.Equal,
-            participants, null, null, null, null, null, null, null), Json);
+            participants, null, null, null, null, null, null), Json);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<ExpenseDto>(Json))!;
     }

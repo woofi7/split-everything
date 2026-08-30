@@ -100,7 +100,7 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
 
     private static CsvColumnMapping WorldTourMapping() => new(
         DateColumn: 7, DescriptionColumn: 5, AmountColumn: 1,
-        CurrencyColumn: 2, CategoryColumn: 6, PaidByColumn: 0,
+        CurrencyColumn: 2, PaidByColumn: 0,
         ParticipantColumns: null, DateFormat: null, DecimalSeparator: null,
         ParticipantsColumn: 3, SplitAmountsColumn: 4, TypeColumn: 11);
 
@@ -196,24 +196,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
         // an unequal split is exactly what the column exists to preserve.
         flights.Splits.Count.ShouldBe(2);
         flights.Splits.Select(s => s.Amount).ShouldAllBe(a => a == 209.43m);
-    }
-
-    [Fact]
-    public async Task An_empty_category_does_not_become_a_category_named_space()
-    {
-        var user = await TestData.SeedUserAsync(Db, "Nicolas");
-
-        var result = await Imports.CommitCsvAsync(user.Id, Export(), new CsvCommitRequest(
-            Guid.CreateVersion7(), null, "World tour", WorldTourMapping(),
-            new Dictionary<string, Guid?>(), [], true, true, "CAD", "World tour.csv"));
-
-        // Every Category cell in this export is a single space, which is not a
-        // category and must not be treated as one.
-        var expenses = await NewContext().Expenses
-            .Where(e => e.GroupId == result.GroupId)
-            .ToListAsync();
-
-        expenses.ShouldAllBe(e => e.CategoryId == null);
     }
 
     [Fact]

@@ -43,7 +43,7 @@ public class RecurringExpenseServiceTests(PostgresFixture fixture) : ServiceTest
         decimal amount = 1200m, RecurrenceUnit unit = RecurrenceUnit.Month,
         int interval = 1, int? dayOfMonth = 1, DateTimeOffset? startsOn = null,
         DateTimeOffset? endsOn = null, int? maxOccurrences = null)
-        => new(groupId, payer, "Rent", amount, "CAD", null, SplitType.Equal,
+        => new(groupId, payer, "Rent", amount, "CAD", SplitType.Equal,
             participants.Select(p => new SplitInputDto(p, null)).ToList(),
             unit, interval, dayOfMonth, null,
             startsOn ?? TestData.Jan1, endsOn, maxOccurrences);
@@ -345,7 +345,7 @@ public class ReceiptServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
         var payer = group.Members.First(m => m.UserId == owner.Id).Id;
         await Expenses.CreateAsync(owner.Id, new CreateExpenseRequest(
             group.Id, payer, "Dinner", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(payer, null)], null, null, receipt.Id, null, null, null, null));
+            [new SplitInputDto(payer, null)], null, receipt.Id, null, null, null, null));
 
         var download = await Receipts.DownloadAsync(member.Id, receipt.Id);
 
@@ -363,7 +363,7 @@ public class ReceiptServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
         var payer = group.Members.Single().Id;
         await Expenses.CreateAsync(owner.Id, new CreateExpenseRequest(
             group.Id, payer, "Dinner", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(payer, null)], null, null, receipt.Id, null, null, null, null));
+            [new SplitInputDto(payer, null)], null, receipt.Id, null, null, null, null));
 
         await Should.ThrowAsync<ForbiddenException>(() => Receipts.DownloadAsync(stranger.Id, receipt.Id));
     }

@@ -19,7 +19,7 @@ Built to the spec in [docs/spec.md](docs/spec.md).
   credit-card statement parsed entirely in the browser.
 - **Groups** can be archived, merged, split apart, and individual expenses moved
   between them carrying their full history.
-- **Recurring expenses**, receipts, threaded comments, categories, multi-currency
+- **Recurring expenses**, receipts, threaded comments, multi-currency
   with frozen rates, push notifications, and a stats dashboard.
 
 ## Layout
@@ -106,7 +106,7 @@ against `crypto.subtle` itself, because the hashes are compared with the server'
 ### Filling a development database
 
 `scripts/seed-demo-data.py` creates a couple of groups that look like they have
-been used: several months of expenses across real categories, more than one payer
+been used: several months of expenses, more than one payer
 so the charts have something to show, a settlement and a comment.
 
 ```bash
@@ -136,6 +136,17 @@ variable and asserts the endpoint still answers 403.
 For real Google sign-in, create an OAuth client in the Google Cloud console with
 `http://localhost:5173` as an authorised origin, then set `Auth:GoogleClientId`
 for the API and `VITE_GOOGLE_CLIENT_ID` for the app.
+
+## Divergences from the spec
+
+Categories were removed from the whole application after the spec was written:
+there is no category on an expense, no category tables, no spending-by-category
+breakdown, and no auto-categorisation ruleset in the statement importer. The
+migration that removed them drops the column and both tables, so the categories
+that had been set are gone.
+
+`docs/spec.md` is kept as it was written rather than edited to match, so the
+difference between what was asked for and what exists stays visible.
 
 ## Tests
 

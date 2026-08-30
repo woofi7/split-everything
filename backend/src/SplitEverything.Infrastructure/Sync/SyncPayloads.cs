@@ -59,7 +59,6 @@ public static class SyncPayloads
         public decimal? AmountInBaseCurrency { get; set; }
         public decimal? ExchangeRate { get; set; }
         public DateTimeOffset? SpentAt { get; set; }
-        public Guid? CategoryId { get; set; }
         public SplitType? SplitType { get; set; }
         public Guid? ReceiptId { get; set; }
         public string? Notes { get; set; }
@@ -88,16 +87,6 @@ public static class SyncPayloads
         public Guid AuthorMemberId { get; set; }
         public Guid? ParentCommentId { get; set; }
         public string? Body { get; set; }
-    }
-
-    public sealed class CategoryRulePayload
-    {
-        public Guid Id { get; set; }
-        public string? Keyword { get; set; }
-        public Guid CategoryId { get; set; }
-        public Guid? SuggestedGroupId { get; set; }
-        public bool IsEnabled { get; set; } = true;
-        public int Weight { get; set; } = 1;
     }
 
     public static T? Parse<T>(string json) where T : class

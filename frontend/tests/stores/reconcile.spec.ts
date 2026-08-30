@@ -92,7 +92,6 @@ const strandedExpense = (overrides: Partial<LocalExpense> = {}): LocalExpense =>
   amountInBaseCurrency: 60,
   exchangeRate: 1,
   spentAt: '2026-01-05T12:00:00.000Z',
-  categoryId: null,
   splitType: 'Equal',
   receiptId: null,
   notes: null,
