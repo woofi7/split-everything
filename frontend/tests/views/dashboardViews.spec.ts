@@ -195,7 +195,7 @@ describe('StatsView', () => {
   it('draws the spend-over-time bars scaled to the biggest bucket', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    const bars = wrapper.findAll('[data-testid="spend-chart"] li > span')
+    const bars = wrapper.findAll('[data-testid="bar-fill"]')
     expect(bars).toHaveLength(2)
     // The tallest bucket fills the chart; the other is proportional.
     expect(bars[0].attributes('style')).toContain('height: 100%')
@@ -208,10 +208,14 @@ describe('StatsView', () => {
     // The bars carried a percentage height inside an auto-height list item, so it
     // resolved against nothing and the whole chart rendered flat. jsdom does no
     // layout, which is why the style assertion above passed while the chart was
-    // empty on screen.
+    // empty on screen. The column is a button now, so the chain runs through it.
     const items = wrapper.findAll('[data-testid="spend-chart"] li')
     expect(items.length).toBeGreaterThan(0)
     for (const item of items) expect(item.classes()).toContain('h-full')
+
+    for (const bar of wrapper.findAll('[data-testid="bar"]')) {
+      expect(bar.classes()).toContain('h-full')
+    }
   })
 
   it('gives a tiny bucket a visible floor rather than an invisible bar', async () => {
@@ -234,7 +238,7 @@ describe('StatsView', () => {
       }),
     })
 
-    const bars = wrapper.findAll('[data-testid="spend-chart"] li > span')
+    const bars = wrapper.findAll('[data-testid="bar-fill"]')
     expect(bars[1].attributes('style')).toContain('height: 4%')
   })
 
@@ -288,6 +292,165 @@ describe('StatsView', () => {
     const segments = wrapper.findAll('[data-testid="bar-segment"]')
     expect(segments).toHaveLength(1)
     expect(segments[0].attributes('style')).toContain('height: 100%')
+  })
+
+  /**
+   * Asking a bar how much, when, and who.
+   *
+   * A bar says how one stretch of time compares with the others and nothing else.
+   * The same question the pie answers, and on a phone the only way to ask is a
+   * tap, so the whole column is the target rather than the bar.
+   */
+  describe('asking about a bar', () => {
+    it('says nothing until a bar is asked about', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+
+      // A line repeating the total from the card above is furniture.
+      expect(wrapper.find('[data-testid="bar-readout"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="key-amount"]').exists()).toBe(false)
+    })
+
+    it('answers with the date and the total when a bar is hovered', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+
+      await wrapper.findAll('[data-testid="bar"]')[0].trigger('mouseenter')
+
+      const readout = wrapper.find('[data-testid="bar-readout"]').text()
+      expect(readout).toMatch(/Jan/)
+      expect(readout).toContain('100.00')
+    })
+
+    it('says what each person paid in that bar', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+
+      await wrapper.findAll('[data-testid="bar"]')[0].trigger('mouseenter')
+
+      const key = wrapper.find('[data-testid="chart-key"]').text().replace(/\s+/g, ' ')
+      expect(key).toContain('Alice')
+      expect(key).toContain('60.00')
+      expect(key).toContain('60%')
+      expect(key).toContain('Bob')
+      expect(key).toContain('40.00')
+      expect(key).toContain('40%')
+    })
+
+    it('dims whoever paid nothing in that bar', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+
+      // February was Alice alone.
+      await wrapper.findAll('[data-testid="bar"]')[1].trigger('mouseenter')
+
+      const rows = wrapper.find('[data-testid="chart-key"]').findAll('li')
+      expect(rows[0].classes()).not.toContain('opacity-40')
+      expect(rows[1].classes()).toContain('opacity-40')
+    })
+
+    it('dims the other bars, so the one asked about is obvious', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+
+      await wrapper.findAll('[data-testid="bar"]')[0].trigger('mouseenter')
+
+      const bars = wrapper.findAll('[data-testid="bar"]')
+      expect(bars[0].classes()).not.toContain('opacity-40')
+      expect(bars[1].classes()).toContain('opacity-40')
+    })
+
+    it('puts the heading back when the pointer leaves', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+      const bar = wrapper.findAll('[data-testid="bar"]')[0]
+
+      await bar.trigger('mouseenter')
+      await bar.trigger('mouseleave')
+
+      expect(wrapper.find('[data-testid="bar-readout"]').exists()).toBe(false)
+    })
+
+    it('answers a tap, which is all a phone has', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+
+      await wrapper.findAll('[data-testid="bar"]')[1].trigger('click')
+
+      expect(wrapper.find('[data-testid="bar-readout"]').text()).toContain('50.00')
+    })
+
+    it('keeps a tapped bar on show after the pointer leaves', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+      const bar = wrapper.findAll('[data-testid="bar"]')[0]
+
+      await bar.trigger('mouseenter')
+      await bar.trigger('click')
+      await bar.trigger('mouseleave')
+
+      // A tap is a decision, not a passing glance.
+      expect(wrapper.find('[data-testid="bar-readout"]').text()).toContain('100.00')
+    })
+
+    it('switches to another bar when that one is clicked', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+      const bars = wrapper.findAll('[data-testid="bar"]')
+
+      await bars[0].trigger('mouseenter')
+      await bars[0].trigger('click')
+      // What a pointer really does: it is over the second one before the click.
+      await bars[0].trigger('mouseleave')
+      await bars[1].trigger('mouseenter')
+      await bars[1].trigger('click')
+
+      // Treating hover and click as one state made this read as clicking the one
+      // already chosen, so it cleared instead of switching.
+      expect(wrapper.find('[data-testid="bar-readout"]').text()).toContain('50.00')
+    })
+
+    it('lets a second tap put the heading back', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+      const bar = wrapper.findAll('[data-testid="bar"]')[0]
+
+      await bar.trigger('mouseenter')
+      await bar.trigger('click')
+      await bar.trigger('click')
+
+      expect(wrapper.find('[data-testid="bar-readout"]').exists()).toBe(false)
+    })
+
+    it('answers keyboard focus, which is the only way in without a pointer', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+
+      await wrapper.findAll('[data-testid="bar"]')[0].trigger('focus')
+
+      expect(wrapper.find('[data-testid="bar-readout"]').text()).toContain('100.00')
+    })
+
+    it('names each bar for a screen reader, which cannot hover one', async () => {
+      const { wrapper } = await mountView(StatsView, { api: api() })
+
+      const label = wrapper.findAll('[data-testid="bar"]')[0].attributes('aria-label')
+      expect(label).toContain('Alice')
+      expect(label).toContain('100.00')
+    })
+  })
+
+  it('labels a bucket by its own calendar date, not by an instant', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+
+    // Read as midnight UTC and rendered west of it, the first of January became
+    // the last of December: every label on a monthly chart was a month out.
+    const dates = wrapper.find('[data-testid="chart-dates"]').text()
+    expect(dates).toContain('Jan')
+    expect(dates).toContain('Feb')
+    expect(dates).not.toContain('Dec')
+  })
+
+  it('puts the dates under the graph, above the names', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+
+    // Against the bars they belong to, rather than adrift under the key.
+    const html = wrapper.html()
+    const chart = html.indexOf('data-testid="spend-chart"')
+    const dates = html.indexOf('data-testid="chart-dates"')
+    const key = html.indexOf('data-testid="chart-key"')
+
+    expect(dates).toBeGreaterThan(chart)
+    expect(key).toBeGreaterThan(dates)
   })
 
   it('shows who is up and who is down', async () => {

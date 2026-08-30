@@ -83,6 +83,8 @@ onMounted(async () => {
 
 async function load(): Promise<void> {
   isLoading.value = true
+  // Whatever was being asked about belongs to the chart being replaced.
+  forget()
   try {
     dashboard.value = await useApi().get<Dashboard>('/stats', {
       groupId: groupId.value || undefined,
@@ -155,17 +157,83 @@ const chartDescription = computed(() => {
   return `Spending over time, by who paid: ${points.map(bucketTitle).join('; ')}`
 })
 
+/**
+ * The bar being asked about.
+ *
+ * A bar says how one stretch of time compares with the others and never says how
+ * much, or when, or who. So it is asked: by hovering, tapping or focusing it, and
+ * answered beside the heading and along the key underneath.
+ *
+ * Hovering and tapping are held apart for the same reason as on the pie: a click
+ * always arrives after the pointer is already over the thing clicked, so treating
+ * the two as one state made clicking a second bar read as clicking the one already
+ * chosen, and it cleared instead of switching.
+ */
+const hoveredBucket = ref<string | null>(null)
+const pinnedBucket = ref<string | null>(null)
+
+const selectedBucket = computed(() => hoveredBucket.value ?? pinnedBucket.value)
+
+const selected = computed(
+  () =>
+    dashboard.value?.spendOverTime.find((point) => point.bucket === selectedBucket.value) ?? null,
+)
+
+function look(bucket: string): void {
+  hoveredBucket.value = bucket
+}
+
+function lookAway(): void {
+  hoveredBucket.value = null
+}
+
+/**
+ * A tap, which is not a hover. The same one again puts the heading back, and that
+ * has to clear the hover too, or on a phone the tap leaves behind a hover that
+ * never ends and nothing appears to happen.
+ */
+function pin(bucket: string): void {
+  pinnedBucket.value = pinnedBucket.value === bucket ? null : bucket
+  hoveredBucket.value = pinnedBucket.value === null ? null : bucket
+}
+
+function forget(): void {
+  hoveredBucket.value = null
+  pinnedBucket.value = null
+}
+
+/** What one person paid in one bucket, and how much of it that was. */
+function paidIn(point: SpendPoint, memberId: string): number {
+  return point.byMember?.find((member) => member.memberId === memberId)?.amount ?? 0
+}
+
+function shareIn(point: SpendPoint, memberId: string): string {
+  if (point.amount <= 0) return '0%'
+  return `${Math.round((paidIn(point, memberId) / point.amount) * 100)}%`
+}
+
 /** Scaled against the largest bucket, so the bars are readable at any spend level. */
 const peak = computed(() =>
   Math.max(1, ...(dashboard.value?.spendOverTime.map((point) => point.amount) ?? [1])),
 )
 
-const bucketLabel = (bucket: string) =>
-  new Date(`${bucket}T00:00:00Z`).toLocaleDateString(undefined, {
+/**
+ * A bucket, as a date on a calendar.
+ *
+ * Built from its parts rather than parsed as an instant. Read as midnight UTC and
+ * then rendered anywhere west of it, the first of a month becomes the last of the
+ * month before: a chart of January was labelled Dec 25 in Montreal, and every
+ * label on a monthly chart was a month out.
+ */
+const bucketLabel = (bucket: string): string => {
+  const [year, month, day] = bucket.split('T')[0].split('-').map(Number)
+
+  return new Date(year, (month ?? 1) - 1, day ?? 1).toLocaleDateString(undefined, {
     month: 'short',
     year: granularity.value === 'month' ? '2-digit' : undefined,
     day: granularity.value === 'month' ? undefined : 'numeric',
   })
+}
 </script>
 
 <template>
@@ -233,58 +301,120 @@ const bucketLabel = (bucket: string) =>
       </section>
 
       <section v-if="dashboard.spendOverTime.length > 0" class="surface-card mb-4 p-4">
-        <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">Spending over time</h2>
+        <!--
+          The bar being asked about is answered here, where the eye already is for
+          the heading, and along the key underneath. Nothing when nothing is asked:
+          a line reporting the same total as the card above is furniture.
+        -->
+        <div class="mb-3 flex items-baseline justify-between gap-2">
+          <h2 class="min-w-0 truncate text-sm font-medium text-[var(--text-muted)]">
+            Spending over time
+          </h2>
+
+          <p
+            v-if="selected"
+            data-testid="bar-readout"
+            class="flex shrink-0 items-baseline gap-2 text-sm"
+          >
+            <span class="text-[var(--text-muted)]">{{ bucketLabel(selected.bucket) }}</span>
+            <span class="font-semibold tabular-nums">
+              {{ formatMoney(selected.amount, dashboard.currency) }}
+            </span>
+          </p>
+        </div>
+
         <ul
           class="flex h-32 items-end gap-1"
           data-testid="spend-chart"
-          role="img"
+          role="group"
           :aria-label="chartDescription"
         >
           <li
             v-for="point in dashboard.spendOverTime"
             :key="point.bucket"
             class="flex h-full flex-1 items-end"
-            :title="bucketTitle(point)"
           >
             <!--
-              Stacked by whoever paid, in that person's colour. The total alone says
-              how much a month cost; the split also says who carried it, which is the
-              thing a shared account argues about.
+              The whole column is the target, not just the bar: a daily chart of a
+              busy month gives each bar a few pixels of width and none of its height
+              until it is tall. Keyboard focus asks the same question a hover does.
             -->
-            <span
-              class="flex w-full flex-col-reverse overflow-hidden rounded-t"
-              :style="{ height: `${Math.max(4, (point.amount / peak) * 100)}%` }"
+            <button
+              type="button"
+              data-testid="bar"
+              class="flex h-full w-full cursor-pointer items-end transition-opacity"
+              :class="selectedBucket && selectedBucket !== point.bucket ? 'opacity-40' : ''"
+              :aria-pressed="selectedBucket === point.bucket"
+              :aria-label="bucketTitle(point)"
+              @mouseenter="look(point.bucket)"
+              @mouseleave="lookAway"
+              @focus="look(point.bucket)"
+              @blur="lookAway"
+              @click="pin(point.bucket)"
             >
+              <!--
+                Stacked by whoever paid, in that person's colour. The total alone
+                says how much a month cost; the split also says who carried it,
+                which is the thing a shared account argues about.
+              -->
               <span
-                v-for="member in segmentsOf(point)"
-                :key="member.memberId"
-                data-testid="bar-segment"
-                class="block w-full"
-                :style="{
-                  height: `${member.share * 100}%`,
-                  backgroundColor: colourOf(member.memberId),
-                }"
-              />
-            </span>
+                data-testid="bar-fill"
+                class="flex w-full flex-col-reverse overflow-hidden rounded-t"
+                :style="{ height: `${Math.max(4, (point.amount / peak) * 100)}%` }"
+              >
+                <span
+                  v-for="member in segmentsOf(point)"
+                  :key="member.memberId"
+                  data-testid="bar-segment"
+                  class="block w-full"
+                  :style="{
+                    height: `${member.share * 100}%`,
+                    backgroundColor: colourOf(member.memberId),
+                  }"
+                />
+              </span>
+            </button>
           </li>
         </ul>
 
-        <ul v-if="chartPeople.length > 0" class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-          <li v-for="person in chartPeople" :key="person.memberId" class="flex items-center gap-1.5">
+        <!-- Under the graph, against the bars they belong to, not under the names. -->
+        <div
+          data-testid="chart-dates"
+          class="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]"
+        >
+          <span>{{ bucketLabel(dashboard.spendOverTime[0].bucket) }}</span>
+          <span>
+            {{ bucketLabel(dashboard.spendOverTime[dashboard.spendOverTime.length - 1].bucket) }}
+          </span>
+        </div>
+
+        <ul
+          v-if="chartPeople.length > 0"
+          data-testid="chart-key"
+          class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs"
+        >
+          <li
+            v-for="person in chartPeople"
+            :key="person.memberId"
+            class="flex items-center gap-1.5"
+            :class="selected && paidIn(selected, person.memberId) === 0 ? 'opacity-40' : ''"
+          >
             <span
               class="h-2 w-2 shrink-0 rounded-full"
               :style="{ backgroundColor: colourOf(person.memberId) }"
               aria-hidden="true"
             />
             <span class="text-[var(--text-muted)]">{{ person.memberName }}</span>
+
+            <!-- What this person paid in the bar being asked about. -->
+            <span v-if="selected" data-testid="key-amount" class="tabular-nums">
+              {{ formatMoney(paidIn(selected, person.memberId), dashboard.currency) }}
+              <span class="text-[var(--text-muted)]">
+                {{ shareIn(selected, person.memberId) }}
+              </span>
+            </span>
           </li>
         </ul>
-        <div class="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]">
-          <span>{{ bucketLabel(dashboard.spendOverTime[0].bucket) }}</span>
-          <span>
-            {{ bucketLabel(dashboard.spendOverTime[dashboard.spendOverTime.length - 1].bucket) }}
-          </span>
-        </div>
       </section>
 
       <section v-if="dashboard.byMember.length > 0" class="surface-card p-4">
