@@ -12,6 +12,8 @@ import SpendPie from '@/components/ui/SpendPie.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
 import { bucketOf, formatMonthHeading } from '@/domain/buckets'
+import { summariseMonths } from '@/domain/monthSummary'
+import MonthRecap from '@/components/groups/MonthRecap.vue'
 import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
 import { useAuthStore } from '@/stores/auth'
@@ -309,6 +311,34 @@ const monthSpending = computed(() => {
 const currentMonth = computed(() => bucketOf(new Date(), 'month'))
 
 /**
+ * How each finished month went, by month.
+ *
+ * Only complete months: the one running has a total on its heading like the rest,
+ * and nothing useful to compare it with until it ends.
+ */
+const recaps = computed(() => {
+  const summaries = summariseMonths(
+    groupExpenses.value.map((expense) => ({
+      key: bucketOf(expense.spentAt, 'month'),
+      amountInBaseCurrency: expense.amountInBaseCurrency,
+      description: expense.description,
+      payers:
+        expense.payers && expense.payers.length > 0
+          ? expense.payers
+          : [
+              {
+                memberId: expense.paidByMemberId,
+                amountInBaseCurrency: expense.amountInBaseCurrency,
+              },
+            ],
+    })),
+    currency.value,
+  )
+
+  return new Map(summaries.map((summary) => [summary.key, summary]))
+})
+
+/**
  * Who should pay whom.
  *
  * Simplified by default: the fewest transfers that clear the group is what people
@@ -549,6 +579,13 @@ async function refresh(): Promise<void> {
                 {{ formatMoney(month.total, currency) }}
               </span>
             </button>
+
+            <MonthRecap
+              v-if="isMonthOpen(month.key) && recaps.get(month.key)"
+              :summary="recaps.get(month.key)!"
+              :currency="currency"
+              :name-of="memberName"
+            />
 
             <ul v-if="isMonthOpen(month.key)" class="mt-2 flex flex-col gap-2">
               <template v-for="expense in month.expenses" :key="expense.id">

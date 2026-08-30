@@ -472,6 +472,111 @@ describe('DashboardView on the main group', () => {
     })
   })
 
+  describe('how a finished month went', () => {
+    /** A date in a given month, at noon so no timezone can move it. */
+    const inMonth = (monthsBack: number, day = 15) => {
+      const now = new Date()
+      return new Date(now.getFullYear(), now.getMonth() - monthsBack, day, 12).toISOString()
+    }
+
+    /** Two finished months and the one running, so the comparisons have something to say. */
+    const history = () => [
+      testExpense({ id: 'now', description: 'This month', spentAt: inMonth(0, 2) }),
+      testExpense({
+        id: 'last-rent',
+        description: 'Rent',
+        amount: 900,
+        amountInBaseCurrency: 900,
+        spentAt: inMonth(1, 2),
+        payers: [{ memberId: ALICE, amount: 900, amountInBaseCurrency: 900 }],
+      }),
+      testExpense({
+        id: 'last-beer',
+        description: 'Beer',
+        amount: 100,
+        amountInBaseCurrency: 100,
+        spentAt: inMonth(1, 9),
+        payers: [{ memberId: BOB, amount: 100, amountInBaseCurrency: 100 }],
+      }),
+      testExpense({
+        id: 'older',
+        description: 'Groceries',
+        amount: 400,
+        amountInBaseCurrency: 400,
+        spentAt: inMonth(2, 5),
+        payers: [{ memberId: ALICE, amount: 400, amountInBaseCurrency: 400 }],
+      }),
+    ]
+
+    /** Opens a month by its position in the list, newest first. */
+    async function openMonth(
+      wrapper: Awaited<ReturnType<typeof mountView>>['wrapper'],
+      index: number,
+    ) {
+      await wrapper.findAll('[data-testid="month-toggle"]')[index].trigger('click')
+      await settle()
+    }
+
+    it('says who paid for the month', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: history(),
+      })
+      await settle()
+
+      await openMonth(wrapper, 1)
+
+      const recap = wrapper.find('[data-testid="month-recap"]')
+      const members = recap.findAll('[data-testid="recap-member"]').map((row) => row.text())
+
+      // Largest first: 900 of the 1,000 came from one of them.
+      expect(members[0]).toContain('Alice')
+      expect(members[0]).toContain('900.00')
+      expect(members[1]).toContain('Bob')
+    })
+
+    it('names the biggest single expense', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: history(),
+      })
+      await settle()
+
+      await openMonth(wrapper, 1)
+
+      const biggest = wrapper.find('[data-testid="recap-biggest"]').text()
+      expect(biggest).toContain('Rent')
+      expect(biggest).toContain('900.00')
+    })
+
+    it('compares the month with the one before and with a usual month', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: history(),
+      })
+      await settle()
+
+      await openMonth(wrapper, 1)
+
+      // 1,000 against 400 the month before, and against a 400 average of the others.
+      const comparison = wrapper.find('[data-testid="recap-comparison"]').text()
+      expect(comparison).toContain('600.00 more than')
+      expect(comparison).toContain('600.00 above')
+    })
+
+    it('leaves the running month to its own total', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: history(),
+      })
+      await settle()
+
+      // The current month is open by default and has no recap: a few days against a
+      // whole month would say only that the month is young.
+      expect(wrapper.find('[data-testid="month-recap"]').exists()).toBe(false)
+    })
+  })
+
   describe('a long expense list', () => {
     /**
      * Distinct ids and times, so the order and the count are both meaningful, and
