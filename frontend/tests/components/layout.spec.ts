@@ -37,6 +37,26 @@ describe('AppShell', () => {
     expect(wrapper.find('button').text()).toBe('New')
   })
 
+  it('puts the back button on its own, top left', () => {
+    const wrapper = mountShell({ backTo: { name: 'dashboard' }, backLabel: 'Dashboard' })
+
+    const back = wrapper.find('[data-testid="back"]')
+    expect(back.classes()).toContain('btn-secondary')
+    expect(back.classes()).toContain('rounded-full')
+
+    // Above the title rather than beside it, so it is never crowded out by a long
+    // group name.
+    const html = wrapper.html()
+    expect(html.indexOf('data-testid="back"')).toBeLessThan(html.indexOf('<h1'))
+  })
+
+  it('leaves the top row out when there is no back and no action', () => {
+    const wrapper = mountShell({})
+
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
+    expect(wrapper.find('h1').text()).toBe('Groups')
+  })
+
   it('has no fixed chrome at the top', () => {
     const wrapper = mountShell({})
 
