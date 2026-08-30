@@ -1,6 +1,8 @@
+using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -167,15 +169,18 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
     options.AddPolicy(RateLimitPolicies.Auth, context => RateLimitPartition.GetFixedWindowLimiter(
-        CallerKey(context),
+        RateLimitKeys.For(context),
         _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = 20,
+            // Enough for a household's devices reconnecting at once, and nowhere
+            // near enough to guess anything. It was twenty, which a phone and a
+            // laptop coming back online together could reach between them.
+            PermitLimit = 60,
             Window = TimeSpan.FromMinutes(1)
         }));
 
     options.AddPolicy(RateLimitPolicies.Diagnostics, context => RateLimitPartition.GetFixedWindowLimiter(
-        CallerKey(context),
+        RateLimitKeys.For(context),
         _ => new FixedWindowRateLimiterOptions
         {
             // A crash loop should report itself once, not five hundred times.
@@ -185,17 +190,17 @@ builder.Services.AddRateLimiter(options =>
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(
         context => RateLimitPartition.GetFixedWindowLimiter(
-            CallerKey(context),
+            RateLimitKeys.For(context),
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 600,
+                /*
+                 * Generous, because a client draining an outbox and pulling deltas
+                 * is chatty by design and being refused is worse than being slow:
+                 * the app reads a refusal as a failure and says it is offline.
+                 */
+                PermitLimit = 1200,
                 Window = TimeSpan.FromMinutes(1)
             }));
-
-    static string CallerKey(HttpContext context)
-        => context.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-           ?? context.Connection.RemoteIpAddress?.ToString()
-           ?? "unknown";
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -205,8 +210,30 @@ builder.Services.AddHostedService<RecurringExpenseWorker>();
 builder.Services.AddHostedService<ExchangeRateWorker>();
 builder.Services.AddHostedService<SyncLogCompactionWorker>();
 
+/*
+ * The caller's real address, when there is a proxy in front.
+ *
+ * Everything about this app is served behind one: Traefik in the deployment, the
+ * dev server's own proxy while developing. Without this the address on every
+ * request is the proxy's, which made the rate limit above count every user of the
+ * app as one caller and refuse them all together.
+ *
+ * Only honoured from a proxy on a private network - the defaults plus the ranges
+ * container networks live in - because the header is one any caller can write.
+ * From the internet it is ignored, which is the point.
+ */
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Named in full: both namespaces in play here declare an IPNetwork.
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+});
+
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseSerilogRequestLogging();
 

@@ -264,3 +264,18 @@ export class ApiClient {
     }
   }
 }
+
+/**
+ * Whether a failed request means the server could not be reached.
+ *
+ * "Offline" on screen should mean unreachable. A server that answered - refused,
+ * rate limited, complained about a payload - is not offline, and saying so sends
+ * somebody looking at their wifi for a problem that is not there. A 408 or a 5xx is
+ * the exception: something answered, but nothing useful happened.
+ */
+export function looksOffline(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status
+
+  if (typeof status !== 'number') return true
+  return status === 408 || status >= 500
+}
