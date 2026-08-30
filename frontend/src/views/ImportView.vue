@@ -233,7 +233,7 @@ async function cancel(): Promise<void> {
           sent, and everything else is discarded when you leave this screen.
         </p>
 
-        <label class="tap-target mt-3 flex cursor-pointer items-center justify-center rounded-lg border text-sm"
+        <label class="btn btn-press btn-secondary mt-3 w-full cursor-pointer"
                style="border-color: var(--border)">
           Choose a CSV or PDF
           <input type="file" accept=".csv,.pdf,text/csv,application/pdf" class="hidden" @change="onFile" />
@@ -311,7 +311,7 @@ async function cancel(): Promise<void> {
 
             <button
               type="button"
-              class="rounded-lg border px-2 py-1 text-xs"
+              class="btn btn-press btn-secondary min-h-0 px-2 py-1 text-xs"
               :class="row.action === 'ignore' ? 'border-brand-500 text-brand-400' : ''"
               :style="row.action === 'ignore' ? undefined : 'border-color: var(--border)'"
               @click="setAction(row.rowNumber, row.action === 'ignore' ? 'personal' : 'ignore')"
@@ -327,7 +327,7 @@ async function cancel(): Promise<void> {
       <div class="flex gap-2">
         <button
           type="button"
-          class="tap-target flex-1 rounded-lg border text-sm"
+          class="btn btn-press btn-secondary flex-1"
           style="border-color: var(--border)"
           @click="cancel"
         >
@@ -335,7 +335,7 @@ async function cancel(): Promise<void> {
         </button>
         <button
           type="button"
-          class="tap-target flex-1 rounded-lg bg-brand-600 text-sm font-medium text-white disabled:opacity-60"
+          class="btn btn-press btn-primary flex-1"
           :disabled="isCommitting || (summary?.toCommit ?? 0) === 0"
           @click="commit"
         >

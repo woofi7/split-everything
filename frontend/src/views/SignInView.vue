@@ -167,7 +167,7 @@ async function handleCredential(credential?: string): Promise<void> {
           v-if="capabilities?.developmentSignIn"
           type="button"
           data-testid="continue-as"
-          class="tap-target mt-4 w-full rounded-lg bg-brand-600 text-sm font-medium text-white disabled:opacity-60"
+          class="btn btn-press btn-primary mt-4 w-full"
           :disabled="isSigningIn"
           @click="continueAsRemembered"
         >
@@ -233,7 +233,7 @@ async function handleCredential(credential?: string): Promise<void> {
 
         <button
           type="submit"
-          class="tap-target rounded-lg bg-brand-600 text-sm font-medium text-white disabled:opacity-60"
+          class="btn btn-press btn-primary"
           :disabled="isSigningIn || !devEmail"
         >
           Continue

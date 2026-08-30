@@ -106,7 +106,7 @@ async function redeem(): Promise<void> {
       <button
         v-if="preview.isRedeemable"
         type="button"
-        class="tap-target rounded-lg bg-brand-600 px-6 font-medium text-white disabled:opacity-60"
+        class="btn btn-press btn-primary"
         :disabled="isJoining"
         @click="join"
       >

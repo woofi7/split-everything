@@ -170,7 +170,7 @@ function emailSegments(result: { item: AddableUser; indices: number[]; fieldInde
       v-if="canAddPlaceholder"
       type="button"
       data-testid="add-placeholder"
-      class="tap-target mt-2 w-full rounded-lg border px-3 text-left text-sm"
+      class="btn btn-press btn-secondary mt-2 w-full justify-start"
       style="border-color: var(--border)"
       @click="addPlaceholder"
     >

@@ -129,7 +129,7 @@ async function save(): Promise<void> {
           <span class="text-sm text-[var(--text-muted)]">Icon</span>
           <button
             type="button"
-            class="tap-target flex items-center gap-2 rounded-lg border px-3 text-sm"
+            class="btn btn-press btn-secondary"
             style="border-color: var(--border)"
             @click="isPickingIcon = true"
           >
@@ -209,7 +209,7 @@ async function save(): Promise<void> {
 
       <button
         type="submit"
-        class="tap-target rounded-lg bg-brand-600 font-medium text-white disabled:opacity-60"
+        class="btn btn-press btn-primary w-full"
         :disabled="isSaving"
       >
         {{ isSaving ? 'Creating' : 'Create group' }}

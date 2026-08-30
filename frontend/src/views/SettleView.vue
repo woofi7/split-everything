@@ -83,7 +83,7 @@ async function save(): Promise<void> {
           </span>
           <button
             type="button"
-            class="shrink-0 rounded-lg border px-2 py-1 text-xs"
+            class="btn btn-press btn-secondary shrink-0 min-h-0 px-2 py-1 text-xs"
             style="border-color: var(--border)"
             @click="usePlan(transfer)"
           >
@@ -149,7 +149,7 @@ async function save(): Promise<void> {
 
       <button
         type="submit"
-        class="tap-target rounded-lg bg-brand-600 font-medium text-white disabled:opacity-60"
+        class="btn btn-press btn-primary w-full"
         :disabled="isSaving || amount <= 0"
       >
         {{ isSaving ? 'Recording' : 'Record settlement' }}
