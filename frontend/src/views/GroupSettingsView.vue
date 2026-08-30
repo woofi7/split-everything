@@ -334,6 +334,23 @@ const hasChanges = computed(
 )
 
 /**
+ * Puts every field back to the group, so a change can be abandoned.
+ *
+ * Reads the group again rather than remembering what things were: the group is
+ * the thing being edited, so it is the only honest starting point, and it may have
+ * moved on underneath while the screen was open.
+ */
+function revert(): void {
+  const current = group.value
+  name.value = current?.name ?? ''
+  iconName.value = current?.iconName ?? null
+  pendingColours.value = {}
+  readSplitFromGroup()
+  message.value = null
+  error.value = null
+}
+
+/**
  * Saves the lot in one request.
  *
  * The group's fields and its default split are the same PATCH, so there is no
@@ -871,9 +888,19 @@ async function unarchive(): Promise<void> {
     <div
       v-if="hasChanges && canAdminister"
       data-testid="save-bar"
-      class="fixed right-4 z-40"
+      class="fixed right-4 z-40 flex gap-2"
       style="bottom: calc(6rem + env(safe-area-inset-bottom))"
     >
+      <button
+        type="button"
+        data-testid="cancel-changes"
+        class="btn btn-press btn-secondary shadow-lg"
+        style="border-color: var(--border)"
+        :disabled="isSaving"
+        @click="revert"
+      >
+        Cancel
+      </button>
       <button
         type="button"
         data-testid="save-settings"

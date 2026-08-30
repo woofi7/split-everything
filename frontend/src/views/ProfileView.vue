@@ -21,6 +21,34 @@ const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
 
 
 const isLight = computed(() => auth.theme === 'light')
+const isSaving = ref(false)
+
+/**
+ * Whether anything here differs from the account as it stands.
+ *
+ * The same shape as the group's settings: these are settings, edited and then
+ * kept, so one button saves them and one puts them back. The theme is not among
+ * them, because it is applied as it is switched and there is nothing to preview.
+ */
+const isDirty = computed(() => {
+  const user = auth.user
+  if (!user) return false
+
+  if (displayName.value.trim() !== user.displayName) return true
+  if (defaultCurrency.value !== user.defaultCurrency) return true
+
+  return pickedColour.value !== undefined
+})
+
+/** Puts the form back to the account, so a change can be abandoned. */
+function revert(): void {
+  const user = auth.user
+  displayName.value = user?.displayName ?? ''
+  defaultCurrency.value = user?.defaultCurrency ?? 'CAD'
+  pickedColour.value = undefined
+  message.value = null
+  error.value = null
+}
 
 /**
  * The colour this person would like in the groups they join.
@@ -54,6 +82,7 @@ function pickColour(colorHex: string): void {
 async function save(): Promise<void> {
   error.value = null
   message.value = null
+  isSaving.value = true
 
   try {
     await auth.updateProfile({
@@ -69,6 +98,8 @@ async function save(): Promise<void> {
     message.value = 'Saved.'
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not save your profile.'
+  } finally {
+    isSaving.value = false
   }
 }
 
@@ -138,9 +169,9 @@ async function deleteAccount(): Promise<void> {
         </select>
       </label>
 
-      <button type="submit" class="btn btn-press btn-primary">
-        Save
-      </button>
+      <!-- Enter still saves; the buttons that do it are at the foot of the screen,
+           where they can speak for the colour below as well as these fields. -->
+      <button type="submit" class="hidden" aria-hidden="true" tabindex="-1" />
 
       <p v-if="message" class="text-sm text-owed" role="status">{{ message }}</p>
     </form>
@@ -245,5 +276,38 @@ async function deleteAccount(): Promise<void> {
 
       <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
     </section>
+
+    <!--
+      One save for the settings on this screen, and one way back. In the corner
+      and only once something differs, the same as the group's settings: the fields
+      it covers are spread down the page, and a button that has scrolled away
+      cannot be the answer to "I changed something".
+    -->
+    <div
+      v-if="isDirty"
+      data-testid="save-bar"
+      class="fixed right-4 z-40 flex gap-2"
+      style="bottom: calc(6rem + env(safe-area-inset-bottom))"
+    >
+      <button
+        type="button"
+        data-testid="cancel-changes"
+        class="btn btn-press btn-secondary shadow-lg"
+        style="border-color: var(--border)"
+        :disabled="isSaving"
+        @click="revert"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        data-testid="save-settings"
+        class="btn btn-press btn-primary shadow-lg"
+        :disabled="isSaving"
+        @click="save"
+      >
+        {{ isSaving ? 'Saving' : 'Save changes' }}
+      </button>
+    </div>
   </AppShell>
 </template>

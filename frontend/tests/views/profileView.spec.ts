@@ -18,6 +18,78 @@ describe('ProfileView', () => {
     expect(textOf(wrapper)).toContain('alice@example.com')
   })
 
+  /**
+   * One save, one way back.
+   *
+   * The same shape as the group's settings, because these are settings too: edited
+   * and then kept. The theme is not among them, since it applies as it is switched
+   * and there is nothing to preview.
+   */
+  describe('saving the profile', () => {
+    it('offers nothing while nothing has changed', async () => {
+      const { wrapper } = await mountView(ProfileView)
+
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+    })
+
+    it('appears on the first change', async () => {
+      const { wrapper } = await mountView(ProfileView)
+
+      await wrapper.find('input[type="text"]').setValue('Alice A')
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="cancel-changes"]').exists()).toBe(true)
+    })
+
+    it('saves the name, the currency and the colour together', async () => {
+      const api = fakeApi({ '/auth/me': () => testUser })
+      const { wrapper } = await mountView(ProfileView, { api })
+
+      await wrapper.find('input[type="text"]').setValue('Alice A')
+      await wrapper.find('select').setValue('EUR')
+      await wrapper.find('[data-testid="colour-84cc16"]').trigger('click')
+      await settle(1)
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
+      await settle()
+
+      expect(api.patch).toHaveBeenCalledTimes(1)
+      expect(api.patch).toHaveBeenCalledWith('/auth/me', expect.objectContaining({
+        displayName: 'Alice A',
+        defaultCurrency: 'EUR',
+        preferredColorHex: '#84cc16',
+      }))
+    })
+
+    it('puts everything back when cancelled', async () => {
+      const api = fakeApi()
+      const { wrapper } = await mountView(ProfileView, { api })
+
+      await wrapper.find('input[type="text"]').setValue('Alice A')
+      await wrapper.find('select').setValue('EUR')
+      await wrapper.find('[data-testid="colour-84cc16"]').trigger('click')
+      await settle(1)
+      await wrapper.find('[data-testid="cancel-changes"]').trigger('click')
+      await settle(1)
+
+      expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Alice')
+      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('CAD')
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+      expect(api.patch).not.toHaveBeenCalled()
+    })
+
+    it('leaves the theme alone, which is applied as it is switched', async () => {
+      const { wrapper, auth } = await mountView(ProfileView)
+
+      await wrapper.find('[data-testid="theme-toggle"]').trigger('click')
+      await settle()
+
+      expect(auth.theme).toBe('light')
+      // Nothing to save: there is no preview of a theme.
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+    })
+  })
+
   it('prefills the current name and currency', async () => {
     const { wrapper } = await mountView(ProfileView)
 

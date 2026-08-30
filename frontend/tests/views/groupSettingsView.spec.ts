@@ -107,6 +107,29 @@ describe('GroupSettingsView', () => {
       expect(textOf(wrapper)).toContain('Saved')
     })
 
+    it('puts every setting back when cancelled', async () => {
+      const client = api()
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      await settle()
+
+      await wrapper.find('input[type="text"]').setValue('Flatmates')
+      await wrapper.find('[data-testid="split-Shares"]').setValue(true)
+      await settle(1)
+      await wrapper.find(`[data-testid="recolour-${ALICE}"]`).trigger('click')
+      await settle(1)
+      await wrapper.find('[data-testid="colour-14b8a6"]').trigger('click')
+      await settle(1)
+
+      await wrapper.find('[data-testid="cancel-changes"]').trigger('click')
+      await settle(1)
+
+      expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value)
+        .toBe('Roommates')
+      expect(wrapper.find('[data-testid="split-Equal"]').attributes('checked')).toBeDefined()
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+      expect(client.patch).not.toHaveBeenCalled()
+    })
+
     it('is not offered to someone who cannot change anything', async () => {
       const group = testGroup()
       group.members = group.members.map((member) =>
