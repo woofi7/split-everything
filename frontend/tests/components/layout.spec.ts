@@ -27,13 +27,43 @@ describe('AppShell', () => {
   it('leaves the subtitle out when there is none', () => {
     const wrapper = mountShell({})
 
-    expect(wrapper.findAll('p')).toHaveLength(1)
+    // Nothing to say about sync either, so the page starts with the title alone.
+    expect(wrapper.findAll('p')).toHaveLength(0)
   })
 
-  it('renders a header action', () => {
+  it('renders a page action', () => {
     const wrapper = mountShell({}, { 'header-action': '<button>New</button>' })
 
-    expect(wrapper.find('header button').text()).toBe('New')
+    expect(wrapper.find('button').text()).toBe('New')
+  })
+
+  it('has no fixed chrome at the top', () => {
+    const wrapper = mountShell({})
+
+    // The page is the page. The only fixed furniture is the tab bar.
+    expect(wrapper.find('header').exists()).toBe(false)
+    expect(wrapper.find('.sticky').exists()).toBe(false)
+  })
+
+  it('says nothing about sync when there is nothing to say', () => {
+    const wrapper = mountShell({})
+
+    // "All synced" on every screen forever reports that nothing is wrong, which
+    // is not news.
+    expect(wrapper.text()).not.toContain('All synced')
+  })
+
+  it('still says something when sync needs attention', () => {
+    const wrapper = mountShell({ rejectedCount: 1 })
+
+    expect(wrapper.text()).toContain('needs attention')
+  })
+
+  it('clears the notch at the top of the page', () => {
+    const wrapper = mountShell({})
+
+    // With no header, the content itself has to clear the status bar.
+    expect(wrapper.find('main').classes().join(' ')).toContain('safe-area-inset-top')
   })
 
   it('shows the sync state', () => {

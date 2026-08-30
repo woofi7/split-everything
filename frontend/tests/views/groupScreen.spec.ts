@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
-import GroupView from '@/views/GroupView.vue'
+import DashboardView from '@/views/DashboardView.vue'
 import {
   ALICE,
   BOB,
@@ -21,16 +21,21 @@ vi.mock('vue-router', () => ({
 
 const api = () => fakeApi({ '/groups': () => testGroup() })
 
-describe('GroupView', () => {
+/**
+ * The one group screen, reached either as the dashboard or by a group's own URL.
+ * There used to be two of these; the group route now renders the dashboard, so
+ * these behaviours are asserted where they actually live.
+ */
+describe('the group screen', () => {
   it('shows the group name and member count', async () => {
-    const { wrapper } = await mountView(GroupView, { api: api() })
+    const { wrapper } = await mountView(DashboardView, { api: api() })
 
     expect(textOf(wrapper)).toContain('Roommates')
-    expect(textOf(wrapper)).toContain('2 members')
+    expect(textOf(wrapper)).toContain('2 people')
   })
 
   it('lists each member balance', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense()],
     })
@@ -43,7 +48,7 @@ describe('GroupView', () => {
   })
 
   it('offers a simplified settle-up plan', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense()],
     })
@@ -53,7 +58,7 @@ describe('GroupView', () => {
   })
 
   it('switches to the raw who-owes-whom view', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense()],
     })
@@ -69,13 +74,13 @@ describe('GroupView', () => {
   })
 
   it('says everyone is settled when there is nothing owing', async () => {
-    const { wrapper } = await mountView(GroupView, { api: api() })
+    const { wrapper } = await mountView(DashboardView, { api: api() })
 
     expect(textOf(wrapper)).toContain('Everyone is settled up')
   })
 
   it('lists the expenses with who paid', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense()],
     })
@@ -86,7 +91,7 @@ describe('GroupView', () => {
   })
 
   it('marks an expense that has not synced yet', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense({ pending: true })],
     })
@@ -95,7 +100,7 @@ describe('GroupView', () => {
   })
 
   it('does not mark a synced expense', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense({ pending: false })],
     })
@@ -104,13 +109,13 @@ describe('GroupView', () => {
   })
 
   it('prompts for a first expense when the group is empty', async () => {
-    const { wrapper } = await mountView(GroupView, { api: api() })
+    const { wrapper } = await mountView(DashboardView, { api: api() })
 
     expect(textOf(wrapper)).toContain('No expenses yet')
   })
 
   it('leaves a deleted expense out of the list', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense({ isDeleted: true })],
     })
@@ -119,7 +124,7 @@ describe('GroupView', () => {
   })
 
   it('links a suggested transfer to the settle screen with it prefilled', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense()],
     })
@@ -128,15 +133,21 @@ describe('GroupView', () => {
       .findAllComponents(RouterLinkStub)
       .find((candidate) => JSON.stringify(candidate.props().to).includes('settle'))
 
-    expect(link).toBeDefined()
-    const to = link!.props().to as { query: Record<string, unknown> }
-    expect(to.query.from).toBe(BOB)
-    expect(to.query.to).toBe(ALICE)
-    expect(to.query.amount).toBe(30)
+    // The first settle link is the section's own button; the transfer's carries the
+    // parties and the amount so the form opens filled in.
+    const prefilled = wrapper
+      .findAllComponents(RouterLinkStub)
+      .map((candidate) => candidate.props().to as { query?: Record<string, unknown> })
+      .find((to) => to?.query?.from !== undefined)
+
+    expect(prefilled).toBeDefined()
+    expect(prefilled!.query!.from).toBe(BOB)
+    expect(prefilled!.query!.to).toBe(ALICE)
+    expect(prefilled!.query!.amount).toBe('30.00')
   })
 
   it('links to the group settings', async () => {
-    const { wrapper } = await mountView(GroupView, { api: api() })
+    const { wrapper } = await mountView(DashboardView, { api: api() })
 
     const link = wrapper
       .findAllComponents(RouterLinkStub)
@@ -146,9 +157,9 @@ describe('GroupView', () => {
   })
 })
 
-describe('GroupView expense rows', () => {
+describe('the group screen expense rows', () => {
   it('shows the date of each expense', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
       expenses: [testExpense({ spentAt: '2026-03-14T12:00:00Z', description: 'Dinner' })],
     })
@@ -159,7 +170,7 @@ describe('GroupView expense rows', () => {
   })
 
   it('marks each row with the colour of whoever paid', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
       expenses: [testExpense({ paidByMemberId: ALICE })],
     })
@@ -174,7 +185,7 @@ describe('GroupView expense rows', () => {
   })
 
   it('still names who paid', async () => {
-    const { wrapper } = await mountView(GroupView, {
+    const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
       expenses: [testExpense({ paidByMemberId: ALICE })],
     })

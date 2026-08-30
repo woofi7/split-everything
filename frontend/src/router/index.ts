@@ -21,7 +21,14 @@ const routes: RouteRecordRaw[] = [
   // Anything already pointing at the old path still lands somewhere.
   { path: '/groups', redirect: { name: 'dashboard' } },
   { path: '/groups/new', name: 'new-group', component: () => import('@/views/NewGroupView.vue') },
-  { path: '/groups/:groupId', name: 'group', component: () => import('@/views/GroupView.vue') },
+  {
+    // The same screen as the dashboard, deliberately. There is one group view, and
+    // opening a group by its URL makes that group the one the app is on, which is
+    // what every other screen then follows.
+    path: '/groups/:groupId',
+    name: 'group',
+    component: () => import('@/views/DashboardView.vue'),
+  },
   {
     path: '/groups/:groupId/settings',
     name: 'group-settings',
