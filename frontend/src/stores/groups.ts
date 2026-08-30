@@ -95,6 +95,39 @@ export const useGroupsStore = defineStore('groups', () => {
   }
 
   /**
+   * The group one place before or after this one, without moving to it.
+   *
+   * In the order the groups are listed, so the cycle matches the picker rather
+   * than being an order of its own that nothing on screen shows.
+   *
+   * Wraps around: with three groups, three steps the same way come back to where
+   * they started, which is what makes swiping usable without counting. Nothing
+   * with fewer than two, and a main group that is not in the list (an archived
+   * one, while archived groups are hidden) steps in from the end asked for.
+   *
+   * Answered separately from moving because a swipe shows the group it is bringing
+   * in while the finger is still down.
+   */
+  function groupInCycle(step: 1 | -1): LocalGroup | undefined {
+    const order = visibleGroups.value
+    if (order.length < 2) return undefined
+
+    const at = order.findIndex((group) => group.id === mainGroupId.value)
+    if (at < 0) return step === 1 ? order[0] : order[order.length - 1]
+
+    return order[(at + step + order.length) % order.length]
+  }
+
+  /** Steps to that group, and answers where it landed. */
+  function cycleMainGroup(step: 1 | -1): string | null {
+    const next = groupInCycle(step)
+    if (!next) return null
+
+    setMainGroup(next.id)
+    return next.id
+  }
+
+  /**
    * Keeps the choice pointing at something real.
    *
    * Called after every list load, because a group can be archived, left or deleted
@@ -386,6 +419,8 @@ export const useGroupsStore = defineStore('groups', () => {
     mainGroup,
     restoreMainGroup,
     setMainGroup,
+    groupInCycle,
+    cycleMainGroup,
     get,
     refresh,
     create,

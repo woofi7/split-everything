@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
+import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
@@ -125,6 +126,12 @@ function targetOf(entry: ActivityEntry) {
     <template #header-action>
       <GroupSettingsButton />
     </template>
+
+    <!--
+      Renders nothing but a moment's confirmation: swiping across the screen moves
+      to the next group, which is the navigation this app does most.
+    -->
+    <GroupSwipe />
 
     <ul v-if="entries.length > 0" class="flex flex-col gap-2">
       <li v-for="entry in entries" :key="entry.id">
