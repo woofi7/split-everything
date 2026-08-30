@@ -80,18 +80,23 @@ const hasSyncNews = computed(
       <div data-testid="title-row" class="mb-4 flex items-start justify-between gap-3">
         <div class="flex min-w-0 items-start gap-3">
           <!--
-            The app's mark, top left, where a person looks to know what they have
-            open. Decorative: the title beside it already says the name, so a
+            Top left, where a person looks to know what they have open. The app's
+            mark by default, and the group's own where the screen is about a group,
+            because that is what tells two groups apart at a glance.
+
+            Decorative either way: the title beside it already says the name, so a
             screen reader announcing both would say it twice.
           -->
-          <img
-            src="/icons/icon.svg"
-            alt=""
-            width="32"
-            height="32"
-            data-testid="app-icon"
-            class="mt-0.5 h-8 w-8 shrink-0 rounded-lg"
-          />
+          <slot name="mark">
+            <img
+              src="/icons/icon.svg"
+              alt=""
+              width="32"
+              height="32"
+              data-testid="app-icon"
+              class="mt-0.5 h-8 w-8 shrink-0 rounded-lg"
+            />
+          </slot>
 
           <div class="min-w-0">
             <h1 class="truncate text-xl font-semibold">{{ title }}</h1>

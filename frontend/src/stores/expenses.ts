@@ -15,6 +15,7 @@ import { clearReplica } from '@/offline/db'
 import type { SyncEngine } from '@/offline/syncEngine'
 import { newId } from '@/domain/ids'
 import { useAuthStore } from '@/stores/auth'
+import { useGroupsStore } from '@/stores/groups'
 
 export interface ExpenseDraft {
   groupId: string
@@ -601,6 +602,11 @@ export const useExpensesStore = defineStore('expenses', () => {
   async function resetToServer(): Promise<void> {
     await clearReplica()
     await hydrate()
+
+    // Groups come from their own endpoint rather than from the sync log, so a
+    // pull alone brings back every expense and no group to hang them on. Asked
+    // for first, because an expense whose group is missing has nowhere to show.
+    await useGroupsStore().loadAll()
     await sync()
   }
 
