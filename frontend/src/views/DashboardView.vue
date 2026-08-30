@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupPicker from '@/components/groups/GroupPicker.vue'
@@ -8,6 +8,7 @@ import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SpendPie from '@/components/ui/SpendPie.vue'
 import { resolveIcon } from '@/domain/icons'
 import { memberColor, memberColors } from '@/domain/memberColors'
+import { formatMoney } from '@/domain/money'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 
@@ -21,6 +22,7 @@ import { useExpensesStore } from '@/stores/expenses'
  * next one.
  */
 
+const route = useRoute()
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
 
@@ -29,6 +31,12 @@ const isPickingGroup = ref(false)
 onMounted(async () => {
   await groups.loadAll()
   await expenses.hydrate()
+
+  // Reached by a group's own URL, from a link or an activity entry: that group
+  // becomes the one the app is on, so every other screen follows it too.
+  const requested = route.params.groupId
+  if (typeof requested === 'string' && requested) groups.setMainGroup(requested)
+
   await loadMainGroup()
 })
 
@@ -100,6 +108,22 @@ const balances = computed(() => {
     }))
 })
 
+/**
+ * Who should pay whom.
+ *
+ * Simplified by default: the fewest transfers that clear the group is what people
+ * actually want to act on. The raw list is a tap away for anyone who wants to see
+ * the debts as they were incurred rather than netted.
+ */
+const showSimplified = ref(true)
+
+const plan = computed(() => {
+  if (!group.value) return []
+  return showSimplified.value
+    ? expenses.settleUpPlan(group.value.id)
+    : expenses.rawDebts(group.value.id)
+})
+
 const spentOn = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 </script>
@@ -160,8 +184,20 @@ const spentOn = (iso: string) =>
       </section>
 
       <section v-if="balances.length > 0" class="surface-card mb-4 p-4">
-        <p class="mb-2 text-sm text-[var(--text-muted)]">Balances</p>
-        <ul class="flex flex-col gap-2 text-sm">
+        <div class="flex items-baseline justify-between gap-2">
+          <p class="text-sm text-[var(--text-muted)]">Balances</p>
+          <button
+            v-if="plan.length > 0"
+            type="button"
+            data-testid="toggle-simplify"
+            class="btn btn-press btn-quiet min-h-0 px-2 py-1 text-xs text-brand-400"
+            @click="showSimplified = !showSimplified"
+          >
+            {{ showSimplified ? 'Show who owes whom' : 'Simplify' }}
+          </button>
+        </div>
+
+        <ul class="mt-3 flex flex-col gap-2 text-sm">
           <li
             v-for="member in balances"
             :key="member.id"
@@ -178,6 +214,51 @@ const spentOn = (iso: string) =>
             <MoneyAmount :amount="member.net" :currency="currency" signed size="sm" />
           </li>
         </ul>
+
+        <p v-if="plan.length === 0" class="mt-3 text-sm text-[var(--text-muted)]">
+          Everyone is settled up.
+        </p>
+
+        <div v-else class="mt-4 border-t pt-3" style="border-color: var(--border)">
+          <h3 class="text-sm font-medium text-[var(--text-muted)]">
+            {{ showSimplified
+              ? `Settle up in ${plan.length} transfer${plan.length === 1 ? '' : 's'}`
+              : 'Who owes whom' }}
+          </h3>
+          <ul class="mt-2 flex flex-col gap-2 text-sm">
+            <li
+              v-for="transfer in plan"
+              :key="`${transfer.fromMemberId}-${transfer.toMemberId}`"
+              class="flex items-center justify-between gap-2"
+            >
+              <span class="flex min-w-0 items-center gap-2 truncate">
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full"
+                  :style="{ backgroundColor: colourOf(transfer.fromMemberId) }"
+                  aria-hidden="true"
+                />
+                <span class="truncate">
+                  {{ memberName(transfer.fromMemberId) }} pays
+                  {{ memberName(transfer.toMemberId) }}
+                </span>
+              </span>
+              <RouterLink
+                :to="{
+                  name: 'settle',
+                  params: { groupId: group.id },
+                  query: {
+                    from: transfer.fromMemberId,
+                    to: transfer.toMemberId,
+                    amount: transfer.amount.toFixed(2),
+                  },
+                }"
+                class="btn btn-press btn-secondary min-h-0 shrink-0 px-2 py-1 text-xs"
+              >
+                {{ formatMoney(transfer.amount, currency) }}
+              </RouterLink>
+            </li>
+          </ul>
+        </div>
       </section>
 
       <section>

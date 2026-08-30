@@ -178,3 +178,59 @@ describe('ExpenseView', () => {
     expect(textOf(wrapper)).toContain('not on this device')
   })
 })
+
+describe('ExpenseView comments', () => {
+  it('offers to delete a comment you wrote', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    await wrapper.find('input[type="text"]').setValue('Mine')
+    await wrapper.find('form').trigger('submit')
+    await waitFor(() => textOf(wrapper).includes('Mine'))
+
+    expect(wrapper.find('[data-testid="delete-comment"]').exists()).toBe(true)
+  })
+
+  it('deletes it', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    await wrapper.find('input[type="text"]').setValue('Mine')
+    await wrapper.find('form').trigger('submit')
+    await waitFor(() => textOf(wrapper).includes('Mine'))
+
+    await wrapper.find('[data-testid="delete-comment"]').trigger('click')
+    await waitFor(() => !textOf(wrapper).includes('Mine'))
+
+    expect(textOf(wrapper)).toContain('Comments (0)')
+  })
+
+  it('does not offer to delete someone else comment', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense()],
+      comments: [
+        {
+          id: 'comment-other',
+          expenseId: 'expense-1',
+          groupId: GROUP_ID,
+          authorMemberId: BOB,
+          parentCommentId: null,
+          body: 'Not mine',
+          createdAt: '2026-01-05T13:00:00.000Z',
+          isDeleted: false,
+          vectorClock: {},
+          pending: false,
+        },
+      ],
+    })
+    await settle()
+
+    expect(textOf(wrapper)).toContain('Not mine')
+    expect(wrapper.find('[data-testid="delete-comment"]').exists()).toBe(false)
+  })
+})

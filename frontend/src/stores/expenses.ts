@@ -307,6 +307,41 @@ export const useExpensesStore = defineStore('expenses', () => {
     return entity
   }
 
+  /**
+   * Removes a comment. The server allows only its author, or an admin.
+   *
+   * A tombstone rather than a delete, like everything else here: a device still
+   * offline has to learn the comment is gone rather than keep showing it.
+   */
+  async function removeComment(commentId: string): Promise<void> {
+    const existing = await db.comments.get(commentId)
+    if (!existing || existing.isDeleted) {
+      throw new Error('That comment is not on this device.')
+    }
+
+    const tombstoned = { ...existing, isDeleted: true, pending: true }
+    await db.comments.put(tombstoned)
+    replaceComment(tombstoned)
+
+    await requireSync().enqueue({
+      entityType: 'ExpenseComment',
+      entityId: commentId,
+      operation: 'Delete',
+      groupId: existing.groupId,
+      payload: { id: commentId },
+    })
+
+    await refreshPendingCount()
+    syncSoon()
+  }
+
+  function replaceComment(comment: LocalComment): void {
+    const index = comments.value.findIndex((candidate) => candidate.id === comment.id)
+    if (index >= 0) comments.value[index] = comment
+    else comments.value.push(comment)
+    comments.value = [...comments.value]
+  }
+
   async function settle(draft: SettlementDraft): Promise<LocalSettlement> {
     if (!(draft.amount > 0)) throw new Error('A settlement amount must be greater than zero.')
     if (draft.fromMemberId === draft.toMemberId) {
@@ -589,6 +624,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     edit,
     remove,
     comment,
+    removeComment,
     settle,
     balanceFor,
     settleUpPlan,

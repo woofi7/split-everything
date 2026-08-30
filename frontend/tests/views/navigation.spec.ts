@@ -6,7 +6,6 @@ import AddExpenseView from '@/views/AddExpenseView.vue'
 import ConflictsView from '@/views/ConflictsView.vue'
 import ExpenseView from '@/views/ExpenseView.vue'
 import GroupSettingsView from '@/views/GroupSettingsView.vue'
-import GroupView from '@/views/GroupView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import ImportView from '@/views/ImportView.vue'
 import JoinView from '@/views/JoinView.vue'
@@ -69,7 +68,6 @@ const api = () =>
  */
 const inApp: Array<[string, Component]> = [
   ['Dashboard', DashboardView],
-  ['Group', GroupView],
   ['Group settings', GroupSettingsView],
   ['New group', NewGroupView],
   ['Add expense', AddExpenseView],
@@ -94,7 +92,6 @@ const preAuth: Array<[string, Component]> = [
  * without a back button the only way out is the browser's own.
  */
 const subScreens: Array<[string, Component, string]> = [
-  ['Group', GroupView, 'Dashboard'],
   ['Group settings', GroupSettingsView, 'Roommates'],
   ['New group', NewGroupView, 'Dashboard'],
   ['Expense', ExpenseView, 'Roommates'],

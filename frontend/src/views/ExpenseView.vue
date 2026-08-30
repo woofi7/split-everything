@@ -6,6 +6,7 @@ import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
+import { memberColor, memberColors } from '@/domain/memberColors'
 
 const route = useRoute()
 const router = useRouter()
@@ -37,6 +38,22 @@ const memberName = (memberId: string) =>
 const myMemberId = computed(() =>
   auth.user ? groups.myMemberId(groupId.value, auth.user.id) : null,
 )
+
+const colours = computed(() =>
+  memberColors(groups.membersOf(groupId.value).map((member) => member.id)),
+)
+
+const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
+
+async function removeComment(commentId: string): Promise<void> {
+  error.value = null
+
+  try {
+    await expenses.removeComment(commentId)
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not delete that comment.'
+  }
+}
 
 async function postComment(): Promise<void> {
   error.value = null
@@ -127,11 +144,31 @@ async function remove(): Promise<void> {
         </h2>
 
         <ul v-if="comments.length > 0" class="mb-3 flex flex-col gap-3 text-sm">
-          <li v-for="comment in comments" :key="comment.id">
-            <p class="text-xs text-[var(--text-muted)]">
-              {{ memberName(comment.authorMemberId) }}
-            </p>
-            <p>{{ comment.body }}</p>
+          <li v-for="comment in comments" :key="comment.id" class="flex items-start gap-2">
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full"
+                  :style="{ backgroundColor: colourOf(comment.authorMemberId) }"
+                  aria-hidden="true"
+                />
+                {{ memberName(comment.authorMemberId) }}
+              </span>
+              <span class="block">{{ comment.body }}</span>
+            </span>
+
+            <!-- Only the author. A wrong amount can be corrected; a sentence
+                 cannot be unsaid, so being unable to take one back is worse. -->
+            <button
+              v-if="comment.authorMemberId === myMemberId"
+              type="button"
+              data-testid="delete-comment"
+              class="btn btn-press btn-quiet min-h-0 shrink-0 px-2 py-1 text-xs"
+              :aria-label="`Delete your comment: ${comment.body}`"
+              @click="removeComment(comment.id)"
+            >
+              Delete
+            </button>
           </li>
         </ul>
 
