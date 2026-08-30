@@ -52,6 +52,15 @@ public sealed record CsvPreviewRequest(
     // the people in it have their own accounts here.
     IReadOnlyDictionary<string, Guid>? MemberUserMapping = null);
 
+/// <summary>
+/// One payer of a shared payment, and what they put in.
+///
+/// Settle Up lets several people pay for the same thing; an expense here has one
+/// payer. So a row with two payers becomes two expenses, and this is how the row
+/// carries them as far as the commit.
+/// </summary>
+public sealed record ImportPayerShare(string Name, Guid? MemberId, decimal Amount);
+
 public sealed record ParsedExpenseRow(
     int RowNumber,
     DateTimeOffset? SpentAt,
@@ -70,7 +79,10 @@ public sealed record ParsedExpenseRow(
     // export does not carry them, in which case the split is computed.
     IReadOnlyList<decimal>? SplitAmounts = null,
     // A settlement rather than an expense: someone paying down what they owed.
-    bool IsSettlement = false)
+    bool IsSettlement = false,
+    // Set only when the row names more than one payer, in which case Amount is
+    // their total and each of these becomes an expense of its own.
+    IReadOnlyList<ImportPayerShare>? Payers = null)
 {
     public bool IsCommittable => Problems.Count == 0 && SpentAt is not null && Amount is not null;
 }

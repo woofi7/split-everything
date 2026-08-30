@@ -254,98 +254,125 @@ public sealed class ImportService(
                 ? row.ParticipantMemberIds
                 : [row.PaidByMemberId!.Value];
 
-            // A transfer is one person paying another down, not money spent. Booked
-            // as an expense it would count once as spending and again as a share
-            // owed, moving both balances the wrong way.
-            if (row.IsSettlement)
+            // One expense per payer. Settle Up lets several people pay for the same
+            // thing and writes them as a pair of lists; an expense here has a single
+            // payer, so the row becomes one expense each, split in the proportion
+            // the export gave. The group's total and everybody's balance come out
+            // identical - which is the point - and both halves are visible in the
+            // list rather than hidden inside one card.
+            var payerParts = row.Payers is { Count: > 1 }
+                ? row.Payers
+                : [new ImportPayerShare(row.PaidByName ?? string.Empty, row.PaidByMemberId, row.Amount!.Value)];
+
+            foreach (var part in payerParts)
             {
-                var payee = participants.FirstOrDefault(id => id != row.PaidByMemberId!.Value);
-                if (payee == Guid.Empty)
+                if (part.MemberId is null) continue;
+
+                // Converted once for the row, then apportioned. The single-payer case
+                // keeps the currency service's own figure rather than recomputing it,
+                // so nothing about an ordinary import changes by a cent.
+                var partInBase = payerParts.Count == 1
+                    ? conversion.Amount
+                    : CurrencyPrecision.Round(part.Amount * conversion.Rate, group.BaseCurrency);
+
+                // A transfer is one person paying another down, not money spent. Booked
+                // as an expense it would count once as spending and again as a share
+                // owed, moving both balances the wrong way.
+                if (row.IsSettlement)
                 {
-                    skipped++;
-                    warnings.Add($"Row {row.RowNumber}: a transfer needs someone to pay.");
+                    var payee = participants.FirstOrDefault(id => id != part.MemberId.Value);
+                    if (payee == Guid.Empty)
+                    {
+                        skipped++;
+                        warnings.Add($"Row {row.RowNumber}: a transfer needs someone to pay.");
+                        continue;
+                    }
+
+                    var settlement = new Settlement
+                    {
+                        GroupId = groupId,
+                        FromMemberId = part.MemberId.Value,
+                        ToMemberId = payee,
+                        Amount = part.Amount,
+                        Currency = rowCurrency,
+                        AmountInBaseCurrency = partInBase,
+                        SettledAt = row.SpentAt!.Value,
+                        Note = row.Description,
+                        CreatedAt = clock.UtcNow,
+                        UpdatedAt = clock.UtcNow
+                    };
+                    db.Settlements.Add(settlement);
+
+                    await writer.RecordAsync(settlement, SyncEntityType.Settlement, groupId,
+                        SyncOperation.Create, deviceId, userId, SettlementService.SettlementPayload(settlement), ct: ct);
+
+                    createdSettlements++;
                     continue;
                 }
 
-                var settlement = new Settlement
+                // The export's own per-person amounts, used as weights rather than as
+                // final figures. An export can disagree with itself by a cent, and this
+                // one does: 53.99 split "27;27" adds up to 54.00. Weighting keeps the
+                // ratio the export intended while the shares still sum to the total,
+                // which the rest of the app requires and the sync path enforces. It is
+                // also what makes a shared payment divide correctly: the same weights
+                // against a smaller amount are that payer's share of it.
+                var exact = row.SplitAmounts;
+                var useExact = exact is { Count: > 0 }
+                               && exact.Count == participants.Count
+                               && exact.All(a => a >= 0m)
+                               && exact.Sum() > 0m;
+
+                var shares = useExact
+                    ? SplitCalculator.Calculate(part.Amount, rowCurrency, SplitType.Shares,
+                        participants.Select((id, index) => new SplitInput(id, exact![index])).ToList())
+                    : SplitCalculator.Calculate(part.Amount, rowCurrency, SplitType.Equal,
+                        participants.Select(id => new SplitInput(id, null)).ToList());
+
+                var expense = new Expense
                 {
                     GroupId = groupId,
-                    FromMemberId = row.PaidByMemberId!.Value,
-                    ToMemberId = payee,
-                    Amount = row.Amount!.Value,
+                    PaidByMemberId = part.MemberId.Value,
+                    Description = row.Description,
+                    Amount = part.Amount,
                     Currency = rowCurrency,
-                    AmountInBaseCurrency = conversion.Amount,
-                    SettledAt = row.SpentAt!.Value,
-                    Note = row.Description,
+                    AmountInBaseCurrency = partInBase,
+                    ExchangeRate = conversion.Rate,
+                    ExchangeRateAsOf = conversion.RateAsOf,
+                    SpentAt = row.SpentAt!.Value,
+                    SplitType = SplitType.Equal,
+                    OriginLineageId = group.LineageId,
+                    // The row is the unit a duplicate is judged by, so both halves of
+                    // a shared payment carry the row's fingerprint: re-importing the
+                    // file skips the row, not one half of it.
+                    ImportFingerprint = row.Fingerprint,
+                    ImportBatchId = batch.Id,
+                    Revision = 1,
                     CreatedAt = clock.UtcNow,
                     UpdatedAt = clock.UtcNow
                 };
-                db.Settlements.Add(settlement);
+                db.Expenses.Add(expense);
 
-                await writer.RecordAsync(settlement, SyncEntityType.Settlement, groupId,
-                    SyncOperation.Create, deviceId, userId, SettlementService.SettlementPayload(settlement), ct: ct);
-
-                createdSettlements++;
-                continue;
-            }
-
-            // The export's own per-person amounts, used as weights rather than as
-            // final figures. An export can disagree with itself by a cent, and this
-            // one does: 53.99 split "27;27" adds up to 54.00. Weighting keeps the
-            // ratio the export intended while the shares still sum to the total,
-            // which the rest of the app requires and the sync path enforces.
-            var exact = row.SplitAmounts;
-            var useExact = exact is { Count: > 0 }
-                           && exact.Count == participants.Count
-                           && exact.All(a => a >= 0m)
-                           && exact.Sum() > 0m;
-
-            var shares = useExact
-                ? SplitCalculator.Calculate(row.Amount!.Value, rowCurrency, SplitType.Shares,
-                    participants.Select((id, index) => new SplitInput(id, exact![index])).ToList())
-                : SplitCalculator.Calculate(row.Amount!.Value, rowCurrency, SplitType.Equal,
-                    participants.Select(id => new SplitInput(id, null)).ToList());
-
-            var expense = new Expense
-            {
-                GroupId = groupId,
-                PaidByMemberId = row.PaidByMemberId!.Value,
-                Description = row.Description,
-                Amount = row.Amount!.Value,
-                Currency = rowCurrency,
-                AmountInBaseCurrency = conversion.Amount,
-                ExchangeRate = conversion.Rate,
-                ExchangeRateAsOf = conversion.RateAsOf,
-                SpentAt = row.SpentAt!.Value,
-                SplitType = SplitType.Equal,
-                OriginLineageId = group.LineageId,
-                ImportFingerprint = row.Fingerprint,
-                ImportBatchId = batch.Id,
-                Revision = 1,
-                CreatedAt = clock.UtcNow,
-                UpdatedAt = clock.UtcNow
-            };
-            db.Expenses.Add(expense);
-
-            foreach (var share in shares)
-            {
-                db.ExpenseSplits.Add(new ExpenseSplit
+                foreach (var share in shares)
                 {
-                    ExpenseId = expense.Id,
-                    GroupId = groupId,
-                    MemberId = share.MemberId,
-                    Amount = share.Amount,
-                    AmountInBaseCurrency = CurrencyPrecision.Round(
-                        share.Amount * conversion.Rate, group.BaseCurrency),
-                    CreatedAt = clock.UtcNow,
-                    UpdatedAt = clock.UtcNow
-                });
+                    db.ExpenseSplits.Add(new ExpenseSplit
+                    {
+                        ExpenseId = expense.Id,
+                        GroupId = groupId,
+                        MemberId = share.MemberId,
+                        Amount = share.Amount,
+                        AmountInBaseCurrency = CurrencyPrecision.Round(
+                            share.Amount * conversion.Rate, group.BaseCurrency),
+                        CreatedAt = clock.UtcNow,
+                        UpdatedAt = clock.UtcNow
+                    });
+                }
+
+                await writer.RecordAsync(expense, SyncEntityType.Expense, groupId,
+                    SyncOperation.Create, deviceId, userId, ExpenseService.ExpensePayload(expense), ct: ct);
+
+                created++;
             }
-
-            await writer.RecordAsync(expense, SyncEntityType.Expense, groupId,
-                SyncOperation.Create, deviceId, userId, ExpenseService.ExpensePayload(expense), ct: ct);
-
-            created++;
         }
 
         batch.ExpenseCount = created;
@@ -578,7 +605,19 @@ public sealed class ImportService(
             var spentAt = CsvValueParser.ParseDate(Cell(raw, mapping.DateColumn), mapping.DateFormat);
             if (spentAt is null) problems.Add("the date could not be read");
 
-            var amount = CsvValueParser.ParseAmount(Cell(raw, mapping.AmountColumn), mapping.DecimalSeparator);
+            // Read as a list, because one cell can hold several: Settle Up writes a
+            // payment shared between people as "40;25", one figure per payer. A
+            // single amount is a list of one, so this is the same path for both.
+            var amounts = CsvValueParser.ParseAmountList(
+                Cell(raw, mapping.AmountColumn), mapping.DecimalSeparator);
+
+            decimal? amount = amounts.Count switch
+            {
+                0 => null,
+                1 => amounts[0],
+                _ => amounts.Sum()
+            };
+
             if (amount is null) problems.Add("the amount could not be read");
             else if (amount == 0m) problems.Add("the amount is zero");
 
@@ -591,13 +630,44 @@ public sealed class ImportService(
             if (string.IsNullOrWhiteSpace(rowCurrency) || rowCurrency.Length != 3)
                 rowCurrency = fallbackCurrency?.ToUpperInvariant();
 
-            var payerName = mapping.PaidByColumn is { } payerColumn
-                ? CsvValueParser.ParseNameList(Cell(raw, payerColumn)).FirstOrDefault()
-                : null;
+            var payerNames = mapping.PaidByColumn is { } payerColumn
+                ? CsvValueParser.ParseNameList(Cell(raw, payerColumn))
+                : [];
 
+            var payerName = payerNames.FirstOrDefault();
             var payerId = payerName is null ? null : Resolve(payerName, nameMapping, members);
             if (payerName is null) problems.Add("no payer was named");
             else if (payerId is null) problems.Add($"the payer {payerName} is not a member yet");
+
+            // Several payers, each with their own figure. Flagged rather than
+            // guessed when the two lists disagree: a row that says who paid without
+            // saying how much each of them put in cannot be divided, and inventing
+            // a division would be wrong in a way nobody would see.
+            //
+            // Decided by the amount cell alone. A payer cell can hold a comma for
+            // reasons that have nothing to do with sharing - a name written surname
+            // first - and the list of names is split on commas too, so reading two
+            // names as two payers would flag ordinary rows as unsplittable.
+            List<ImportPayerShare>? payers = null;
+            if (amounts.Count > 1)
+            {
+                if (amounts.Count != payerNames.Count)
+                {
+                    problems.Add(
+                        $"the row names {payerNames.Count} payers and {amounts.Count} amounts");
+                }
+                else
+                {
+                    payers = [];
+                    for (var payer = 0; payer < payerNames.Count; payer++)
+                    {
+                        var name = payerNames[payer];
+                        var id = Resolve(name, nameMapping, members);
+                        if (id is null) problems.Add($"the payer {name} is not a member yet");
+                        payers.Add(new ImportPayerShare(name, id, amounts[payer]));
+                    }
+                }
+            }
 
             // Two export shapes: a single "for whom" cell, or one column per member.
             var participantNames = new List<string>();
@@ -649,8 +719,11 @@ public sealed class ImportService(
 
             rows.Add(new ParsedExpenseRow(
                 i + 1, spentAt, description, amount, rowCurrency,
-                payerName, payerId, participantNames, participantIds,
-                fingerprint, false, null, problems, splitAmounts, isSettlement));
+                // Every payer in the name, so a preview of a shared payment does not
+                // read as though one person covered the lot.
+                payers is null ? payerName : string.Join(", ", payers.Select(p => p.Name)),
+                payerId, participantNames, participantIds,
+                fingerprint, false, null, problems, splitAmounts, isSettlement, payers));
         }
 
         return rows;
