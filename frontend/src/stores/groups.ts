@@ -265,6 +265,28 @@ export const useGroupsStore = defineStore('groups', () => {
   }
 
   /**
+   * Folds one member into another, and refreshes the group over the answer.
+   *
+   * Everything the source paid, owed, was owed and said becomes the target's, and
+   * the source is removed. There is no undo: nothing records which rows moved, so
+   * nothing can move them back.
+   */
+  async function mergeMembers(
+    groupId: string,
+    sourceMemberId: string,
+    targetMemberId: string,
+  ): Promise<void> {
+    const dto = await requireApi().post<GroupSummaryDto>(`/groups/${groupId}/members/merge`, {
+      sourceMemberId,
+      targetMemberId,
+    })
+
+    const local = toLocalGroup(dto, groups.value)
+    await db.groups.put(local)
+    upsert(local)
+  }
+
+  /**
    * People with an account who are not in this group yet.
    *
    * Read on demand rather than cached: the point of the list is to be current,
@@ -321,6 +343,7 @@ export const useGroupsStore = defineStore('groups', () => {
     unarchive,
     setDefaultSplit,
     addUserMember,
+    mergeMembers,
     addableUsers,
     removeMember,
     membersOf,

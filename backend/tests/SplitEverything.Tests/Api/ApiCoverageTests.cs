@@ -99,6 +99,23 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
     }
 
     [Fact]
+    public async Task Members_can_be_merged_over_http()
+    {
+        await SignInAsync();
+        var group = await CreateGroupAsync("Roommates", "Bob", "Bobby");
+        var bob = group.Members.First(m => m.DisplayName == "Bob");
+        var bobby = group.Members.First(m => m.DisplayName == "Bobby");
+
+        var response = await Client.PostAsJsonAsync($"/api/groups/{group.Id}/members/merge",
+            new MergeMembersRequest(bobby.Id, bob.Id), Json);
+
+        response.EnsureSuccessStatusCode();
+        var merged = await response.Content.ReadFromJsonAsync<GroupDto>(Json);
+        merged!.Members.ShouldNotContain(m =>
+            m.Id == bobby.Id && m.Status == MembershipStatus.Active);
+    }
+
+    [Fact]
     public async Task A_member_can_be_added_and_removed_over_http()
     {
         await SignInAsync();

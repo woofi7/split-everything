@@ -43,6 +43,12 @@ public sealed class GroupsController(
     public async Task<ActionResult<GroupDto>> Unarchive(Guid groupId, CancellationToken ct)
         => Ok(await groups.UnarchiveAsync(UserId, groupId, ct));
 
+    /// <summary>Folds one member into another. Cannot be undone.</summary>
+    [HttpPost("{groupId:guid}/members/merge")]
+    public async Task<ActionResult<GroupDto>> MergeMembers(
+        Guid groupId, MergeMembersRequest request, CancellationToken ct)
+        => Ok(await groups.MergeMembersAsync(UserId, groupId, request, ct));
+
     [HttpPost("{groupId:guid}/members/user")]
     public async Task<ActionResult<GroupMemberDto>> AddUserMember(
         Guid groupId, AddUserMemberRequest request, CancellationToken ct)

@@ -421,4 +421,127 @@ describe('GroupSettingsView', () => {
 
     expect(textOf(wrapper)).toContain('archived')
   })
+
+  /**
+   * Folding two people into one.
+   *
+   * The same person can be in a group twice: a name a CSV import invented, and
+   * the account they later signed up with. Both halves carry expenses, so neither
+   * can just be deleted.
+   *
+   * Everything still works afterwards, which is exactly why a mistake here is
+   * invisible: the balances are simply wrong from then on, and nothing records
+   * what they used to be. So the warning is part of the feature.
+   */
+  describe('merging two people', () => {
+    it('offers a merge on someone who is not the owner', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+
+      expect(wrapper.find(`[data-testid="merge-${BOB}"]`).exists()).toBe(true)
+    })
+
+    it('does not offer to merge the owner away', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+
+      // A group has to keep an owner, and merging the other way round does the
+      // same job.
+      const owner = testGroup().members.find((m) => m.role === 'Owner')!
+      expect(wrapper.find(`[data-testid="merge-${owner.id}"]`).exists()).toBe(false)
+    })
+
+    it('asks nothing of the server until it is confirmed', async () => {
+      const client = api()
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="merge-confirm"]').exists()).toBe(true)
+      expect(client.post).not.toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}/members/merge`,
+        expect.anything(),
+      )
+    })
+
+    it('says that it cannot be undone', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+
+      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="merge-confirm"]').text())
+        .toContain('cannot be undone')
+    })
+
+    it('will not merge until a target is chosen', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+
+      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
+      await settle(1)
+
+      const confirm = wrapper.find('[data-testid="merge-confirm-button"]')
+      expect(confirm.attributes('disabled')).toBeDefined()
+    })
+
+    it('does not offer to merge someone into themselves', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+
+      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
+      await settle(1)
+
+      const options = wrapper
+        .findAll('[data-testid="merge-target"] option')
+        .map((option) => option.attributes('value'))
+
+      expect(options).not.toContain(BOB)
+    })
+
+    it('merges once confirmed', async () => {
+      const client = api()
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
+      await settle(1)
+      const owner = testGroup().members.find((m) => m.role === 'Owner')!
+      await wrapper.find('[data-testid="merge-target"]').setValue(owner.id)
+      await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
+      await settle()
+
+      expect(client.post).toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}/members/merge`,
+        { sourceMemberId: BOB, targetMemberId: owner.id },
+      )
+    })
+
+    it('can be backed out of', async () => {
+      const client = api()
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
+      await settle(1)
+      await wrapper.findAll('button').find((b) => b.text() === 'Cancel')!.trigger('click')
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="merge-confirm"]').exists()).toBe(false)
+      expect(client.post).not.toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}/members/merge`,
+        expect.anything(),
+      )
+    })
+
+    it('reports a refusal from the server', async () => {
+      const client = api()
+      client.post.mockRejectedValue(new Error('The group owner cannot be merged away.'))
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+
+      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
+      await settle(1)
+      const owner = testGroup().members.find((m) => m.role === 'Owner')!
+      await wrapper.find('[data-testid="merge-target"]').setValue(owner.id)
+      await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
+      await settle()
+
+      expect(textOf(wrapper)).toContain('cannot be merged away')
+    })
+  })
 })
