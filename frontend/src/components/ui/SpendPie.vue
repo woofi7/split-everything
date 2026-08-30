@@ -75,12 +75,36 @@ const description = computed(() =>
 </script>
 
 <template>
-  <div v-if="wedges.length === 0" class="text-sm text-[var(--text-muted)]">
-    Nothing spent yet.
-  </div>
+  <!--
+    Names on the left under the heading, chart on the right. The chart is beside
+    the heading as well as the list, which is what lets it be the tallest thing in
+    the card without the card growing: the words fill the space it needs anyway.
+  -->
+  <div class="flex items-center gap-4">
+    <div class="min-w-0 flex-1">
+      <p v-if="$slots.heading" class="mb-3 text-sm text-[var(--text-muted)]">
+        <slot name="heading" />
+      </p>
 
-  <div v-else class="flex items-center gap-4">
+      <p v-if="wedges.length === 0" class="text-sm text-[var(--text-muted)]">
+        Nothing spent yet.
+      </p>
+
+      <ul v-else class="flex min-w-0 flex-col gap-1 text-sm">
+        <li v-for="wedge in wedges" :key="wedge.id" class="flex items-center gap-2">
+          <span
+            class="h-2.5 w-2.5 shrink-0 rounded-full"
+            :style="{ backgroundColor: wedge.colorHex }"
+            aria-hidden="true"
+          />
+          <span class="min-w-0 flex-1 truncate">{{ wedge.label }}</span>
+          <span class="shrink-0 text-[var(--text-muted)]">{{ percent(wedge.share) }}</span>
+        </li>
+      </ul>
+    </div>
+
     <svg
+      v-if="wedges.length > 0"
       viewBox="0 0 140 140"
       class="h-32 w-32 shrink-0"
       role="img"
@@ -113,17 +137,5 @@ const description = computed(() =>
         {{ formatMoney(total, props.currency) }}
       </text>
     </svg>
-
-    <ul class="min-w-0 flex-1 flex-col gap-1 text-sm">
-      <li v-for="wedge in wedges" :key="wedge.id" class="flex items-center gap-2">
-        <span
-          class="h-2.5 w-2.5 shrink-0 rounded-full"
-          :style="{ backgroundColor: wedge.colorHex }"
-          aria-hidden="true"
-        />
-        <span class="min-w-0 flex-1 truncate">{{ wedge.label }}</span>
-        <span class="shrink-0 text-[var(--text-muted)]">{{ percent(wedge.share) }}</span>
-      </li>
-    </ul>
   </div>
 </template>

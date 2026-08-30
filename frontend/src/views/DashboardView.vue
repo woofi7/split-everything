@@ -317,8 +317,9 @@ const spentOn = (iso: string) =>
     <template v-if="group">
       <!-- The shape of the group's spending, first: it is what the screen is for. -->
       <section class="surface-card mb-4 p-4">
-        <p class="mb-3 text-sm text-[var(--text-muted)]">Who paid</p>
-        <SpendPie :slices="paidByMember" :currency="currency" />
+        <SpendPie :slices="paidByMember" :currency="currency">
+          <template #heading>Who paid</template>
+        </SpendPie>
       </section>
 
       <!--
