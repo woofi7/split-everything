@@ -106,6 +106,21 @@ export interface EnqueueRequest {
 
 /** Guards against a server that always claims there is more to pull. */
 const MAX_PULL_PAGES = 50
+
+/**
+ * Whether the server refused the request itself, rather than being unreachable.
+ *
+ * A refusal will be refused again just as firmly, so retrying it forever holds
+ * the rows it touched hostage. 401 is a session to renew, 408 and 429 are "not
+ * now", and a 5xx is the server's own problem: all of those are worth another go.
+ */
+function isRefusal(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status
+  if (typeof status !== 'number') return false
+  if (status === 401 || status === 408 || status === 429) return false
+
+  return status >= 400 && status < 500
+}
 const PULL_BATCH_SIZE = 500
 
 /**
@@ -212,16 +227,21 @@ export class SyncEngine {
       return result
     } catch (error) {
       // Nothing is discarded: the queue is the durable record of the user's work.
+      // But a refusal is not a connection problem, and treating the two alike is
+      // what left rows waiting on a request that would never be accepted.
       const message = error instanceof Error ? error.message : String(error)
-      await Promise.all(
-        pending.map((operation) =>
-          db.outbox.update(operation.operationId, {
-            status: 'pending',
-            attempts: operation.attempts + 1,
-            lastError: message,
-          }),
-        ),
-      )
+      const refused = isRefusal(error)
+
+      for (const operation of pending) {
+        await db.outbox.update(operation.operationId, {
+          status: refused ? 'rejected' : 'pending',
+          attempts: operation.attempts + 1,
+          lastError: message,
+        })
+
+        if (refused) await this.release(operation)
+      }
+
       return empty
     }
   }
@@ -250,6 +270,7 @@ export class SyncEngine {
           attempts: operation.attempts + 1,
           lastError: `${rejection.code}: ${rejection.reason}`,
         })
+        await this.release(operation)
         continue
       }
 
@@ -278,6 +299,67 @@ export class SyncEngine {
 
     for (const [groupId, serverSeq] of Object.entries(result.groupCursors)) {
       await setCursor(groupId, serverSeq)
+    }
+  }
+
+  /**
+   * Lets go of a local row whose change the server will not take.
+   *
+   * The marker is the whole problem: a row that claims to be unsent is skipped by
+   * every pull, on purpose, so that a remote revision cannot overwrite work the
+   * person can still see. Leave the marker on a change that has been refused and
+   * that protection becomes a trap. The row is frozen wrong, the server can never
+   * correct it, and a refused deletion in particular hides the expense on this
+   * device for good.
+   *
+   * So the row goes back to being the server's to describe. What the person tried
+   * to do is not lost: the operation stays in the queue as refused, with its
+   * payload and the reason, for the screen that lists those.
+   */
+  private async release(operation: OutboxOperation): Promise<void> {
+    const stillQueued = await db.outbox
+      .where('entityId')
+      .equals(operation.entityId)
+      .filter((row) => row.status === 'pending' || row.status === 'inflight')
+      .count()
+
+    // A later edit to the same thing is still going: it owns the row now.
+    if (stillQueued > 0) return
+
+    // A creation the server refused exists nowhere else, so there is nothing for a
+    // pull to replace it with. Left on screen it would keep counting towards
+    // balances that no one else can see.
+    if (operation.operation === 'Create') {
+      switch (operation.entityType) {
+        case 'Expense':
+          await db.expenses.delete(operation.entityId)
+          break
+        case 'Settlement':
+          await db.settlements.delete(operation.entityId)
+          break
+        case 'ExpenseComment':
+          await db.comments.delete(operation.entityId)
+          break
+      }
+      return
+    }
+
+    // Anything else: unmark it, and bring back what a refused deletion hid, so
+    // the next pull can replace it with whatever the server actually holds.
+    const restore = operation.operation === 'Delete'
+      ? { pending: false, isDeleted: false }
+      : { pending: false }
+
+    switch (operation.entityType) {
+      case 'Expense':
+        await db.expenses.update(operation.entityId, restore)
+        break
+      case 'Settlement':
+        await db.settlements.update(operation.entityId, restore)
+        break
+      case 'ExpenseComment':
+        await db.comments.update(operation.entityId, restore)
+        break
     }
   }
 
