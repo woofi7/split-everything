@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupCard from '@/components/groups/GroupCard.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SpendPie from '@/components/ui/SpendPie.vue'
+import GroupSwitcher from '@/components/groups/GroupSwitcher.vue'
+import { memberColors } from '@/domain/memberColors'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
@@ -16,22 +18,55 @@ const auth = useAuthStore()
 onMounted(async () => {
   await groups.loadAll()
   await expenses.hydrate()
+  await loadMainGroup()
 })
 
-const currency = computed(() => auth.user?.defaultCurrency ?? 'CAD')
+/**
+ * The list endpoint counts members but does not name them, and the pie is by
+ * person, so the main group needs a detail read. Watched as well as loaded, since
+ * switching group is the whole point of the control above it.
+ */
+async function loadMainGroup(): Promise<void> {
+  if (groups.mainGroupId) await groups.get(groups.mainGroupId)
+}
+
+watch(() => groups.mainGroupId, () => void loadMainGroup())
+
+const currency = computed(() => groups.mainGroup?.baseCurrency ?? auth.user?.defaultCurrency ?? 'CAD')
 
 /**
- * Spend per group, for the pie. Archived groups are left out: the chart is about
- * where money is going, and a frozen group is not going anywhere.
+ * Who spent what in the main group.
+ *
+ * By person rather than by group: a dashboard about one group answers "who has
+ * been paying", which is the question a shared account actually has. Totals per
+ * group are on each card already, and the group balance is above.
+ *
+ * Money paid, not shares owed, because that is what "spending" means to the person
+ * who handed over the card.
  */
-const spendByGroup = computed(() =>
-  groups.visibleGroups.map((group) => ({
-    id: group.id,
-    label: group.name,
-    amount: group.totalSpend,
-    colorHex: group.colorHex,
-  })),
-)
+const spendByMember = computed(() => {
+  const group = groups.mainGroup
+  if (!group) return []
+
+  const paid = new Map<string, number>()
+  for (const expense of expenses.forGroup(group.id)) {
+    paid.set(
+      expense.paidByMemberId,
+      (paid.get(expense.paidByMemberId) ?? 0) + expense.amountInBaseCurrency,
+    )
+  }
+
+  const colours = memberColors(group.members.map((member) => member.id))
+
+  return group.members
+    .map((member) => ({
+      id: member.id,
+      label: member.displayName,
+      amount: paid.get(member.id) ?? 0,
+      colorHex: colours[member.id],
+    }))
+    .sort((left, right) => right.amount - left.amount)
+})
 </script>
 
 <template>
@@ -61,10 +96,17 @@ const spendByGroup = computed(() =>
       />
     </section>
 
-    <!-- Where the money went, before the list of where to look. -->
-    <section v-if="groups.visibleGroups.length > 0" class="surface-card mb-4 p-4">
-      <p class="mb-3 text-sm text-[var(--text-muted)]">Spending by group</p>
-      <SpendPie :slices="spendByGroup" :currency="currency" />
+    <!-- Which group everything else on this screen is about. -->
+    <section v-if="groups.visibleGroups.length > 1" class="mb-4">
+      <GroupSwitcher />
+    </section>
+
+    <!-- Who has been paying, before the list of where to look. -->
+    <section v-if="groups.mainGroup" class="surface-card mb-4 p-4">
+      <p class="mb-3 text-sm text-[var(--text-muted)]">
+        Who paid in {{ groups.mainGroup.name }}
+      </p>
+      <SpendPie :slices="spendByMember" :currency="currency" />
     </section>
 
     <div v-if="groups.visibleGroups.length > 0" class="flex flex-col gap-3">

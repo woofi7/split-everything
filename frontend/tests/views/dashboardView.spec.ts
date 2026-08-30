@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import DashboardView from '@/views/DashboardView.vue'
-import { GROUP_ID, fakeApi, mountView, settle, testGroup, textOf } from '../support/viewHarness'
+import {
+  ALICE,
+  BOB,
+  GROUP_ID,
+  fakeApi,
+  mountView,
+  settle,
+  testExpense,
+  testGroup,
+  textOf,
+} from '../support/viewHarness'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: {}, query: {} }),
@@ -104,30 +114,30 @@ describe('DashboardView', () => {
 })
 
 describe('DashboardView spending pie', () => {
-  it('shows how the spending is split across groups', async () => {
+  it('shows who paid in the main group, not which group', async () => {
     const { wrapper } = await mountView(DashboardView, {
-      api: fakeApi({
-        '/groups': () => [
-          { ...testGroup(), id: 'g1', name: 'Roommates', totalSpend: 600, colorHex: '#4f46e5' },
-          { ...testGroup(), id: 'g2', name: 'Ski trip', totalSpend: 400, colorHex: '#0ea5e9' },
-        ],
-      }),
-      groups: [],
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [
+        testExpense({ id: 'e1', paidByMemberId: ALICE, amount: 60, amountInBaseCurrency: 60 }),
+        testExpense({ id: 'e2', paidByMemberId: BOB, amount: 40, amountInBaseCurrency: 40 }),
+      ],
     })
+    await settle()
 
+    // The question a shared account has is who has been paying.
     const text = textOf(wrapper)
-    expect(text).toContain('Roommates')
+    expect(text).toContain('Who paid in Roommates')
+    expect(text).toContain('Alice')
     expect(text).toContain('60%')
     expect(text).toContain('40%')
   })
 
   it('says nothing has been spent rather than drawing an empty circle', async () => {
     const { wrapper } = await mountView(DashboardView, {
-      api: fakeApi({
-        '/groups': () => [{ ...testGroup(), totalSpend: 0 }],
-      }),
-      groups: [],
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [],
     })
+    await settle()
 
     expect(textOf(wrapper)).toContain('Nothing spent yet')
   })
@@ -139,5 +149,22 @@ describe('DashboardView spending pie', () => {
     })
 
     expect(wrapper.find('svg[role="img"]').exists()).toBe(false)
+  })
+
+  it('offers a way to change which group the app is on', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({
+        '/groups': () => [
+          { ...testGroup(), id: 'group-1', name: 'Roommates' },
+          { ...testGroup(), id: 'group-2', name: 'Ski trip' },
+        ],
+      }),
+      groups: [],
+    })
+    await settle()
+
+    const switcher = wrapper.find('select[aria-label="Which group the app is on"]')
+    expect(switcher.exists()).toBe(true)
+    expect(switcher.text()).toContain('Ski trip')
   })
 })

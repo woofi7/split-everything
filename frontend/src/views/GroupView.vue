@@ -7,6 +7,7 @@ import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { formatMoney } from '@/domain/money'
 import type { LocalGroup } from '@/offline/db'
+import { memberColor, memberColors } from '@/domain/memberColors'
 
 const route = useRoute()
 const groups = useGroupsStore()
@@ -20,6 +21,17 @@ onMounted(async () => {
   group.value = await groups.get(groupId.value)
   await expenses.hydrate()
 })
+
+const colours = computed(() => memberColors((group.value?.members ?? []).map((m) => m.id)))
+
+const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
+
+/**
+ * Short and local: the year is noise for this year's expenses and the list is
+ * already in date order, so the day and month carry the meaning.
+ */
+const spentOn = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 
 const memberName = (memberId: string) =>
   group.value?.members.find((member) => member.id === memberId)?.displayName ?? 'Unknown'
@@ -126,8 +138,17 @@ const plan = computed(() =>
                   Waiting
                 </span>
               </span>
-              <span class="block truncate text-xs text-[var(--text-muted)]">
+              <span class="flex items-center gap-1.5 truncate text-xs text-[var(--text-muted)]">
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full"
+                  :style="{ backgroundColor: colourOf(expense.paidByMemberId) }"
+                  aria-hidden="true"
+                />
                 {{ memberName(expense.paidByMemberId) }} paid
+                <!-- The date, because a list of amounts with no dates cannot be
+                     reconciled against anything. -->
+                <span aria-hidden="true">-</span>
+                <span class="shrink-0">{{ spentOn(expense.spentAt) }}</span>
               </span>
             </span>
             <MoneyAmount :amount="expense.amount" :currency="expense.currency" size="sm" />

@@ -35,7 +35,9 @@ const splitTypes: Array<{ value: SplitType; label: string }> = [
 
 onMounted(async () => {
   await groups.loadAll()
-  await selectGroup(groupId.value || groups.visibleGroups[0]?.id || '')
+  // The main group, then whatever the query asked for, then anything at all. The
+  // query wins when it is there, because it means someone arrived from a group.
+  await selectGroup(groupId.value || groups.mainGroupId || groups.visibleGroups[0]?.id || '')
 })
 
 const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
