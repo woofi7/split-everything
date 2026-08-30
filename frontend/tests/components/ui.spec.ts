@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { RouterLinkStub, mount } from '@vue/test-utils'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SyncIndicator from '@/components/ui/SyncIndicator.vue'
 
@@ -63,13 +63,14 @@ describe('SyncIndicator', () => {
   })
 
   it('reports how many changes are waiting', () => {
-    const wrapper = mount(SyncIndicator, { props: { ...props, pendingCount: 3 } })
+    const wrapper = mount(SyncIndicator, { props: { ...props, pendingCount: 3 }, global: { stubs: { RouterLink: RouterLinkStub } } })
 
     expect(wrapper.text()).toContain('3 waiting')
   })
 
   it('says offline alongside the waiting count', () => {
     const wrapper = mount(SyncIndicator, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
       props: { ...props, pendingCount: 2, isOffline: true },
     })
 
@@ -79,19 +80,20 @@ describe('SyncIndicator', () => {
   })
 
   it('says offline on its own when nothing is queued', () => {
-    const wrapper = mount(SyncIndicator, { props: { ...props, isOffline: true } })
+    const wrapper = mount(SyncIndicator, { props: { ...props, isOffline: true }, global: { stubs: { RouterLink: RouterLinkStub } } })
 
     expect(wrapper.attributes('data-state')).toBe('offline')
   })
 
   it('shows syncing while a flush is in flight', () => {
-    const wrapper = mount(SyncIndicator, { props: { ...props, isSyncing: true } })
+    const wrapper = mount(SyncIndicator, { props: { ...props, isSyncing: true }, global: { stubs: { RouterLink: RouterLinkStub } } })
 
     expect(wrapper.attributes('data-state')).toBe('syncing')
   })
 
   it('puts anything needing attention above every other state', () => {
     const wrapper = mount(SyncIndicator, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
       props: { pendingCount: 5, rejectedCount: 1, isOffline: true, isSyncing: true },
     })
 
@@ -101,8 +103,45 @@ describe('SyncIndicator', () => {
     expect(wrapper.text()).toContain('attention')
   })
 
+  it('is a link to the screen that explains the count', () => {
+    const wrapper = mount(SyncIndicator, {
+      props: { ...props, pendingCount: 3 },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+
+    // The count is a question. The screen that answers it was two taps away under
+    // a heading nobody would think to look under.
+    const link = wrapper.findComponent(RouterLinkStub)
+    expect(link.exists()).toBe(true)
+    expect(link.props().to).toEqual({ name: 'conflicts' })
+    expect(link.text()).toContain('3 waiting to sync')
+  })
+
+  it('is a link when something needs attention too', () => {
+    const wrapper = mount(SyncIndicator, {
+      props: { ...props, rejectedCount: 1 },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+
+    expect(wrapper.findComponent(RouterLinkStub).props().to).toEqual({ name: 'conflicts' })
+  })
+
+  it('is plain text when there is nothing behind it', () => {
+    for (const state of [{}, { isSyncing: true }, { isOffline: true }]) {
+      const wrapper = mount(SyncIndicator, {
+        props: { ...props, ...state },
+        global: { stubs: { RouterLink: RouterLinkStub } },
+      })
+
+      // Syncing and offline on their own lead to an empty page, so they are not
+      // offered as somewhere to go.
+      expect(wrapper.findComponent(RouterLinkStub).exists()).toBe(false)
+      expect(wrapper.find('p').exists()).toBe(true)
+    }
+  })
+
   it('uses the singular for one rejected change', () => {
-    const wrapper = mount(SyncIndicator, { props: { ...props, rejectedCount: 1 } })
+    const wrapper = mount(SyncIndicator, { props: { ...props, rejectedCount: 1 }, global: { stubs: { RouterLink: RouterLinkStub } } })
 
     expect(wrapper.text()).toContain('1 change needs attention')
   })
