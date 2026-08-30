@@ -103,6 +103,25 @@ and `crypto.subtle` is secure-context only, so the app carries its own SHA-256 f
 that case. It is the same algorithm, tested against the published vectors and
 against `crypto.subtle` itself, because the hashes are compared with the server's.
 
+### Filling a development database
+
+`scripts/seed-demo-data.py` creates a couple of groups that look like they have
+been used: several months of expenses across real categories, more than one payer
+so the charts have something to show, a settlement and a comment.
+
+```bash
+python3 scripts/seed-demo-data.py --email you@example.com --name You
+```
+
+Everything goes through the API rather than into the tables, so the result is
+indistinguishable from a group people actually used: activity entries, sync log
+rows, vector clocks and balances all come out of the same code paths the app runs.
+Inserting rows directly produces a database that looks right and an activity feed
+that is empty, which this project has already been caught by once.
+
+It only sees the groups of the account it signs in as, so a group of the same name
+owned by someone else will not stop it creating another. It never deletes anything.
+
 ### Signing in locally
 
 `appsettings.Development.json` sets `Auth:AllowDevelopmentSignIn`, so the sign-in
