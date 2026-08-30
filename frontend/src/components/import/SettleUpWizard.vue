@@ -75,6 +75,28 @@ const target = ref<'new' | 'existing'>('new')
 const newGroupName = ref('')
 const existingGroupId = ref('')
 
+/**
+ * The destination as one value, for the dropdown over the rows.
+ *
+ * The step above asks it as a radio pair plus a name, which is the right shape
+ * when the answer is still being composed. Over the rows it is one question with
+ * one answer, so it is one control, reading and writing the same two refs rather
+ * than keeping a third.
+ */
+const destination = computed(() =>
+  target.value === 'new' ? 'new' : existingGroupId.value,
+)
+
+function chooseDestination(value: string): void {
+  if (value === 'new') {
+    target.value = 'new'
+    return
+  }
+
+  target.value = 'existing'
+  existingGroupId.value = value
+}
+
 /** Exported name -> member id, or null to create someone for it. */
 const nameMapping = ref<Record<string, string | null>>({})
 const skipped = ref<Set<number>>(new Set())
@@ -349,14 +371,38 @@ const dateOf = (value: string | null) =>
 
       <!-- Step four: the rows. -->
       <template v-if="preview">
-        <div class="surface-card p-3 text-sm">
-          {{ toImport }} to import, {{ skipped.size }} ignored
-          <template v-if="preview.duplicateCount > 0">
-            , {{ preview.duplicateCount }} already recorded
-          </template>
-          <template v-if="preview.problemCount > 0">
-            , {{ preview.problemCount }} need fixing
-          </template>
+        <div class="surface-card flex flex-col gap-3 p-3">
+          <p class="text-sm">
+            {{ toImport }} to import, {{ skipped.size }} ignored
+            <template v-if="preview.duplicateCount > 0">
+              , {{ preview.duplicateCount }} already recorded
+            </template>
+            <template v-if="preview.problemCount > 0">
+              , {{ preview.problemCount }} need fixing
+            </template>
+          </p>
+
+          <!--
+            Where the lot is going, next to the count of it. It is asked earlier as
+            well, but this is where the rows are actually read, and reading them
+            without knowing which group they are about to join is reading half the
+            question.
+          -->
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-[var(--text-muted)]">Import all of these into</span>
+            <select
+              :value="destination"
+              data-testid="destination"
+              class="tap-target rounded-lg border bg-[var(--surface)] px-3 text-sm"
+              style="border-color: var(--border)"
+              @change="chooseDestination(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="new">A new group: {{ newGroupName || 'unnamed' }}</option>
+              <option v-for="group in groups.visibleGroups" :key="group.id" :value="group.id">
+                {{ group.name }}
+              </option>
+            </select>
+          </label>
         </div>
 
         <ul class="flex flex-col gap-2">
@@ -366,7 +412,7 @@ const dateOf = (value: string | null) =>
             data-testid="row"
             :data-ignored="skipped.has(row.rowNumber) ? 'true' : 'false'"
             class="surface-card p-3 transition-opacity"
-            :class="skipped.has(row.rowNumber) ? 'opacity-40' : ''"
+            :class="skipped.has(row.rowNumber) ? 'opacity-25' : ''"
           >
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
@@ -378,12 +424,28 @@ const dateOf = (value: string | null) =>
                   {{ row.description }}
                 </p>
 
-                <p class="text-xs text-[var(--text-muted)]">
+                <!--
+                  Who it came from and who it was for, said rather than implied.
+                  These were a tail on the date line, which is where the two things
+                  a person checks a row against were hardest to read.
+
+                  A transfer names one person on each side; an expense names the
+                  payer and everybody who shared it.
+                -->
+                <dl class="mt-1 grid grid-cols-[2.5rem_1fr] gap-x-2 text-xs">
+                  <dt class="text-[var(--text-muted)]">From</dt>
+                  <dd data-testid="row-from" class="truncate">
+                    {{ row.paidByName ?? 'Not named' }}
+                  </dd>
+
+                  <dt class="text-[var(--text-muted)]">To</dt>
+                  <dd data-testid="row-to" class="truncate">
+                    {{ row.participantNames.length > 0 ? row.participantNames.join(', ') : 'Not named' }}
+                  </dd>
+                </dl>
+
+                <p class="mt-1 text-xs text-[var(--text-muted)]">
                   {{ dateOf(row.spentAt) }}
-                  <template v-if="row.paidByName"> - {{ row.paidByName }} paid</template>
-                  <template v-if="row.participantNames.length > 0">
-                    - {{ row.participantNames.join(', ') }}
-                  </template>
                 </p>
 
                 <p v-if="row.isSettlement" class="text-xs text-brand-400">
