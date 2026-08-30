@@ -52,9 +52,7 @@ const SPLIT_CHOICES = [
 
 const splitType = ref<SplitType>('Equal')
 const splitValues = ref<Record<string, number>>({})
-const isSavingSplit = ref(false)
-const splitError = ref<string | null>(null)
-const splitMessage = ref<string | null>(null)
+const isSaving = ref(false)
 
 /** Only the people who could be on an expense. */
 const activeMembers = computed(() =>
@@ -93,8 +91,8 @@ function readSplitFromGroup(): void {
 /** Seeds sensible numbers when the type changes, rather than leaving them blank. */
 function changeSplitType(next: SplitType): void {
   splitType.value = next
-  splitMessage.value = null
-  splitError.value = null
+  message.value = null
+  error.value = null
 
   if (next === 'Equal') return
 
@@ -108,26 +106,7 @@ function changeSplitType(next: SplitType): void {
   splitValues.value = seeded
 }
 
-async function saveSplit(): Promise<void> {
-  if (splitProblem.value) return
 
-  splitError.value = null
-  splitMessage.value = null
-  isSavingSplit.value = true
-
-  try {
-    await groups.setDefaultSplit(
-      groupId.value,
-      splitType.value,
-      splitNeedsValues.value ? splitValues.value : null,
-    )
-    splitMessage.value = 'Saved.'
-  } catch (caught) {
-    splitError.value = caught instanceof Error ? caught.message : 'Could not save that split.'
-  } finally {
-    isSavingSplit.value = false
-  }
-}
 
 /**
  * Which of these people is the one reading the list.
@@ -298,20 +277,63 @@ const group = computed(() => groups.groups.find((candidate) => candidate.id === 
 // reads it during setup, so above it this is a const in its dead zone.
 watch(group, readSplitFromGroup)
 
+/**
+ * Whether anything on this screen differs from the group as it stands.
+ *
+ * The name, the icon and the default split are settings: they are edited and then
+ * kept, so they are saved together, once. Adding a person, removing one, changing
+ * a colour and creating an invite are actions rather than settings, and stay
+ * immediate.
+ */
+const isDirty = computed(() => {
+  const current = group.value
+  if (!current) return false
+
+  if (name.value.trim() !== current.name) return true
+  if ((iconName.value ?? null) !== (current.iconName ?? null)) return true
+
+  const storedType = current.defaultSplitType ?? 'Equal'
+  if (splitType.value !== storedType) return true
+  if (!splitNeedsValues.value) return false
+
+  const stored = current.defaultSplitValues ?? {}
+  return activeMembers.value.some(
+    (member) => (stored[member.id] ?? null) !== (splitValues.value[member.id] ?? null),
+  )
+})
+
+/**
+ * Saves the lot in one request.
+ *
+ * The group's fields and its default split are the same PATCH, so there is no
+ * reason for two round trips or for one of them to succeed alone.
+ */
 async function save(): Promise<void> {
+  if (splitProblem.value) return
+
   error.value = null
+  message.value = null
+  isSaving.value = true
+
   try {
-    await groups.update(groupId.value, { name: name.value, iconName: iconName.value })
+    await groups.update(groupId.value, {
+      name: name.value,
+      iconName: iconName.value,
+      defaultSplitType: splitType.value,
+      defaultSplitValues: splitNeedsValues.value ? splitValues.value : null,
+    })
     message.value = 'Saved.'
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not save the group.'
+  } finally {
+    isSaving.value = false
   }
 }
 
-/** Choosing an icon saves straight away: there is no other reason to be here. */
-async function chooseIcon(next: string | null): Promise<void> {
+/** Chosen, not saved: the one save at the foot of the screen does that. */
+function chooseIcon(next: string | null): void {
   iconName.value = next
-  await save()
+  isPickingIcon.value = false
 }
 
 async function loadAddable(): Promise<void> {
@@ -442,9 +464,9 @@ async function unarchive(): Promise<void> {
         </label>
       </div>
 
-      <button type="submit" class="btn btn-press btn-primary">
-        Save
-      </button>
+      <!-- Enter still saves, but the button that does it is at the foot of the
+           screen, where it can speak for every setting rather than just these. -->
+      <button type="submit" class="hidden" aria-hidden="true" tabindex="-1" />
     </form>
 
     <!--
@@ -527,24 +549,9 @@ async function unarchive(): Promise<void> {
 
       <p v-if="splitProblem" class="mt-2 text-xs text-owing" role="alert">{{ splitProblem }}</p>
 
-      <button
-        v-if="canAdminister"
-        type="button"
-        data-testid="save-split"
-        class="btn btn-press btn-secondary mt-3"
-        style="border-color: var(--border)"
-        :disabled="isSavingSplit || splitProblem !== null"
-        @click="saveSplit"
-      >
-        {{ isSavingSplit ? 'Saving' : 'Save how expenses split' }}
-      </button>
-
-      <p v-else class="mt-3 text-xs text-[var(--text-muted)]">
+      <p v-if="!canAdminister" class="mt-3 text-xs text-[var(--text-muted)]">
         Only an owner or an admin can change this.
       </p>
-
-      <p v-if="splitMessage" class="mt-2 text-sm text-owed" role="status">{{ splitMessage }}</p>
-      <p v-if="splitError" class="mt-2 text-sm text-owing" role="alert">{{ splitError }}</p>
     </section>
 
     <section class="surface-card mb-4 p-4">
@@ -814,5 +821,30 @@ async function unarchive(): Promise<void> {
 
     <p v-if="message" class="mt-4 text-sm text-owed" role="status">{{ message }}</p>
     <p v-if="error" class="mt-4 text-sm text-owing" role="alert">{{ error }}</p>
+
+    <!--
+      One save for every setting on the screen, in the corner, and only once there
+      is something to save. Fixed rather than in the flow: the settings it covers
+      are spread down a long page, and a button that has scrolled away cannot be
+      the answer to "I changed something".
+
+      Clear of the tab bar and of the add button in the middle of it.
+    -->
+    <div
+      v-if="isDirty && canAdminister"
+      data-testid="save-bar"
+      class="fixed right-4 z-40"
+      style="bottom: calc(6rem + env(safe-area-inset-bottom))"
+    >
+      <button
+        type="button"
+        data-testid="save-settings"
+        class="btn btn-press btn-primary shadow-lg"
+        :disabled="isSaving || splitProblem !== null"
+        @click="save"
+      >
+        {{ isSaving ? 'Saving' : 'Save changes' }}
+      </button>
+    </div>
   </AppShell>
 </template>

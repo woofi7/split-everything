@@ -199,13 +199,24 @@ export const useGroupsStore = defineStore('groups', () => {
       iconName: string | null
       colorHex: string | null
       baseCurrency: string
+      // The group's own fields and how it splits are the same PATCH, so a screen
+      // that edits both can save both in one request rather than half-succeeding.
+      defaultSplitType: SplitType
+      defaultSplitValues: Record<string, number> | null
     }>,
   ): Promise<LocalGroup> {
     // The API reads null as "not supplied" and an empty string as an explicit
     // clear, so removing an icon or a description has to send the empty string.
-    const payload = { ...changes }
+    const payload: Record<string, unknown> = { ...changes }
     if ('iconName' in payload && payload.iconName === null) payload.iconName = ''
     if ('description' in payload && payload.description === null) payload.description = ''
+
+    // An empty map is the explicit clear, matching the server's convention, and
+    // equal needs no values at all.
+    if ('defaultSplitType' in changes) {
+      payload.defaultSplitValues =
+        changes.defaultSplitType === 'Equal' ? {} : (changes.defaultSplitValues ?? {})
+    }
 
     const dto = await requireApi().patch<GroupSummaryDto>(`/groups/${groupId}`, payload)
     const local = toLocalGroup(dto, groups.value)
