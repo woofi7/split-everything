@@ -6,7 +6,6 @@ import { db, resetDatabase } from '@/offline/db'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
-import { useCategoriesStore } from '@/stores/categories'
 import { SyncEngine } from '@/offline/syncEngine'
 import { textOf, waitFor } from '../support/viewHarness'
 
@@ -110,17 +109,6 @@ async function mountView() {
 
   const expenses = useExpensesStore()
   expenses.attachSync(new SyncEngine(fakeSyncApi(), () => false))
-
-  const categories = useCategoriesStore()
-  categories.attachApi({
-    get: vi.fn(async () => [
-      { id: 'c1', key: 'groceries', name: 'Groceries', iconName: 'cart-shopping', colorHex: '#16a34a', sortOrder: 1 },
-      { id: 'c2', key: 'dining', name: 'Restaurants', iconName: 'utensils', colorHex: '#f97316', sortOrder: 2 },
-    ]),
-    post: vi.fn(),
-    patch: vi.fn(),
-    delete: vi.fn(),
-  } as never)
 
   const wrapper = mount(ExpenseFormView, {
     global: { stubs: { RouterLink: RouterLinkStub } },
@@ -282,47 +270,6 @@ describe('ExpenseFormView', () => {
   })
 })
 
-describe('ExpenseFormView categories', () => {
-  beforeEach(() => {
-    push.mockClear()
-    replace.mockClear()
-  })
-
-  it('offers the categories the server knows', async () => {
-    const { wrapper } = await mountView()
-
-    const picker = wrapper.find('[data-testid="category"]')
-    expect(picker.exists()).toBe(true)
-    expect(picker.text()).toContain('Groceries')
-    expect(picker.text()).toContain('Restaurants')
-  })
-
-  it('files the expense under the category chosen', async () => {
-    const { wrapper, expenses } = await mountView()
-
-    await wrapper.find('input[placeholder="Groceries"]').setValue('Metro run')
-    await wrapper.find('input[inputmode="decimal"]').setValue('42.50')
-    await wrapper.find('[data-testid="category"]').setValue('c1')
-    await wrapper.find('form').trigger('submit')
-    await settle()
-
-    // Without this every expense was uncategorised, and the by-category breakdown
-    // in stats read "Uncategorised, 100%".
-    expect(expenses.expenses.at(-1)?.categoryId).toBe('c1')
-  })
-
-  it('allows no category, since not everything has one', async () => {
-    const { wrapper, expenses } = await mountView()
-
-    await wrapper.find('input[placeholder="Groceries"]').setValue('Something')
-    await wrapper.find('input[inputmode="decimal"]').setValue('10')
-    await wrapper.find('form').trigger('submit')
-    await settle()
-
-    expect(expenses.expenses.at(-1)?.categoryId).toBeNull()
-  })
-})
-
 describe('ExpenseFormView editing an expense', () => {
   const existing = {
     id: 'expense-1',
@@ -334,7 +281,7 @@ describe('ExpenseFormView editing an expense', () => {
     amountInBaseCurrency: 84.32,
     exchangeRate: 1,
     spentAt: '2026-03-14T12:00:00.000Z',
-    categoryId: 'c2',
+    categoryId: null,
     splitType: 'Shares' as const,
     receiptId: null,
     notes: null,
@@ -382,15 +329,6 @@ describe('ExpenseFormView editing an expense', () => {
       delete: vi.fn(),
     } as never)
 
-    const categories = useCategoriesStore()
-    categories.attachApi({
-      get: vi.fn(async () => [
-        { id: 'c1', key: 'groceries', name: 'Groceries', iconName: 'cart-shopping', colorHex: '#16a34a', sortOrder: 1 },
-        { id: 'c2', key: 'dining', name: 'Restaurants', iconName: 'utensils', colorHex: '#f97316', sortOrder: 2 },
-      ]),
-      post: vi.fn(), patch: vi.fn(), delete: vi.fn(),
-    } as never)
-
     const expenses = useExpensesStore()
     expenses.attachSync(new SyncEngine(fakeSyncApi(), () => false))
 
@@ -417,8 +355,6 @@ describe('ExpenseFormView editing an expense', () => {
       .toBe('84.32')
     expect((wrapper.find('input[type="date"]').element as HTMLInputElement).value)
       .toBe('2026-03-14')
-    expect((wrapper.find('[data-testid="category"]').element as HTMLSelectElement).value)
-      .toBe('c2')
   })
 
   it('keeps an uneven split someone set by hand', async () => {
@@ -510,7 +446,6 @@ describe('ExpenseFormView editing an expense', () => {
 
     const groups = useGroupsStore()
     groups.attachApi({ get: vi.fn(async () => group), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } as never)
-    useCategoriesStore().attachApi({ get: vi.fn(async () => []), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } as never)
     useExpensesStore().attachSync(new SyncEngine(fakeSyncApi(), () => false))
 
     const wrapper = mount(ExpenseFormView, { global: { stubs: { RouterLink: RouterLinkStub } } })
@@ -531,18 +466,33 @@ describe('ExpenseFormView fits one screen', () => {
     const { wrapper } = await mountView()
 
     // Adding an expense is what people open this app to do, usually one-handed, so
-    // a form that scrolls hides half the decision. Amount, date, description,
-    // category, who paid, and who it is between.
+    // a form that scrolls hides half the decision. Amount, date, what it was,
+    // group, who paid, and who it is between.
     const fields = wrapper.findAll('input:not([type="checkbox"]), select')
     expect(fields.length).toBeLessThanOrEqual(6)
   })
 
-  it('does not ask which group, since the app is on one', async () => {
+  it('asks which group', async () => {
     const { wrapper } = await mountView()
 
-    // The group name is in the subtitle instead, so it is never in doubt.
-    expect(wrapper.findAll('select')).toHaveLength(2)
+    expect(wrapper.find('[data-testid="group"]').exists()).toBe(true)
     expect(textOf(wrapper)).toContain('Roommates')
+  })
+
+  it('does not ask for a category', async () => {
+    const { wrapper } = await mountView()
+
+    // Dropped to keep the form on one screen. The by-category breakdown in stats
+    // now only reflects what an import set.
+    expect(wrapper.find('[data-testid="category"]').exists()).toBe(false)
+    expect(textOf(wrapper)).not.toContain('Category')
+  })
+
+  it('does not offer to move an expense between groups while editing', async () => {
+    routeParams = { groupId, expenseId: 'expense-1' }
+    const { wrapper } = await mountView()
+
+    expect(wrapper.find('[data-testid="group"]').exists()).toBe(false)
   })
 
   it('shows each share on the person rather than in a section below', async () => {

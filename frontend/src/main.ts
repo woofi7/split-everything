@@ -10,7 +10,6 @@ import { HttpSyncApi } from './api/syncApi'
 import { deviceIdNow, getDeviceId } from './offline/db'
 import { useAuthStore } from './stores/auth'
 import { useGroupsStore } from './stores/groups'
-import { useCategoriesStore } from './stores/categories'
 import { useExpensesStore } from './stores/expenses'
 import { createRealtimeConnection } from './offline/realtime'
 import './styles/main.css'
@@ -45,7 +44,6 @@ async function bootstrap(): Promise<void> {
   // Restored before any screen reads it, so the app opens on the group it was left
   // on rather than flicking to a different one.
   groupsStore.restoreMainGroup()
-  useCategoriesStore().attachApi(api)
 
   // Before the router runs, so the guard sees the session rather than bouncing
   // someone to sign-in while a good session sits in the cookie the app cannot
