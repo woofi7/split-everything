@@ -37,17 +37,28 @@ describe('AppShell', () => {
     expect(wrapper.find('button').text()).toBe('New')
   })
 
-  it('puts the back button on its own, top left', () => {
+  it('puts the back button top right, level with the title', () => {
     const wrapper = mountShell({ backTo: { name: 'dashboard' }, backLabel: 'Dashboard' })
 
     const back = wrapper.find('[data-testid="back"]')
     expect(back.classes()).toContain('btn-secondary')
     expect(back.classes()).toContain('rounded-full')
 
-    // Above the title rather than beside it, so it is never crowded out by a long
-    // group name.
+    // On the title's own row, not a row of its own above it.
+    const row = wrapper.find('h1').element.parentElement?.parentElement
+    expect(row?.querySelector('[data-testid="back"]')).not.toBeNull()
+  })
+
+  it('puts back furthest right, past the page action', () => {
+    const wrapper = mountShell(
+      { backTo: { name: 'dashboard' } },
+      { 'header-action': '<button>Change</button>' },
+    )
+
+    // Back is the one control that is not about this page but about leaving it, so
+    // it takes the corner.
     const html = wrapper.html()
-    expect(html.indexOf('data-testid="back"')).toBeLessThan(html.indexOf('<h1'))
+    expect(html.indexOf('Change')).toBeLessThan(html.indexOf('data-testid="back"'))
   })
 
   it('has no back button on a screen a tab can reach', () => {
@@ -65,17 +76,15 @@ describe('AppShell', () => {
     expect(row?.querySelector('button')?.textContent).toBe('Change')
   })
 
-  it('keeps the action on the title line even with a back button', () => {
+  it('keeps the action on the title line beside back', () => {
     const wrapper = mountShell(
       { backTo: { name: 'dashboard' } },
       { 'header-action': '<button>Change</button>' },
     )
 
-    const html = wrapper.html()
-    // Back above, action beside the title.
-    expect(html.indexOf('data-testid="back"')).toBeLessThan(html.indexOf('<h1'))
     const row = wrapper.find('h1').element.parentElement?.parentElement
     expect(row?.querySelector('button')?.textContent).toBe('Change')
+    expect(row?.querySelector('[data-testid="back"]')).not.toBeNull()
   })
 
   it('has no fixed chrome at the top', () => {
