@@ -98,14 +98,26 @@ async function mountView() {
   } as never
 
   const groups = useGroupsStore()
+  const patch = vi.fn(async (_path: string, body: any) => ({
+    ...groupOverrides,
+    ...group,
+    defaultSplitType: body.defaultSplitType,
+    defaultSplitValues: Object.keys(body.defaultSplitValues ?? {}).length > 0
+      ? body.defaultSplitValues
+      : null,
+  }))
+
   groups.attachApi({
     get: vi.fn(async (path: string) =>
-      path === '/groups' ? [{ ...group, memberCount: 2, lastActivityAt: null }] : group,
+      path === '/groups'
+        ? [{ ...group, ...groupOverrides, memberCount: 2, lastActivityAt: null }]
+        : { ...group, ...groupOverrides },
     ),
     post: vi.fn(),
-    patch: vi.fn(),
+    patch,
     delete: vi.fn(),
   } as never)
+  groupsPatch = patch
 
   const expenses = useExpensesStore()
   expenses.attachSync(new SyncEngine(fakeSyncApi(), () => false))
@@ -122,6 +134,10 @@ async function mountView() {
   return { wrapper, expenses, groups }
 }
 
+/** Lets a test set how the group splits before the form reads it. */
+let groupOverrides: Record<string, unknown> = {}
+let groupsPatch: ReturnType<typeof vi.fn> | null = null
+
 /** Lets pending microtasks and IndexedDB transactions finish. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 5; i++) {
@@ -133,6 +149,7 @@ async function settle(): Promise<void> {
 describe('ExpenseFormView', () => {
   beforeEach(() => {
     routeParams = {}
+    groupOverrides = {}
     push.mockClear()
     replace.mockClear()
   })
@@ -642,5 +659,130 @@ describe('ExpenseFormView switching split type', () => {
     const saved = expenses.forGroup(groupId)[0]
     expect(saved.splitType).toBe('Percentage')
     expect(saved.splits.map((split) => split.amount)).toEqual([30, 30])
+  })
+})
+
+describe('ExpenseFormView group default split', () => {
+  beforeEach(() => {
+    routeParams = {}
+    groupOverrides = {}
+    push.mockClear()
+    replace.mockClear()
+  })
+
+  const shareInputs = (wrapper: { findAll: (s: string) => any[] }) =>
+    wrapper.findAll('input[type="number"]').map((input: any) => (input.element as HTMLInputElement).value)
+
+  it('starts equal when the group has no default', async () => {
+    const { wrapper } = await mountView()
+
+    const selected = wrapper.findAll('button').filter((b) => b.classes().includes('btn-primary'))
+    expect(selected.map((b) => b.text())).toContain('Equally')
+  })
+
+  it('starts on the split the group uses', async () => {
+    groupOverrides = {
+      defaultSplitType: 'Shares',
+      defaultSplitValues: { [alice]: 2, [bob]: 1 },
+    }
+
+    const { wrapper } = await mountView()
+
+    // A household that always divides rent sixty forty had to say so every time.
+    const selected = wrapper.findAll('button').filter((b) => b.classes().includes('btn-primary'))
+    expect(selected.map((b) => b.text())).toContain('Shares')
+    expect(shareInputs(wrapper)).toEqual(['2', '1'])
+  })
+
+  it('divides by that default without anything being typed', async () => {
+    groupOverrides = {
+      defaultSplitType: 'Shares',
+      defaultSplitValues: { [alice]: 2, [bob]: 1 },
+    }
+
+    const { wrapper } = await mountView()
+    await wrapper.find('input[inputmode="decimal"]').setValue('90')
+    await settle()
+
+    expect(wrapper.text()).toContain('60.00')
+    expect(wrapper.text()).toContain('30.00')
+  })
+
+  it('ignores a stored weight for someone no longer in the group', async () => {
+    groupOverrides = {
+      defaultSplitType: 'Shares',
+      defaultSplitValues: { [alice]: 2, 'member-who-left': 5 },
+    }
+
+    const { wrapper } = await mountView()
+    await wrapper.find('input[inputmode="decimal"]').setValue('90')
+    await settle()
+
+    // Left in, the split would refuse to add up and nobody would know why.
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('offers to record the split as the default once it differs', async () => {
+    const { wrapper } = await mountView()
+
+    // Nothing to record while the form matches what the group already does.
+    expect(wrapper.find('[data-testid="make-default"]').exists()).toBe(false)
+
+    const shares = wrapper.findAll('button[type="button"]').find((b) => b.text() === 'Shares')
+    await shares!.trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-testid="make-default"]').exists()).toBe(true)
+  })
+
+  it('records it when asked', async () => {
+    const { wrapper } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Rent')
+    await wrapper.find('input[inputmode="decimal"]').setValue('90')
+    const shares = wrapper.findAll('button[type="button"]').find((b) => b.text() === 'Shares')
+    await shares!.trigger('click')
+    await settle()
+
+    await wrapper.find('[data-testid="make-default"]').setValue(true)
+    await wrapper.find('form').trigger('submit')
+    await waitFor(() => (groupsPatch?.mock.calls.length ?? 0) > 0)
+
+    const [path, body] = groupsPatch!.mock.calls[0]
+    expect(path).toBe(`/groups/${groupId}`)
+    expect(body.defaultSplitType).toBe('Shares')
+  })
+
+  it('leaves the group alone when not asked', async () => {
+    const { wrapper } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Rent')
+    await wrapper.find('input[inputmode="decimal"]').setValue('90')
+    const shares = wrapper.findAll('button[type="button"]').find((b) => b.text() === 'Shares')
+    await shares!.trigger('click')
+    await settle()
+
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(groupsPatch).not.toHaveBeenCalled()
+  })
+
+  it('still saves the expense when recording the default fails', async () => {
+    const { wrapper, expenses } = await mountView()
+    groupsPatch!.mockRejectedValue(new Error('Only an admin can change that.'))
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Rent')
+    await wrapper.find('input[inputmode="decimal"]').setValue('90')
+    const shares = wrapper.findAll('button[type="button"]').find((b) => b.text() === 'Shares')
+    await shares!.trigger('click')
+    await settle()
+    await wrapper.find('[data-testid="make-default"]').setValue(true)
+    await wrapper.find('form').trigger('submit')
+    await waitFor(() => expenses.forGroup(groupId).length > 0)
+
+    // A group setting is not worth losing someone's expense over.
+    expect(expenses.forGroup(groupId)).toHaveLength(1)
+    expect(textOf(wrapper)).toContain('group default could not be changed')
   })
 })

@@ -48,6 +48,25 @@ const colours = computed(() =>
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
+const SPLIT_LABELS: Record<string, string> = {
+  Equal: 'Equally',
+  Percentage: 'By percentage',
+  Shares: 'By shares',
+  ExactAmount: 'Exact amounts',
+  Itemized: 'By item',
+}
+
+const splitTypeLabel = computed(() =>
+  expense.value ? (SPLIT_LABELS[expense.value.splitType] ?? expense.value.splitType) : '',
+)
+
+/** The weight as the split type meant it: a percentage, a share count, or money. */
+function weightLabel(value: number): string {
+  if (expense.value?.splitType === 'Percentage') return `${value}%`
+  if (expense.value?.splitType === 'Shares') return value === 1 ? '1 share' : `${value} shares`
+  return ''
+}
+
 /** Mixed with the surface, so the text stays readable in either theme. */
 function cardStyle(memberId: string) {
   const colour = colourOf(memberId)
@@ -135,14 +154,35 @@ async function remove(): Promise<void> {
       </section>
 
       <section class="surface-card p-4">
-        <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">Split</h2>
+        <div class="mb-2 flex items-baseline justify-between gap-2">
+          <h2 class="text-sm font-medium text-[var(--text-muted)]">Split</h2>
+          <!--
+            How, not just how much. Two expenses with identical shares can have
+            been divided by quite different rules, and the rule is what someone
+            checks when the numbers look wrong.
+          -->
+          <span data-testid="split-type" class="text-xs text-[var(--text-muted)]">
+            {{ splitTypeLabel }}
+          </span>
+        </div>
         <ul class="flex flex-col gap-2 text-sm">
           <li
             v-for="split in expense.splits"
             :key="split.memberId"
-            class="flex justify-between"
+            class="flex items-center justify-between gap-2"
           >
-            <span>{{ memberName(split.memberId) }}</span>
+            <span class="flex min-w-0 items-center gap-2">
+              <span
+                class="h-2 w-2 shrink-0 rounded-full"
+                :style="{ backgroundColor: colourOf(split.memberId) }"
+                aria-hidden="true"
+              />
+              <span class="truncate">{{ memberName(split.memberId) }}</span>
+              <!-- The weight behind the share, where the split type had one. -->
+              <span v-if="split.inputValue !== null" class="shrink-0 text-xs text-[var(--text-muted)]">
+                {{ weightLabel(split.inputValue) }}
+              </span>
+            </span>
             <MoneyAmount :amount="split.amount" :currency="expense.currency" size="sm" />
           </li>
         </ul>

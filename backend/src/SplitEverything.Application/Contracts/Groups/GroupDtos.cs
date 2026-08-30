@@ -11,7 +11,12 @@ public sealed record CreateGroupRequest(
     IReadOnlyList<string>? PlaceholderMemberNames);
 
 public sealed record UpdateGroupRequest(
-    string? Name, string? Description, string? IconName, string? ColorHex, string? BaseCurrency);
+    string? Name, string? Description, string? IconName, string? ColorHex, string? BaseCurrency,
+    // How a new expense here is split unless someone says otherwise. Null leaves
+    // the current default alone; DefaultSplitValues is only read when a type is
+    // given, and an empty map clears the values.
+    SplitType? DefaultSplitType = null,
+    IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null);
 
 public sealed record GroupMemberDto(
     Guid Id,
@@ -38,7 +43,9 @@ public sealed record GroupDto(
     IReadOnlyList<GroupMemberDto> Members,
     decimal MyNetBalance,
     decimal TotalSpend,
-    int ExpenseCount);
+    int ExpenseCount,
+    SplitType DefaultSplitType = SplitType.Equal,
+    IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null);
 
 public sealed record GroupSummaryDto(
     Guid Id, string Name, string BaseCurrency, string? IconName, string ColorHex,

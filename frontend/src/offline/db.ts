@@ -28,6 +28,10 @@ export interface LocalGroup {
    * read fills `members` in.
    */
   memberCount?: number
+  /** How a new expense here is split unless someone says otherwise. */
+  defaultSplitType?: SplitType
+  /** Member id to weight, for a default that needs values. */
+  defaultSplitValues?: Record<string, number> | null
   myNetBalance: number
   totalSpend: number
   expenseCount: number

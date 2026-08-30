@@ -3,10 +3,13 @@ import { defineStore } from 'pinia'
 import { db, type LocalGroup, type LocalMember } from '@/offline/db'
 import type { ApiClient } from '@/api/client'
 import type { AddableUser } from '@/api/types'
+import type { SplitType } from '@/domain/splitting'
 
 const MAIN_GROUP_KEY = 'split-everything.main-group'
 
 interface GroupSummaryDto {
+  defaultSplitType?: SplitType
+  defaultSplitValues?: Record<string, number> | null
   id: string
   name: string
   baseCurrency: string
@@ -231,6 +234,28 @@ export const useGroupsStore = defineStore('groups', () => {
   }
 
   /** Adds someone who already has an account, rather than a placeholder. */
+  /**
+   * Records how this group splits by default, from what someone just used.
+   *
+   * An admin-only change on the server, because it decides what everyone else's
+   * next expense does.
+   */
+  async function setDefaultSplit(
+    groupId: string,
+    splitType: SplitType,
+    values: Record<string, number> | null,
+  ): Promise<void> {
+    const dto = await requireApi().patch<GroupSummaryDto>(`/groups/${groupId}`, {
+      defaultSplitType: splitType,
+      // An empty map is the explicit clear, matching the server's convention.
+      defaultSplitValues: splitType === 'Equal' ? {} : (values ?? {}),
+    })
+
+    const local = toLocalGroup(dto, groups.value)
+    await db.groups.put(local)
+    upsert(local)
+  }
+
   async function addUserMember(groupId: string, userId: string): Promise<void> {
     await requireApi().post(`/groups/${groupId}/members/user`, { userId })
     await refresh(groupId)
@@ -292,6 +317,7 @@ export const useGroupsStore = defineStore('groups', () => {
     archive,
     unarchive,
     addPlaceholderMember,
+    setDefaultSplit,
     addUserMember,
     addableUsers,
     removeMember,
@@ -324,6 +350,9 @@ function toLocalGroup(dto: GroupSummaryDto, existing: LocalGroup[]): LocalGroup 
     // A detail read has the roster but no count; a summary has the count but no
     // roster. Either one can answer "how many people".
     memberCount: dto.memberCount ?? dto.members?.length ?? previous?.memberCount ?? 0,
+    // A summary carries neither, so the cached copy holds them until a detail read.
+    defaultSplitType: dto.defaultSplitType ?? previous?.defaultSplitType ?? 'Equal',
+    defaultSplitValues: dto.defaultSplitValues ?? previous?.defaultSplitValues ?? null,
     myNetBalance: dto.myNetBalance,
     totalSpend: dto.totalSpend ?? previous?.totalSpend ?? 0,
     expenseCount: dto.expenseCount ?? previous?.expenseCount ?? 0,
