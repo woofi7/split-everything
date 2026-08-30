@@ -55,13 +55,31 @@ const isMerging = ref(false)
 /**
  * Who this person could be merged into: everyone else still in the group.
  *
- * The owner is a valid target and never a source, so the group always keeps one.
+ * Active only. Merging into someone who has been removed would hide the history
+ * behind a member nobody can see. The owner is a valid target and never a source,
+ * so the group always keeps one.
  */
 const mergeTargets = computed(() =>
   (group.value?.members ?? []).filter(
     (member) => member.id !== merging.value?.id && member.status === 'Active',
   ),
 )
+
+/**
+ * Whether this row can be folded into someone else.
+ *
+ * Removed members included, and that is the point: removing a member deactivates
+ * it rather than deleting it precisely because it still holds expenses, so a
+ * removed placeholder is the most likely thing anyone wants to merge. Only the
+ * owner is never a source, and only when somebody is left to merge into.
+ */
+function canMerge(member: { id: string; role: string }): boolean {
+  if (member.role === 'Owner') return false
+
+  return (group.value?.members ?? []).some(
+    (other) => other.id !== member.id && other.status === 'Active',
+  )
+}
 
 function startMerge(member: { id: string; displayName: string }): void {
   error.value = null
@@ -283,7 +301,7 @@ async function unarchive(): Promise<void> {
               a CSV import invented, and the account they later signed up with.
             -->
             <button
-              v-if="member.status === 'Active' && member.role !== 'Owner' && (group?.members?.length ?? 0) > 1"
+              v-if="canMerge(member)"
               type="button"
               :data-testid="`merge-${member.id}`"
               class="text-xs text-[var(--text-muted)] underline"

@@ -216,6 +216,36 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
     }
 
     [Fact]
+    public async Task A_removed_member_is_exactly_what_gets_merged_away()
+    {
+        var (userId, group, alice, bob, ghost) = await SetupAsync();
+        var expense = await Expenses.CreateAsync(userId, Expense(group.Id, ghost, 30m, alice, ghost));
+
+        // Removing a member deactivates it rather than deleting it, precisely
+        // because it still holds expenses. That leftover is the most likely thing
+        // anyone wants to merge, so being removed cannot disqualify it.
+        await Groups.RemoveMemberAsync(userId, group.Id, ghost);
+        await Groups.MergeMembersAsync(userId, group.Id, Merge(ghost, bob));
+
+        var fresh = NewContext();
+        (await fresh.Expenses.FirstAsync(e => e.Id == expense.Id)).PaidByMemberId.ShouldBe(bob);
+    }
+
+    [Fact]
+    public async Task Nothing_can_be_merged_into_a_removed_member()
+    {
+        var (userId, group, _, bob, ghost) = await SetupAsync();
+        await Groups.RemoveMemberAsync(userId, group.Id, bob);
+
+        // Everything ends up on the target, and a removed member is one nobody
+        // can see: the history would be there and invisible.
+        var refusal = await Should.ThrowAsync<ValidationException>(
+            () => Groups.MergeMembersAsync(userId, group.Id, Merge(ghost, bob)));
+
+        refusal.Message.ShouldContain("removed");
+    }
+
+    [Fact]
     public async Task Merging_someone_into_themselves_is_refused()
     {
         var (userId, group, _, bob, _) = await SetupAsync();
