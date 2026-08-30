@@ -145,7 +145,7 @@ const bucketLabel = (bucket: string) =>
           <li
             v-for="point in dashboard.spendOverTime"
             :key="point.bucket"
-            class="flex-1"
+            class="flex h-full flex-1 items-end"
             :title="`${bucketLabel(point.bucket)}: ${point.amount}`"
           >
             <span

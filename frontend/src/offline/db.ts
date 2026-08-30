@@ -120,7 +120,8 @@ export interface LocalCategory {
   id: string
   key: string
   name: string
-  emoji: string
+  /** Font Awesome solid icon name, as the API sends it. */
+  iconName: string
   colorHex: string
   sortOrder: number
 }
@@ -193,13 +194,12 @@ const DEVICE_ID_KEY = 'deviceId'
 const CURSOR_PREFIX = 'cursor:'
 
 /**
- * The device id keys every vector clock, so it must survive reloads. A fresh one
+ * The device id keys every vector clock, so it must survive reloads: a fresh one
  * per session would make the same install look like a new peer each launch and
  * conflict with its own earlier writes.
- */
-/**
- * Held in memory as well as stored, so every request can read it without waiting.
- * The API client needs it synchronously on each call.
+ *
+ * Held in memory as well as stored, because the API client needs it synchronously
+ * on every request.
  */
 let cachedDeviceId: string | null = null
 

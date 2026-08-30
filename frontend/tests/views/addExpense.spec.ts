@@ -6,6 +6,7 @@ import { db, resetDatabase } from '@/offline/db'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
+import { useCategoriesStore } from '@/stores/categories'
 import { SyncEngine } from '@/offline/syncEngine'
 
 const groupId = 'group-1'
@@ -105,6 +106,17 @@ async function mountView() {
 
   const expenses = useExpensesStore()
   expenses.attachSync(new SyncEngine(fakeSyncApi(), () => false))
+
+  const categories = useCategoriesStore()
+  categories.attachApi({
+    get: vi.fn(async () => [
+      { id: 'c1', key: 'groceries', name: 'Groceries', iconName: 'cart-shopping', colorHex: '#16a34a', sortOrder: 1 },
+      { id: 'c2', key: 'dining', name: 'Restaurants', iconName: 'utensils', colorHex: '#f97316', sortOrder: 2 },
+    ]),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  } as never)
 
   const wrapper = mount(AddExpenseView, {
     global: { stubs: { RouterLink: RouterLinkStub } },
@@ -261,5 +273,46 @@ describe('AddExpenseView', () => {
     await settle()
 
     expect(wrapper.text()).toContain('6.25')
+  })
+})
+
+describe('AddExpenseView categories', () => {
+  beforeEach(() => {
+    push.mockClear()
+    replace.mockClear()
+  })
+
+  it('offers the categories the server knows', async () => {
+    const { wrapper } = await mountView()
+
+    const picker = wrapper.find('[data-testid="category"]')
+    expect(picker.exists()).toBe(true)
+    expect(picker.text()).toContain('Groceries')
+    expect(picker.text()).toContain('Restaurants')
+  })
+
+  it('files the expense under the category chosen', async () => {
+    const { wrapper, expenses } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Metro run')
+    await wrapper.find('input[inputmode="decimal"]').setValue('42.50')
+    await wrapper.find('[data-testid="category"]').setValue('c1')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    // Without this every expense was uncategorised, and the by-category breakdown
+    // in stats read "Uncategorised, 100%".
+    expect(expenses.expenses.at(-1)?.categoryId).toBe('c1')
+  })
+
+  it('allows no category, since not everything has one', async () => {
+    const { wrapper, expenses } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Something')
+    await wrapper.find('input[inputmode="decimal"]').setValue('10')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(expenses.expenses.at(-1)?.categoryId).toBeNull()
   })
 })

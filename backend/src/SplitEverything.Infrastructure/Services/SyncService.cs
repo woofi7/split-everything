@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SplitEverything.Application.Abstractions;
@@ -25,7 +26,8 @@ public sealed class SyncService(
     AppDbContext db,
     ISyncWriter writer,
     ISyncBroadcaster broadcaster,
-    IClock clock) : ISyncService
+    IClock clock,
+    IActivityService activity) : ISyncService
 {
     public async Task<SyncPushResult> PushAsync(
         Guid userId, SyncPushRequest request, CancellationToken ct = default)
@@ -72,6 +74,18 @@ public sealed class SyncService(
                 }
 
                 await db.SaveChangesAsync(ct);
+
+                if (outcome.Kind == OutcomeKind.Accepted)
+                {
+                    // After the save, so the row it describes exists to be read. Here
+                    // rather than in each handler, so every accepted operation is
+                    // logged once and a retry of one already applied is not logged at
+                    // all. The app writes everything through this path, so without it
+                    // the feed showed only the group and member events that go
+                    // through the REST services.
+                    await LogActivityAsync(userId, operation, ct);
+                    await db.SaveChangesAsync(ct);
+                }
             }
             catch (AppException ex)
             {
@@ -602,6 +616,108 @@ public sealed class SyncService(
             conflict.Id, conflict.GroupId, conflict.EntityType, conflict.EntityId,
             storedJson, VectorClock.FromJson(conflict.StoredVectorClockJson).Counters,
             operation.PayloadJson, operation.VectorClock, fields, conflict.DetectedAt));
+    }
+
+    /// <summary>
+    /// Records what an accepted operation did, for the activity feed.
+    ///
+    /// Reads the entity back rather than the payload, so the summary describes what
+    /// was actually stored. A row we cannot describe is skipped: the feed is a
+    /// convenience, and failing a sync push over it would cost someone their work.
+    /// </summary>
+    private async Task LogActivityAsync(Guid userId, SyncOperationDto operation, CancellationToken ct)
+    {
+        var actor = await db.GroupMembers
+            .Where(m => m.GroupId == operation.GroupId && m.UserId == userId && !m.IsDeleted)
+            .Select(m => new { m.Id, m.DisplayName })
+            .FirstOrDefaultAsync(ct);
+
+        if (actor is null) return;
+
+        var (kind, summary) = operation.EntityType switch
+        {
+            SyncEntityType.Expense => await DescribeExpenseAsync(actor.DisplayName, operation, ct),
+            SyncEntityType.Settlement => await DescribeSettlementAsync(actor.DisplayName, operation, ct),
+            SyncEntityType.ExpenseComment => await DescribeCommentAsync(actor.DisplayName, operation, ct),
+            _ => (null, null)
+        };
+
+        if (kind is null || summary is null) return;
+
+        await activity.RecordAsync(operation.GroupId, kind.Value, userId, actor.Id,
+            operation.EntityType, operation.EntityId, summary, ct: ct);
+    }
+
+    private async Task<(ActivityKind?, string?)> DescribeExpenseAsync(
+        string actorName, SyncOperationDto operation, CancellationToken ct)
+    {
+        var expense = await db.Expenses
+            .Where(e => e.Id == operation.EntityId)
+            .Select(e => new { e.Description, e.Amount, e.Currency })
+            .FirstOrDefaultAsync(ct);
+
+        if (expense is null) return (null, null);
+
+        var amount = CurrencyPrecision.Round(expense.Amount, expense.Currency);
+        var money = $"{amount.ToString($"F{CurrencyPrecision.DecimalsFor(expense.Currency)}", CultureInfo.InvariantCulture)} {expense.Currency}";
+
+        return operation.Operation switch
+        {
+            SyncOperation.Create =>
+                (ActivityKind.ExpenseCreated, $"{actorName} added {expense.Description} ({money})"),
+            SyncOperation.Update =>
+                (ActivityKind.ExpenseUpdated, $"{actorName} edited {expense.Description}"),
+            SyncOperation.Delete =>
+                (ActivityKind.ExpenseDeleted, $"{actorName} deleted {expense.Description}"),
+            _ => (null, null)
+        };
+    }
+
+    private async Task<(ActivityKind?, string?)> DescribeSettlementAsync(
+        string actorName, SyncOperationDto operation, CancellationToken ct)
+    {
+        var settlement = await db.Settlements
+            .Where(s => s.Id == operation.EntityId)
+            .Select(s => new { s.Amount, s.Currency, s.FromMemberId, s.ToMemberId })
+            .FirstOrDefaultAsync(ct);
+
+        if (settlement is null) return (null, null);
+
+        var names = await db.GroupMembers
+            .Where(m => m.Id == settlement.FromMemberId || m.Id == settlement.ToMemberId)
+            .ToDictionaryAsync(m => m.Id, m => m.DisplayName, ct);
+
+        var amount = CurrencyPrecision.Round(settlement.Amount, settlement.Currency);
+        var money = $"{amount.ToString($"F{CurrencyPrecision.DecimalsFor(settlement.Currency)}", CultureInfo.InvariantCulture)} {settlement.Currency}";
+        var from = names.GetValueOrDefault(settlement.FromMemberId, "Someone");
+        var to = names.GetValueOrDefault(settlement.ToMemberId, "someone");
+
+        return operation.Operation switch
+        {
+            SyncOperation.Delete =>
+                (ActivityKind.SettlementDeleted, $"{actorName} removed a payment of {money}"),
+            _ => (ActivityKind.SettlementCreated, $"{from} paid {to} {money}")
+        };
+    }
+
+    private async Task<(ActivityKind?, string?)> DescribeCommentAsync(
+        string actorName, SyncOperationDto operation, CancellationToken ct)
+    {
+        if (operation.Operation == SyncOperation.Delete) return (null, null);
+
+        var comment = await db.ExpenseComments
+            .Where(c => c.Id == operation.EntityId)
+            .Select(c => c.ExpenseId)
+            .FirstOrDefaultAsync(ct);
+
+        if (comment == Guid.Empty) return (null, null);
+
+        var description = await db.Expenses
+            .Where(e => e.Id == comment)
+            .Select(e => e.Description)
+            .FirstOrDefaultAsync(ct);
+
+        return (ActivityKind.CommentPosted, $"{actorName} commented on {description ?? "an expense"}");
     }
 
     private async Task<HashSet<Guid>> MembershipAsync(Guid userId, CancellationToken ct)

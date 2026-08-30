@@ -765,7 +765,7 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         Clock.Advance(TimeSpan.FromDays(400));
         await Lifecycle.CompactAsync(group.Id, Clock.UtcNow.AddYears(-1));
 
-        var sync = new SyncService(Db, Writer, Broadcaster, Clock);
+        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity);
         var result = await sync.PullAsync(user.Id, new SplitEverything.Application.Contracts.Sync.SyncPullRequest(
             TestData.DeviceB, new Dictionary<Guid, long> { [group.Id] = 0 }));
 
