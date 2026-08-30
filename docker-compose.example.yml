@@ -2,12 +2,12 @@
 #
 # Copy this next to an .env file (see .env.example), pull, and bring it up. It is
 # laid out the same way as the other stack on that server: named containers, images
-# from Docker Hub pinned by tag, appdata under /mnt/user/appdata, and ports
-# published for whatever reverse proxy fronts the machine.
+# from Docker Hub pinned by tag, appdata under /mnt/user/appdata, and Traefik
+# reaching them over its own network rather than through published ports.
 #
-# The API and the web app are two images. Put them behind one hostname so the
-# browser makes no cross-origin requests and the refresh cookie stays first-party:
-# /api and /hubs to the API, everything else to the web app.
+# The API and the app are two images behind one hostname: /api and /hubs go to the
+# API, everything else to the app. Nothing is published to the host, so add a ports
+# line temporarily if you ever want to reach a container directly.
 services:
   postgres:
     image: postgres:17-alpine
@@ -76,9 +76,20 @@ services:
       # named volume rather than a path under appdata: the container runs as its own
       # user, and Docker gets the ownership right on a named volume by itself.
       - dataprotection:/home/app/.aspnet/DataProtection-Keys
-    ports:
-      # Behind the proxy: send /api and /hubs here. /hubs is a WebSocket.
-      - '8091:8080'
+    labels:
+      # The API and the app share one hostname, so the browser makes no
+      # cross-origin requests and the refresh cookie stays first-party. This router
+      # takes the two prefixes that are the API and leaves the rest to the app: both
+      # rules match the host, and Traefik prefers the specific one only because the
+      # priority says so.
+      #
+      # /hubs is the SignalR WebSocket. Traefik upgrades it without being asked.
+      - "traefik.enable=true"
+      - "traefik.http.routers.split-api.rule=Host(`${PUBLIC_HOST}`) && (PathPrefix(`/api`) || PathPrefix(`/hubs`))"
+      - "traefik.http.routers.split-api.priority=20"
+      - "traefik.http.routers.split-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.split-api.middlewares=secure-headers@file"
+      - "traefik.http.services.split-api.loadbalancer.server.port=8080"
     # Liveness rather than readiness: readiness asks the database, and a brief
     # Postgres restart would mark the API unhealthy and take it out of rotation.
     healthcheck:
@@ -88,17 +99,27 @@ services:
       retries: 3
       start_period: 60s
     networks:
+      # internal to reach Postgres, proxy to be reached by Traefik.
       - internal
+      - proxy
 
   web:
     image: ${DOCKERHUB_USERNAME}/split-everything-web:${APP_TAG}
     container_name: split-everything-web
     restart: unless-stopped
+    # Start order only, not a health gate: this app is offline-first, so the shell
+    # coming up while the API is still starting shows a working screen reading from
+    # the device rather than one of Traefik's 404s.
     depends_on:
-      api:
-        condition: service_healthy
-    ports:
-      - '8090:8080'
+      - api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.split-web.rule=Host(`${PUBLIC_HOST}`)"
+      # Lower than the API's, so /api and /hubs win.
+      - "traefik.http.routers.split-web.priority=10"
+      - "traefik.http.routers.split-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.split-web.middlewares=secure-headers@file"
+      - "traefik.http.services.split-web.loadbalancer.server.port=8080"
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8080/healthz || exit 1']
       interval: 30s
@@ -106,7 +127,9 @@ services:
       retries: 3
       start_period: 15s
     networks:
-      - internal
+      # Static files and nothing else: it never talks to Postgres or the API, since
+      # the browser reaches the API through Traefik on the same hostname.
+      - proxy
 
   backup:
     image: postgres:17-alpine
@@ -132,4 +155,8 @@ volumes:
   dataprotection:
 
 networks:
+  # Postgres, the API and the backup talk here, and nothing else can reach it.
   internal:
+  # Traefik's own network, created by that stack rather than this one.
+  proxy:
+    external: true
