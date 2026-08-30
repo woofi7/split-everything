@@ -131,7 +131,13 @@ const description = computed(() =>
         <slot name="heading" />
       </p>
 
-      <p v-if="wedges.length === 0" class="text-sm text-[var(--text-muted)]">{{ t('Nothing spent yet.') }}
+      <!--
+        An empty chart is not always an empty group. What "nothing here" means
+        depends on what the chart counts, so the caller says it; the wording below
+        is only the default.
+      -->
+      <p v-if="wedges.length === 0" data-testid="pie-empty" class="text-sm text-[var(--text-muted)]">
+        <slot name="empty">{{ t('Nothing spent yet.') }}</slot>
       </p>
 
       <ul v-else class="flex min-w-0 flex-col gap-1 text-sm">

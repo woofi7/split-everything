@@ -10,6 +10,7 @@ import {
   settle,
   testExpense,
   testGroup,
+  testSettlement,
   textOf,
 } from '../support/viewHarness'
 
@@ -73,19 +74,58 @@ describe('DashboardView on the main group', () => {
     expect(textOf(wrapper)).toMatch(/14 Mar|Mar 14/)
   })
 
-  it('shows who paid, as a pie', async () => {
+  it('shows what is still owed, as a pie', async () => {
     const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
+      // Alice put 100 on her card for the two of them, so Bob owes her 50 and is
+      // the only one owing anything.
       expenses: [
-        testExpense({ id: 'e1', paidByMemberId: ALICE, amount: 60, amountInBaseCurrency: 60 }),
-        testExpense({ id: 'e2', paidByMemberId: BOB, amount: 40, amountInBaseCurrency: 40 }),
+        testExpense({
+          amount: 100,
+          amountInBaseCurrency: 100,
+          splits: [
+            { memberId: ALICE, amount: 50, amountInBaseCurrency: 50, inputValue: null },
+            { memberId: BOB, amount: 50, amountInBaseCurrency: 50, inputValue: null },
+          ],
+        }),
       ],
     })
     await settle()
 
-    const text = textOf(wrapper)
-    expect(text).toContain('60%')
-    expect(text).toContain('40%')
+    expect(textOf(wrapper)).toContain('Still to settle')
+    // The debt, not the till: 100 was spent and 50 of it has to move.
+    expect(wrapper.find('[data-testid="centre-total"]').text()).toContain('$50.00')
+    expect(wrapper.find('[data-testid="legend-row"]').text()).toContain('Bob')
+  })
+
+  it('leaves the pie empty once the group is square', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense()],
+      // Bob's half of the 60, paid back. Nothing left to split.
+      settlements: [
+        testSettlement({ fromMemberId: BOB, toMemberId: ALICE, amount: 30, amountInBaseCurrency: 30 }),
+      ],
+    })
+    await settle()
+
+    // A chart of debts on a settled group is empty for a good reason, and says so
+    // rather than reading as a group that has never spent anything.
+    expect(wrapper.find('[data-testid="pie-empty"]').text()).toContain('settled up')
+  })
+
+  it('totals the expenses beside their heading', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [
+        testExpense({ id: 'e1', amount: 60, amountInBaseCurrency: 60 }),
+        testExpense({ id: 'e2', amount: 40, amountInBaseCurrency: 40 }),
+      ],
+    })
+    await settle()
+
+    // Every expense in the group, not only the page of them on screen.
+    expect(wrapper.find('[data-testid="group-total"]').text()).toBe('$100.00')
   })
 
   it('says which of the balances is yours', async () => {
@@ -228,7 +268,7 @@ describe('DashboardView on the main group', () => {
       await settle()
 
       const html = wrapper.html()
-      const pie = html.indexOf('Who paid')
+      const pie = html.indexOf('Still to settle')
       const balances = html.indexOf('>Balances<')
       const expensesHeading = html.indexOf('>Expenses<')
 
@@ -283,15 +323,117 @@ describe('DashboardView on the main group', () => {
    * about not building a thousand cards for a list nobody has scrolled through.
    * A group that has been running a year is the normal case.
    */
+  describe('expenses by month', () => {
+    /** A date in a given month, at noon so no timezone can move it. */
+    const inMonth = (monthsBack: number, day = 15) => {
+      const now = new Date()
+      return new Date(now.getFullYear(), now.getMonth() - monthsBack, day, 12).toISOString()
+    }
+
+    const acrossMonths = () => [
+      testExpense({ id: 'now-1', description: 'This month', spentAt: inMonth(0, 3) }),
+      testExpense({ id: 'now-2', description: 'Also this month', spentAt: inMonth(0, 9) }),
+      testExpense({ id: 'old-1', description: 'Last month', spentAt: inMonth(1) }),
+      testExpense({ id: 'older-1', description: 'The month before', spentAt: inMonth(2) }),
+    ]
+
+    it('gives each month its own heading', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: acrossMonths(),
+      })
+      await settle()
+
+      expect(wrapper.findAll('[data-testid="month-toggle"]')).toHaveLength(3)
+    })
+
+    it('opens the current month and leaves the rest closed', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: acrossMonths(),
+      })
+      await settle()
+
+      const text = textOf(wrapper)
+      expect(text).toContain('This month')
+      expect(text).toContain('Also this month')
+      // Present as a heading, absent as a card: a closed month builds nothing.
+      expect(text).not.toContain('Last month')
+      expect(wrapper.findAll('[data-testid="expense-card"]')).toHaveLength(2)
+    })
+
+    it('opens a month when its heading is tapped', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: acrossMonths(),
+      })
+      await settle()
+
+      await wrapper.findAll('[data-testid="month-toggle"]')[1].trigger('click')
+      await settle()
+
+      expect(textOf(wrapper)).toContain('Last month')
+      expect(wrapper.findAll('[data-testid="expense-card"]')).toHaveLength(3)
+    })
+
+    it('closes the month that was open when it is tapped again', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: acrossMonths(),
+      })
+      await settle()
+
+      await wrapper.findAll('[data-testid="month-toggle"]')[0].trigger('click')
+      await settle()
+
+      expect(wrapper.findAll('[data-testid="expense-card"]')).toHaveLength(0)
+      expect(wrapper.findAll('[data-testid="month-toggle"]')[0].attributes('aria-expanded')).toBe(
+        'false',
+      )
+    })
+
+    it('totals each month on its heading, open or closed', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: [
+          testExpense({ id: 'a', amount: 25, amountInBaseCurrency: 25, spentAt: inMonth(0, 2) }),
+          testExpense({ id: 'b', amount: 75, amountInBaseCurrency: 75, spentAt: inMonth(0, 4) }),
+          testExpense({ id: 'c', amount: 10, amountInBaseCurrency: 10, spentAt: inMonth(1) }),
+        ],
+      })
+      await settle()
+
+      const totals = wrapper.findAll('[data-testid="month-total"]').map((row) => row.text())
+      expect(totals[0]).toBe('$100.00')
+      expect(totals[1]).toBe('$10.00')
+    })
+
+    it('opens the most recent month when nothing was spent this one', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        // A group that went quiet: closing everything would leave a screen of
+        // headings and no way to see it has ever been used.
+        expenses: [testExpense({ description: 'Quiet since', spentAt: inMonth(2) })],
+      })
+      await settle()
+
+      expect(textOf(wrapper)).toContain('Quiet since')
+    })
+  })
+
   describe('a long expense list', () => {
-    /** Distinct ids and dates, so the order and the count are both meaningful. */
+    /**
+     * Distinct ids and times, so the order and the count are both meaningful, and
+     * all inside one month: paging happens within the months that are open, so a
+     * fixture spread over several would be measuring the sections instead.
+     */
     function manyExpenses(count: number) {
       return Array.from({ length: count }, (_, index) =>
         testExpense({
           id: `expense-${String(index).padStart(3, '0')}`,
           paidByMemberId: ALICE,
           description: `Expense ${index}`,
-          spentAt: new Date(Date.UTC(2026, 0, 1 + index)).toISOString(),
+          spentAt: new Date(Date.UTC(2026, 0, 15, 12, index)).toISOString(),
         }),
       )
     }

@@ -9,11 +9,15 @@ import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SpendPie from '@/components/ui/SpendPie.vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
+import { bucketOf, formatMonthHeading } from '@/domain/buckets'
 import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
+import type { LocalExpense } from '@/offline/db'
 
 /**
  * The group the app is on.
@@ -93,12 +97,82 @@ const memberName = (memberId: string) =>
   group.value?.members.find((member) => member.id === memberId)?.displayName ?? 'Someone'
 
 /**
- * Who paid, not who owes. That is what spending means to whoever handed over the
- * card, and the balances below already say who owes what.
+ * The expenses by the month they were spent in.
+ *
+ * A dashboard is read from the top and the top is this month; everything before it
+ * is history, and history is what a long list buries. Newest month first, and the
+ * order inside each one is the order the list already had.
  */
+interface ExpenseMonth {
+  key: string
+  label: string
+  total: number
+  count: number
+  expenses: LocalExpense[]
+}
+
+const expenseMonths = computed<ExpenseMonth[]>(() => {
+  const byMonth = new Map<string, LocalExpense[]>()
+
+  for (const expense of groupExpenses.value) {
+    const key = bucketOf(expense.spentAt, 'month')
+    const found = byMonth.get(key)
+    if (found) found.push(expense)
+    else byMonth.set(key, [expense])
+  }
+
+  return [...byMonth].map(([key, list]) => ({
+    key,
+    label: formatMonthHeading(key),
+    total: list.reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
+    count: list.length,
+    expenses: list,
+  }))
+})
+
+/**
+ * Which month is open, and which one that is before anybody has said.
+ *
+ * Null rather than a set seeded with the answer: the default depends on the
+ * expenses, which arrive after this screen does, and a set filled in once would
+ * hold whatever was true at that moment. This way the default follows the data
+ * until somebody taps, and then their choice takes over entirely.
+ *
+ * The current month, or the most recent one there is: a group whose last expense
+ * was in June opens on June rather than on a screen of closed headings.
+ */
+const openMonths = ref<Set<string> | null>(null)
+
+const defaultMonth = computed(() => {
+  const thisMonth = bucketOf(new Date(), 'month')
+  const months = expenseMonths.value.map((month) => month.key)
+
+  return months.includes(thisMonth) ? thisMonth : (months[0] ?? null)
+})
+
+const isMonthOpen = (key: string): boolean =>
+  openMonths.value ? openMonths.value.has(key) : key === defaultMonth.value
+
+function toggleMonth(key: string): void {
+  const open = new Set(openMonths.value ?? (defaultMonth.value ? [defaultMonth.value] : []))
+
+  if (open.has(key)) open.delete(key)
+  else open.add(key)
+
+  openMonths.value = open
+}
+
 /** The slice on screen, and whether there is more behind it. */
-const visibleExpenses = computed(() => groupExpenses.value.slice(0, visibleCount.value))
-const hasMoreExpenses = computed(() => groupExpenses.value.length > visibleCount.value)
+const openExpenses = computed(() =>
+  expenseMonths.value.filter((month) => isMonthOpen(month.key)).flatMap((month) => month.expenses),
+)
+
+const visibleIds = computed(
+  () => new Set(openExpenses.value.slice(0, visibleCount.value).map((expense) => expense.id)),
+)
+
+const remainingExpenses = computed(() => openExpenses.value.length - visibleIds.value.size)
+const hasMoreExpenses = computed(() => remainingExpenses.value > 0)
 
 function showMoreExpenses(): void {
   if (!hasMoreExpenses.value) return
@@ -135,34 +209,19 @@ watch(sentinel, (element) => {
   observer.observe(element)
 })
 
-// Back to the first page: the count belongs to the list being read, and the next
-// group's list is a different list.
+// Back to the first page, and back to the default month: both belong to the list
+// being read, and the next group's list is a different list.
 watch(() => group.value?.id, () => {
   visibleCount.value = EXPENSE_PAGE
+  openMonths.value = null
 })
 
 onUnmounted(() => observer?.disconnect())
 
-const paidByMember = computed(() => {
-  if (!group.value) return []
-
-  const paid = new Map<string, number>()
-  for (const expense of groupExpenses.value) {
-    paid.set(
-      expense.paidByMemberId,
-      (paid.get(expense.paidByMemberId) ?? 0) + expense.amountInBaseCurrency,
-    )
-  }
-
-  return group.value.members
-    .map((member) => ({
-      id: member.id,
-      label: member.displayName,
-      amount: paid.get(member.id) ?? 0,
-      colorHex: colourOf(member.id),
-    }))
-    .sort((left, right) => right.amount - left.amount)
-})
+/** What the group has spent in total, all of it, however it was settled. */
+const groupTotal = computed(() =>
+  groupExpenses.value.reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
+)
 
 /**
  * Which row in the balances is the person reading it.
@@ -189,6 +248,30 @@ const balances = computed(() => {
       colour: colourOf(member.id),
     }))
 })
+
+/**
+ * What is left to split, by whoever still owes it.
+ *
+ * Not all-time spending, which is a figure that only grows and says nothing about
+ * today: a group two years old with everybody square looked exactly as busy as one
+ * where nobody has paid anybody back. These are the balances, so every settlement
+ * already came off them, and the total in the middle of the chart is the money that
+ * still has to move.
+ *
+ * The people owed are the same money seen from the other side, so showing both
+ * would double it. The debts are the actionable half.
+ */
+const stillToSettle = computed(() =>
+  balances.value
+    .filter((member) => member.net < 0)
+    .map((member) => ({
+      id: member.id,
+      label: member.name,
+      amount: -member.net,
+      colorHex: member.colour,
+    }))
+    .sort((left, right) => right.amount - left.amount),
+)
 
 /**
  * Who should pay whom.
@@ -275,8 +358,9 @@ async function refresh(): Promise<void> {
     <template v-if="group">
       <!-- The shape of the group's spending, first: it is what the screen is for. -->
       <section class="surface-card mb-4 p-4">
-        <SpendPie :slices="paidByMember" :currency="currency">
-          <template #heading>{{ t('Who paid') }}</template>
+        <SpendPie :slices="stillToSettle" :currency="currency">
+          <template #heading>{{ t('Still to settle') }}</template>
+          <template #empty>{{ t('Everyone is settled up.') }}</template>
         </SpendPie>
       </section>
 
@@ -382,34 +466,83 @@ async function refresh(): Promise<void> {
       </section>
 
       <section>
-        <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Expenses') }}</h2>
+        <!--
+          The total sits beside the heading rather than in the pie, which now
+          answers a different question. It belongs to the list underneath it: the
+          sum of every expense there, not only the ones scrolled into view.
+        -->
+        <div class="mb-2 flex items-baseline justify-between gap-3">
+          <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Expenses') }}</h2>
 
-        <ul v-if="groupExpenses.length > 0" class="flex flex-col gap-2">
-          <li v-for="expense in visibleExpenses" :key="expense.id">
-            <RouterLink
-              :to="{ name: 'expense', params: { groupId: group.id, expenseId: expense.id } }"
-              data-testid="expense-card"
-              class="tap-target flex items-center justify-between gap-3 rounded-xl border border-l-4 p-3"
-              :style="cardStyle(expense.paidByMemberId)"
+          <p
+            v-if="groupExpenses.length > 0"
+            data-testid="group-total"
+            class="shrink-0 text-sm font-medium tabular-nums"
+          >
+            {{ formatMoney(groupTotal, currency) }}
+          </p>
+        </div>
+
+        <!--
+          One section per month, closed but for the current one. A group that has
+          been running a year is mostly history: the headings keep it reachable in
+          a screen's worth of space, and a closed month builds none of its cards.
+        -->
+        <ul v-if="expenseMonths.length > 0" class="flex flex-col gap-3">
+          <li v-for="month in expenseMonths" :key="month.key">
+            <button
+              type="button"
+              data-testid="month-toggle"
+              class="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left"
+              :aria-expanded="isMonthOpen(month.key)"
+              @click="toggleMonth(month.key)"
             >
-              <span class="min-w-0">
-                <span class="flex items-center gap-2">
-                  <span class="truncate font-medium">{{ expense.description }}</span>
-                  <span
-                    v-if="expense.pending"
-                    class="shrink-0 rounded-full bg-brand-600/20 px-1.5 py-0.5 text-[10px] text-brand-400"
-                    :title="t('Saved on this device, waiting to sync')"
-                  >{{ t('Waiting') }}
-                  </span>
-                </span>
-                <span class="truncate text-xs text-[var(--text-muted)]">
-                  {{ memberName(expense.paidByMemberId) }} paid
-                  <span aria-hidden="true">-</span>
-                  {{ spentOn(expense.spentAt) }}
-                </span>
+              <FontAwesomeIcon
+                :icon="faChevronRight"
+                class="h-3 w-3 shrink-0 text-[var(--text-muted)] transition-transform"
+                :class="isMonthOpen(month.key) ? 'rotate-90' : ''"
+                aria-hidden="true"
+              />
+              <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ month.label }}</span>
+              <span class="shrink-0 text-xs text-[var(--text-muted)]">{{ month.count }}</span>
+              <span
+                data-testid="month-total"
+                class="shrink-0 text-sm tabular-nums text-[var(--text-muted)]"
+              >
+                {{ formatMoney(month.total, currency) }}
               </span>
-              <MoneyAmount :amount="expense.amount" :currency="expense.currency" size="sm" />
-            </RouterLink>
+            </button>
+
+            <ul v-if="isMonthOpen(month.key)" class="mt-2 flex flex-col gap-2">
+              <template v-for="expense in month.expenses" :key="expense.id">
+                <li v-if="visibleIds.has(expense.id)">
+                  <RouterLink
+                    :to="{ name: 'expense', params: { groupId: group.id, expenseId: expense.id } }"
+                    data-testid="expense-card"
+                    class="tap-target flex items-center justify-between gap-3 rounded-xl border border-l-4 p-3"
+                    :style="cardStyle(expense.paidByMemberId)"
+                  >
+                    <span class="min-w-0">
+                      <span class="flex items-center gap-2">
+                        <span class="truncate font-medium">{{ expense.description }}</span>
+                        <span
+                          v-if="expense.pending"
+                          class="shrink-0 rounded-full bg-brand-600/20 px-1.5 py-0.5 text-[10px] text-brand-400"
+                          :title="t('Saved on this device, waiting to sync')"
+                        >{{ t('Waiting') }}
+                        </span>
+                      </span>
+                      <span class="truncate text-xs text-[var(--text-muted)]">
+                        {{ memberName(expense.paidByMemberId) }} paid
+                        <span aria-hidden="true">-</span>
+                        {{ spentOn(expense.spentAt) }}
+                      </span>
+                    </span>
+                    <MoneyAmount :amount="expense.amount" :currency="expense.currency" size="sm" />
+                  </RouterLink>
+                </li>
+              </template>
+            </ul>
           </li>
         </ul>
 
@@ -432,7 +565,7 @@ async function refresh(): Promise<void> {
             class="btn btn-press btn-quiet text-xs"
             @click="showMoreExpenses"
           >
-            Show more ({{ groupExpenses.length - visibleExpenses.length }} left)
+            Show more ({{ remainingExpenses }} left)
           </button>
         </div>
       </section>
