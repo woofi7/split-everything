@@ -440,6 +440,64 @@ describe('GroupSettingsView', () => {
       expect(wrapper.find(`[data-testid="merge-${BOB}"]`).exists()).toBe(true)
     })
 
+    it('offers a merge on someone who has been removed', async () => {
+      const removed = testGroup()
+      removed.members[1] = { ...removed.members[1], status: 'Removed' }
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => removed }),
+        groups: [removed],
+      })
+
+      // Removing a member deactivates it rather than deleting it, because it
+      // still holds expenses. That leftover is the most likely thing anyone wants
+      // to merge, and gating the button on Active hid it on exactly that row.
+      expect(wrapper.find(`[data-testid="merge-${BOB}"]`).exists()).toBe(true)
+    })
+
+    it('does not offer to merge someone into a removed member', async () => {
+      const removed = testGroup()
+      removed.members = [
+        removed.members[0],
+        { ...removed.members[1], status: 'Removed' },
+        { ...removed.members[1], id: 'member-carol', displayName: 'Carol', status: 'Active' },
+      ]
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => removed }),
+        groups: [removed],
+      })
+
+      await wrapper.find('[data-testid="merge-member-carol"]').trigger('click')
+      await settle(1)
+
+      const options = wrapper
+        .findAll('[data-testid="merge-target"] option')
+        .map((option) => option.attributes('value'))
+
+      // Everything ends up on the target, so a member nobody can see would put
+      // the history out of sight.
+      expect(options).not.toContain(BOB)
+    })
+
+    it('offers no merge when there is nobody left to merge into', async () => {
+      // Contrived: in practice the owner is active and is always a valid target.
+      // It pins the second half of the rule, so the button can never open a
+      // dialog whose only choice is nobody.
+      const alone = testGroup()
+      alone.members = [
+        { ...alone.members[0], status: 'Removed' },
+        alone.members[1],
+      ]
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => alone }),
+        groups: [alone],
+      })
+
+      expect(wrapper.find(`[data-testid="merge-${BOB}"]`).exists()).toBe(false)
+    })
+
     it('does not offer to merge the owner away', async () => {
       const { wrapper } = await mountView(GroupSettingsView, { api: api() })
 

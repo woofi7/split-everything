@@ -407,6 +407,15 @@ public sealed class GroupService(
             throw new ValidationException(
                 "The group owner cannot be merged away. Merge the other person into the owner instead.");
 
+        // The source may well be a removed member: removing one deactivates it
+        // rather than deleting it precisely because it still holds expenses, and
+        // folding that into a real account is what this is for. The target is the
+        // other way round, because everything ends up on it and a removed member
+        // is one nobody can see.
+        if (target.Status == MembershipStatus.Removed)
+            throw new ValidationException(
+                $"{target.DisplayName} has been removed from this group, so nothing can be merged into them.");
+
         var deviceId = DeviceFor(userId);
         var summary = $"Merged {source.DisplayName} into {target.DisplayName}";
 
