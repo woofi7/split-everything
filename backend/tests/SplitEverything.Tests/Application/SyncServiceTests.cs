@@ -461,6 +461,62 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
     }
 
     [Fact]
+    public async Task Pulling_sends_a_group_the_device_has_never_heard_of()
+    {
+        var (userId, group, alice, _) = await SetupAsync();
+
+        // A second group, created after this device last pulled, so the device has
+        // a cursor for the first and none for this one.
+        var later = await Groups.CreateAsync(userId,
+            new CreateGroupRequest("Ski trip", "CAD", null, null, null, ["Luc"]));
+        var payer = later.Members.First(m => m.UserId == userId).Id;
+        await Expenses.CreateAsync(userId, new CreateExpenseRequest(
+            later.Id, payer, "Lift passes", 90m, "CAD", TestData.Jan1, SplitType.Equal,
+            [new SplitInputDto(payer, null)], null, null, null, null, null, null));
+
+        var result = await Sync.PullAsync(userId, new SyncPullRequest(
+            TestData.DeviceB, new Dictionary<Guid, long> { [group.Id] = 0 }));
+
+        // Honouring only the cursors the device sent meant a group it had not heard
+        // of was never sent: it appeared through the group endpoint and then sat
+        // there with no expenses in it, for good.
+        result.Entries.ShouldContain(e => e.GroupId == later.Id);
+        result.GroupCursors.ShouldContainKey(later.Id);
+    }
+
+    [Fact]
+    public async Task Pulling_sends_a_group_the_caller_was_just_added_to()
+    {
+        var (ownerId, group, _, _) = await SetupAsync();
+        var joiner = await TestData.SeedUserAsync(Db, "Mallory", "mallory@example.com", "google-mallory");
+        await Groups.AddUserMemberAsync(ownerId, group.Id, new AddUserMemberRequest(joiner.Id));
+
+        // The joiner's device knows about some other group of its own, so it sends
+        // a cursor, just not for this one.
+        var own = await Groups.CreateAsync(joiner.Id,
+            new CreateGroupRequest("Alone", "CAD", null, null, null, null));
+
+        var result = await Sync.PullAsync(joiner.Id, new SyncPullRequest(
+            TestData.DeviceB, new Dictionary<Guid, long> { [own.Id] = 0 }));
+
+        result.Entries.ShouldContain(e => e.GroupId == group.Id);
+    }
+
+    [Fact]
+    public async Task Pulling_still_sends_nothing_for_a_group_the_caller_left()
+    {
+        var (ownerId, group, _, _) = await SetupAsync();
+        var other = await TestData.SeedUserAsync(Db, "Mallory", "mallory@example.com", "google-mallory");
+
+        // Membership decides, so a cursor for someone else's group buys nothing.
+        var result = await Sync.PullAsync(other.Id, new SyncPullRequest(
+            TestData.DeviceB, new Dictionary<Guid, long> { [group.Id] = 0 }));
+
+        result.Entries.ShouldBeEmpty();
+        result.GroupCursors.ShouldNotContainKey(group.Id);
+    }
+
+    [Fact]
     public async Task Pulling_from_a_cursor_returns_only_what_is_new()
     {
         var (userId, group, alice, _) = await SetupAsync();

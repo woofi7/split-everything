@@ -117,10 +117,17 @@ public sealed class SyncService(
     {
         var membership = await MembershipAsync(userId, ct);
 
-        var requested = request.GroupCursors.Count > 0
-            ? request.GroupCursors.Where(kv => membership.Contains(kv.Key))
-                .ToDictionary(kv => kv.Key, kv => kv.Value)
-            : membership.ToDictionary(id => id, _ => 0L);
+        // Every group the caller belongs to, from the caller's cursor where it has
+        // one and from the beginning where it does not.
+        //
+        // Membership decides which groups, never the cursors: a client sends a
+        // cursor per group it has heard of, so honouring only those meant a group
+        // it had not heard of yet was never sent. A group created since the last
+        // pull, or one the caller was just added to, arrived through the group
+        // endpoint and then sat there with no expenses in it, for good.
+        var requested = membership.ToDictionary(
+            id => id,
+            id => request.GroupCursors.TryGetValue(id, out var cursor) ? cursor : 0L);
 
         var maxEntries = Math.Clamp(request.MaxEntries, 1, 2000);
         var entries = new List<SyncLogEntryDto>();
