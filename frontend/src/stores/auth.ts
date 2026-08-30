@@ -65,6 +65,9 @@ export const useAuthStore = defineStore('auth', () => {
   /** Whether this load has already signed the device back in on its own. */
   let hasReconnected = false
 
+  /** The resume every caller shares while it is running. */
+  let resumeInFlight: Promise<boolean> | null = null
+
   const isSignedIn = computed(() => user.value !== null && tokens.value !== null)
   const accessToken = computed(() => tokens.value?.accessToken ?? null)
 
@@ -192,6 +195,18 @@ export const useAuthStore = defineStore('auth', () => {
   async function resumeSession(): Promise<boolean> {
     if (isSignedIn.value) return true
 
+    // Shared, because two callers ask: the route guard and the sign-in page, and
+    // on a mid-visit recovery both ask at once. Two attempts would each rotate the
+    // refresh token, and the server treats a replayed one as theft and revokes the
+    // whole chain, so the second would sign the account out of everything.
+    resumeInFlight ??= attemptResume().finally(() => {
+      resumeInFlight = null
+    })
+
+    return resumeInFlight
+  }
+
+  async function attemptResume(): Promise<boolean> {
     // Nothing to resume on a device that has never signed in here, or was
     // deliberately disconnected: the refresh cookie is written at the same moment
     // as the remembered account and removed at the same moment too, so with no

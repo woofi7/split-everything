@@ -8,16 +8,169 @@
     <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>Split Everything</title>
+
+    <!--
+      The first screen, and the only styling the page has until the stylesheet
+      arrives with the script. Inline on purpose: a separate file is one more
+      round trip before anything at all is visible, which is the moment this
+      exists to fill. It also owns the background, or the page is a white flash
+      followed by a dark app.
+
+      Everything here is thrown away the moment Vue mounts, which clears #app.
+    -->
+    <style>
+      html {
+        background: #0f172a;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+
+      .boot {
+        display: flex;
+        min-height: 100vh;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.75rem;
+      }
+
+      /* The mark, and a ring going round it: the same pie the app opens on. */
+      .boot-mark {
+        position: relative;
+        display: grid;
+        width: 5rem;
+        height: 5rem;
+        place-items: center;
+      }
+
+      .boot-ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: conic-gradient(
+          from 0deg,
+          rgba(129, 140, 248, 0.06) 0deg,
+          rgba(129, 140, 248, 0.28) 120deg,
+          #818cf8 300deg,
+          #c7d2fe 360deg
+        );
+        /* A ring rather than a disc: the mark sits in the hole. */
+        mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+        -webkit-mask: radial-gradient(
+          farthest-side,
+          transparent calc(100% - 4px),
+          #000 calc(100% - 3px)
+        );
+        animation: boot-spin 1.15s linear infinite;
+      }
+
+      .boot-tile {
+        display: grid;
+        width: 3.75rem;
+        height: 3.75rem;
+        place-items: center;
+        border-radius: 1.1rem;
+        background: #4f46e5;
+        box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.55);
+        color: #fff;
+        font-size: 1.05rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        animation: boot-breathe 2.4s ease-in-out infinite;
+      }
+
+      .boot-text {
+        margin: 0;
+        color: #94a3b8;
+        font-size: 0.9rem;
+      }
+
+      /* Three shares settling, one after another. */
+      .boot-dots {
+        display: flex;
+        gap: 0.45rem;
+      }
+
+      .boot-dots span {
+        width: 0.4rem;
+        height: 0.4rem;
+        border-radius: 50%;
+        background: #4f46e5;
+        animation: boot-dot 1.4s ease-in-out infinite;
+      }
+
+      .boot-dots span:nth-child(2) {
+        animation-delay: 0.18s;
+      }
+
+      .boot-dots span:nth-child(3) {
+        animation-delay: 0.36s;
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(1turn);
+        }
+      }
+
+      @keyframes boot-breathe {
+        0%,
+        100% {
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.5);
+        }
+        50% {
+          transform: scale(1.045);
+          box-shadow: 0 0 2rem 0.35rem rgba(79, 70, 229, 0.28);
+        }
+      }
+
+      @keyframes boot-dot {
+        0%,
+        100% {
+          opacity: 0.25;
+          transform: translateY(0);
+        }
+        40% {
+          opacity: 1;
+          transform: translateY(-0.2rem);
+        }
+      }
+
+      /* Asked for it, so honour it: the mark still reads as a mark, standing still. */
+      @media (prefers-reduced-motion: reduce) {
+        .boot-ring,
+        .boot-tile,
+        .boot-dots span {
+          animation: none;
+        }
+
+        .boot-dots span {
+          opacity: 0.6;
+        }
+      }
+    </style>
   </head>
   <body>
-    <!--
-      Replaced the moment the app mounts. It is here so a start that stalls shows
-      something a person can act on instead of a white screen.
-    -->
     <div id="app">
-      <p style="max-width:26rem;margin:15vh auto 0;text-align:center;font:400 15px/1.5 system-ui,sans-serif;color:#94a3b8">
-        Loading Split Everything
-      </p>
+      <div class="boot" role="status" aria-live="polite">
+        <div class="boot-mark">
+          <div class="boot-ring"></div>
+          <div class="boot-tile">SE</div>
+        </div>
+        <p class="boot-text">Loading Split Everything</p>
+        <div class="boot-dots" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

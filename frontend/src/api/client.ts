@@ -5,7 +5,22 @@ export interface ApiClientOptions {
   /** Returns a fresh access token, or null when the session is over. */
   refreshAccessToken?: () => Promise<string | null>
   onUnauthorized: () => void
+  /** How long a request may take before it is treated as unreachable. */
+  timeoutMs?: number
 }
+
+/**
+ * How long a request gets.
+ *
+ * Long enough that a slow connection finishes, short enough that a dead one is
+ * noticed. A stalled fetch is not slow, it is over: a phone that sleeps its wifi
+ * or changes network mid-request leaves the connection open and silent, and fetch
+ * has no timeout of its own, so nothing ever settles.
+ */
+export const DEFAULT_TIMEOUT_MS = 20_000
+
+/** Uploads carry a file, so they get their own, longer allowance. */
+export const UPLOAD_TIMEOUT_MS = 120_000
 
 export class ApiError extends Error {
   readonly status: number
@@ -26,11 +41,15 @@ type QueryValue = string | number | boolean | null | undefined
 /**
  * The HTTP layer.
  *
- * Two behaviours worth naming. A 401 triggers exactly one refresh-and-retry, and
+ * Three behaviours worth naming. A 401 triggers exactly one refresh-and-retry, and
  * concurrent 401s share that single refresh: refresh tokens rotate, so a second
  * concurrent refresh would invalidate the token the first just issued and sign the
  * user out. A network failure is reported as `isOffline`, which is how the UI
  * tells "we are offline, your change is queued" apart from "the server said no".
+ * And every request is given a deadline, because the two single-flight promises
+ * above are only safe if they are guaranteed to settle: a stalled request with no
+ * deadline left the sync indicator spinning for the life of the page and every
+ * later flush waiting behind it.
  */
 export class ApiClient {
   private refreshInFlight: Promise<string | null> | null = null
@@ -155,16 +174,41 @@ export class ApiClient {
       body = JSON.stringify(init.body)
     }
 
+    // Aborted on a deadline rather than left pending. Reported as offline, because
+    // that is what it is from here and what the caller needs to do about it: the
+    // queued change stays queued and is sent again later.
+    const controller = new AbortController()
+    const budget = init.form
+      ? (this.options.timeoutMs ?? UPLOAD_TIMEOUT_MS)
+      : (this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, budget)
+
     try {
       return await fetch(this.buildUrl(path, init.query), {
         method,
         headers,
         body,
         credentials: 'include',
+        signal: controller.signal,
       })
     } catch (error) {
+      if (timedOut) {
+        throw new ApiError(
+          0,
+          'Offline',
+          `The server did not respond within ${Math.round(budget / 1000)} seconds.`,
+          true,
+        )
+      }
+
       const message = error instanceof Error ? error.message : String(error)
       throw new ApiError(0, 'Offline', `Could not reach the server (${message}).`, true)
+    } finally {
+      clearTimeout(timer)
     }
   }
 

@@ -4,6 +4,8 @@ import { RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
 import { useGroupsStore } from '@/stores/groups'
+import NavigationProgress from '@/components/ui/NavigationProgress.vue'
+import { isNavigating } from '@/router'
 
 const auth = useAuthStore()
 const expenses = useExpensesStore()
@@ -41,5 +43,6 @@ async function safeSync(): Promise<void> {
 </script>
 
 <template>
+  <NavigationProgress :active="isNavigating" />
   <RouterView />
 </template>

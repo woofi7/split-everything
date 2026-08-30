@@ -12,6 +12,10 @@ vi.mock('vue-router', () => ({
   RouterView: { template: '<div />' },
 }))
 
+// App.vue reads the navigation state from the router module, which would pull in
+// the real vue-router behind the mock above.
+vi.mock('@/router', () => ({ isNavigating: { value: false }, router: {} }))
+
 /**
  * What the app does when nobody is signed in.
  *

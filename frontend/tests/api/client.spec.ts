@@ -287,3 +287,114 @@ describe('probing for a session', () => {
     vi.unstubAllGlobals()
   })
 })
+
+/**
+ * A stalled request is not a slow one.
+ *
+ * A phone that sleeps its wifi or changes network mid-request leaves the
+ * connection open and silent. fetch has no timeout of its own, so nothing ever
+ * settled: the sync indicator span the rest of the page's life, and because a
+ * flush and a token refresh are each single-flight, every later one waited behind
+ * a promise that was never going to resolve.
+ */
+describe('a request that never answers', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  /** A connection that goes quiet: it answers only the abort. */
+  function stalls() {
+    return vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          )
+        }),
+    )
+  }
+
+  function clientWith(timeoutMs?: number) {
+    return new ApiClient({
+      baseUrl: '/api',
+      getAccessToken: () => 'token-1',
+      getDeviceId: () => 'device-a',
+      onUnauthorized: vi.fn(),
+      timeoutMs,
+    })
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    fetchMock = stalls()
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+  })
+
+  it('gives up after twenty seconds', async () => {
+    const pending = clientWith().get('/groups')
+    const caught = pending.catch((error: unknown) => error)
+
+    await vi.advanceTimersByTimeAsync(19_000)
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const error = await caught
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).isOffline).toBe(true)
+    expect((error as ApiError).message).toContain('did not respond within 20 seconds')
+    vi.useRealTimers()
+  })
+
+  it('reports it as offline, so the change stays queued', async () => {
+    const caught = clientWith(1_000).post('/sync/push', {}).catch((e: unknown) => e as ApiError)
+    await vi.advanceTimersByTimeAsync(1_100)
+
+    // Not a refusal: the server never said no, so the operation is still good and
+    // is sent again later. A hard error would discard it.
+    expect((await caught).isOffline).toBe(true)
+    vi.useRealTimers()
+  })
+
+  it('aborts the request rather than leaving it open', async () => {
+    void clientWith(1_000).get('/groups').catch(() => {})
+    await vi.advanceTimersByTimeAsync(1_100)
+
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true)
+    vi.useRealTimers()
+  })
+
+  it('gives an upload two minutes, because it is carrying a file', async () => {
+    const form = new FormData()
+    form.append('file', new Blob(['bytes']), 'receipt.png')
+    void clientWith().upload('/receipts', form).catch(() => {})
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(91_000)
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true)
+    vi.useRealTimers()
+  })
+})
+
+describe('a request that answers in time', () => {
+  it('does not abort afterwards', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const client = new ApiClient({
+      baseUrl: '/api',
+      getAccessToken: () => null,
+      getDeviceId: () => null,
+      onUnauthorized: vi.fn(),
+    })
+
+    await client.get('/groups')
+    await vi.advanceTimersByTimeAsync(60_000)
+
+    // The deadline has to be cleared, or a long-lived page accumulates a timer
+    // per request and aborts a signal nobody is listening to any more.
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false)
+    vi.useRealTimers()
+  })
+})

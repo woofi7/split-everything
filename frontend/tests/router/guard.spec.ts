@@ -92,6 +92,35 @@ describe('route guard', () => {
     expect(router.currentRoute.value.name).toBe('sign-in')
   })
 
+  it('does not hold a navigation open while a slow resume runs', async () => {
+    localStorage.setItem(
+      'split-everything.device-account',
+      JSON.stringify({ email: 'alice@example.com', displayName: 'Alice', avatarUrl: null }),
+    )
+    const auth = useAuthStore()
+    auth.attachApi({
+      probe: vi.fn(async () => null),
+      // A connection that answers eventually, which on a phone is most of them.
+      get: vi.fn(() => new Promise((resolve) => setTimeout(() => resolve({
+        googleConfigured: false,
+        developmentSignIn: true,
+      }), 30_000))),
+      post: vi.fn(async () => ({ user: session.user, tokens: session.tokens, isNewUser: false, autoJoinedGroupIds: [] })),
+    } as never)
+    auth.restore()
+
+    vi.useFakeTimers()
+    const navigation = router.push('/groups')
+    await vi.advanceTimersByTimeAsync(4_100)
+    await navigation
+
+    // The screen was blank until this returned. Four seconds is the most a
+    // navigation waits; the attempt carries on and the sign-in page, which shares
+    // it, moves on when it lands.
+    expect(router.currentRoute.value.name).toBe('sign-in')
+    vi.useRealTimers()
+  })
+
   it('leaves the invite page public', async () => {
     await router.push('/join/some-token')
 
