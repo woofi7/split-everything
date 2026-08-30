@@ -10,6 +10,7 @@ import SpendPie from '@/components/ui/SpendPie.vue'
 import { resolveIcon } from '@/domain/icons'
 import { memberColor, memberColors } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
+import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 
@@ -25,6 +26,7 @@ import { useExpensesStore } from '@/stores/expenses'
 
 const route = useRoute()
 const groups = useGroupsStore()
+const auth = useAuthStore()
 const expenses = useExpensesStore()
 
 const isPickingGroup = ref(false)
@@ -190,6 +192,17 @@ const paidByMember = computed(() => {
     .sort((left, right) => right.amount - left.amount)
 })
 
+/**
+ * Which row in the balances is the person reading it.
+ *
+ * The card that stated your own balance is gone, so the list has to say which of
+ * these numbers is yours. By membership rather than by name: a group can hold two
+ * people with the same one.
+ */
+const myMemberId = computed(() =>
+  group.value && auth.user ? groups.myMemberId(group.value.id, auth.user.id) : null,
+)
+
 const balances = computed(() => {
   if (!group.value) return []
 
@@ -322,46 +335,23 @@ const spentOn = (iso: string) =>
         </SpendPie>
       </section>
 
-      <!--
-        One line: what you are owed or owe, and the way to act on it. The number
-        and the button that answers it belong next to each other.
-      -->
-      <section
-        data-testid="balance-line"
-        class="surface-card mb-4 flex items-center justify-between gap-3 p-4"
-      >
-        <!--
-          Label over number, and at least as tall as the button beside it so the
-          row reads as one block rather than a number with a control floating next
-          to it. Centred, so it stays level whichever of the two is taller.
-        -->
-        <span class="flex min-h-11 min-w-0 flex-col justify-center">
-          <span class="text-xs text-[var(--text-muted)]">Your balance</span>
-          <MoneyAmount :amount="group.myNetBalance" :currency="currency" signed size="lg" />
-        </span>
-
-        <RouterLink
-          :to="{ name: 'settle', params: { groupId: group.id } }"
-          data-testid="settle-up"
-          class="btn btn-press btn-secondary shrink-0"
-          style="border-color: var(--border)"
-        >
-          Settle up
-        </RouterLink>
-      </section>
-
       <section v-if="balances.length > 0" class="surface-card mb-4 p-4">
-        <div class="flex items-baseline justify-between gap-2">
+        <div class="flex items-center justify-between gap-2">
           <p class="text-sm text-[var(--text-muted)]">Balances</p>
-          <button
-            v-if="plan.length > 0"
-            type="button"
-            data-testid="toggle-simplify"
-            class="btn btn-press btn-quiet min-h-0 px-2 py-1 text-xs text-brand-400"
-            @click="showSimplified = !showSimplified"
+
+          <!--
+            Here rather than in a card of its own. A card holding one number and
+            one button was a row of furniture above the list that says the same
+            thing about everybody, including you.
+          -->
+          <RouterLink
+            :to="{ name: 'settle', params: { groupId: group.id } }"
+            data-testid="settle-up"
+            class="btn btn-press btn-secondary min-h-0 shrink-0 px-3 py-1.5 text-xs"
+            style="border-color: var(--border)"
           >
-            {{ showSimplified ? 'Show who owes whom' : 'Simplify' }}
-          </button>
+            Settle up
+          </RouterLink>
         </div>
 
         <ul class="mt-3 flex flex-col gap-2 text-sm">
@@ -377,6 +367,14 @@ const spentOn = (iso: string) =>
                 aria-hidden="true"
               />
               <span class="truncate">{{ member.name }}</span>
+              <span
+                v-if="member.id === myMemberId"
+                data-testid="your-balance"
+                class="shrink-0 rounded-full px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide"
+                style="background: var(--surface-sunken); color: var(--text-muted)"
+              >
+                You
+              </span>
             </span>
             <MoneyAmount :amount="member.net" :currency="currency" signed size="sm" />
           </li>
@@ -387,11 +385,22 @@ const spentOn = (iso: string) =>
         </p>
 
         <div v-else class="mt-4 border-t pt-3" style="border-color: var(--border)">
-          <h3 class="text-sm font-medium text-[var(--text-muted)]">
-            {{ showSimplified
-              ? `Settle up in ${plan.length} transfer${plan.length === 1 ? '' : 's'}`
-              : 'Who owes whom' }}
-          </h3>
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="min-w-0 text-sm font-medium text-[var(--text-muted)]">
+              {{ showSimplified
+                ? `Settle up in ${plan.length} transfer${plan.length === 1 ? '' : 's'}`
+                : 'Who owes whom' }}
+            </h3>
+            <!-- Beside the list it switches, rather than above the one it does not. -->
+            <button
+              type="button"
+              data-testid="toggle-simplify"
+              class="btn btn-press btn-quiet min-h-0 shrink-0 px-2 py-1 text-xs text-brand-400"
+              @click="showSimplified = !showSimplified"
+            >
+              {{ showSimplified ? 'Show who owes whom' : 'Simplify' }}
+            </button>
+          </div>
           <ul class="mt-2 flex flex-col gap-2 text-sm">
             <li
               v-for="transfer in plan"

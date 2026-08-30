@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { formatMoney } from '@/domain/money'
 
 /**
@@ -69,6 +69,47 @@ const single = computed(() => (wedges.value.length === 1 ? wedges.value[0] : nul
 
 const percent = (share: number) => `${Math.round(share * 100)}%`
 
+/**
+ * The slice being asked about.
+ *
+ * A pie says how spending is spread but never says how much, and a wedge is not
+ * a label: on a phone there is no pointer to rest anywhere. So it is asked, by
+ * hovering, tapping or focusing either the wedge or its name, and answered in the
+ * middle of the chart where the total already sits.
+ */
+const hoveredId = ref<string | null>(null)
+const pinnedId = ref<string | null>(null)
+
+/** What is on show: whatever the pointer is over, else whatever was tapped. */
+const selectedId = computed(() => hoveredId.value ?? pinnedId.value)
+
+const selected = computed(() => wedges.value.find((wedge) => wedge.id === selectedId.value) ?? null)
+
+function select(id: string): void {
+  hoveredId.value = id
+}
+
+function clear(): void {
+  hoveredId.value = null
+}
+
+/**
+ * A tap, which is not a hover.
+ *
+ * Held apart from hovering because a click always arrives after the pointer is
+ * already over the thing clicked: treating the two as one state made clicking a
+ * second wedge look like clicking the one already chosen, so it cleared instead
+ * of switching.
+ *
+ * The same one again puts the total back, and that has to clear the hover too, or
+ * on a phone the tap emulates a hover that never ends and nothing appears to
+ * happen.
+ */
+function toggle(id: string): void {
+  pinnedId.value = pinnedId.value === id ? null : id
+  hoveredId.value = pinnedId.value === null ? null : id
+}
+
 const description = computed(() =>
   wedges.value.map((wedge) => `${wedge.label} ${percent(wedge.share)}`).join(', '),
 )
@@ -79,8 +120,11 @@ const description = computed(() =>
     Names on the left under the heading, chart on the right. The chart is beside
     the heading as well as the list, which is what lets it be the tallest thing in
     the card without the card growing: the words fill the space it needs anyway.
+
+    Both columns start at the top, so the heading sits where every other card's
+    heading sits rather than drifting down to the middle of the chart.
   -->
-  <div class="flex items-center gap-4">
+  <div class="flex items-start gap-4">
     <div class="min-w-0 flex-1">
       <p v-if="$slots.heading" class="mb-3 text-sm text-[var(--text-muted)]">
         <slot name="heading" />
@@ -91,14 +135,41 @@ const description = computed(() =>
       </p>
 
       <ul v-else class="flex min-w-0 flex-col gap-1 text-sm">
-        <li v-for="wedge in wedges" :key="wedge.id" class="flex items-center gap-2">
-          <span
-            class="h-2.5 w-2.5 shrink-0 rounded-full"
-            :style="{ backgroundColor: wedge.colorHex }"
-            aria-hidden="true"
-          />
-          <span class="min-w-0 flex-1 truncate">{{ wedge.label }}</span>
-          <span class="shrink-0 text-[var(--text-muted)]">{{ percent(wedge.share) }}</span>
+        <li v-for="wedge in wedges" :key="wedge.id">
+          <!--
+            A button, not a row of text. On a phone a wedge is a poor target and a
+            hover does not exist, so the name is the way in: tap it and the middle
+            of the chart answers. Keyboard focus does the same thing.
+          -->
+          <button
+            type="button"
+            data-testid="legend-row"
+            class="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors"
+            :class="selectedId === wedge.id ? 'bg-[var(--surface-sunken)]' : ''"
+            :aria-pressed="selectedId === wedge.id"
+            @mouseenter="select(wedge.id)"
+            @mouseleave="clear"
+            @focus="select(wedge.id)"
+            @blur="clear"
+            @click="toggle(wedge.id)"
+          >
+            <span
+              class="h-2.5 w-2.5 shrink-0 rounded-full"
+              :style="{ backgroundColor: wedge.colorHex }"
+              aria-hidden="true"
+            />
+            <span class="min-w-0 flex-1 truncate">{{ wedge.label }}</span>
+            <span
+              v-if="selectedId === wedge.id"
+              data-testid="legend-amount"
+              class="shrink-0 tabular-nums"
+            >
+              {{ formatMoney(wedge.amount, props.currency) }}
+            </span>
+            <span class="shrink-0 tabular-nums text-[var(--text-muted)]">
+              {{ percent(wedge.share) }}
+            </span>
+          </button>
         </li>
       </ul>
     </div>
@@ -117,21 +188,62 @@ const description = computed(() =>
         :cy="CENTRE"
         :r="RADIUS"
         :fill="single.colorHex"
+        class="cursor-pointer"
+        @mouseenter="select(single.id)"
+        @mouseleave="clear"
+        @click="toggle(single.id)"
       />
+      <!--
+        Dimmed rather than moved when another is picked: a wedge that slides out
+        takes the ones beside it with it, and the shape is what the chart is for.
+      -->
       <path
         v-for="wedge in single ? [] : wedges"
         :key="wedge.id"
         data-testid="wedge"
         :d="wedge.path"
         :fill="wedge.colorHex"
+        :opacity="selectedId && selectedId !== wedge.id ? 0.35 : 1"
+        class="cursor-pointer transition-opacity"
+        @mouseenter="select(wedge.id)"
+        @mouseleave="clear"
+        @click="toggle(wedge.id)"
       />
 
       <!-- Punched out so the total can sit inside without fighting the wedges. -->
       <circle :cx="CENTRE" :cy="CENTRE" r="34" fill="var(--surface-raised)" />
+
+      <!--
+        The total, until something is picked. Then that slice, because the question
+        a wedge raises is how much, and the middle is where the eye already is.
+      -->
+      <template v-if="selected">
+        <text
+          :x="CENTRE"
+          :y="CENTRE - 4"
+          text-anchor="middle"
+          data-testid="centre-amount"
+          class="fill-[var(--text)] text-[12px] font-semibold"
+        >
+          {{ formatMoney(selected.amount, props.currency) }}
+        </text>
+        <text
+          :x="CENTRE"
+          :y="CENTRE + 12"
+          text-anchor="middle"
+          data-testid="centre-share"
+          class="fill-[var(--text-muted)] text-[10px]"
+        >
+          {{ percent(selected.share) }}
+        </text>
+      </template>
+
       <text
+        v-else
         :x="CENTRE"
         :y="CENTRE + 5"
         text-anchor="middle"
+        data-testid="centre-total"
         class="fill-[var(--text)] text-[13px] font-semibold"
       >
         {{ formatMoney(total, props.currency) }}

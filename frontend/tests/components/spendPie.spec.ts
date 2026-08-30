@@ -150,4 +150,151 @@ describe('SpendPie', () => {
       expect(wrapper.find('ul').exists()).toBe(true)
     })
   })
+
+  /**
+   * Asking a wedge how much.
+   *
+   * A pie says how spending is spread and never says how much. A wedge is not a
+   * label either, and on a phone there is no pointer to rest on one, so the name
+   * beside it has to work as well as the wedge itself.
+   */
+  describe('asking about a slice', () => {
+    it('shows the total until something is picked', () => {
+      const wrapper = mountPie()
+
+      expect(wrapper.find('[data-testid="centre-total"]').text()).toContain('1,000.00')
+      expect(wrapper.find('[data-testid="centre-amount"]').exists()).toBe(false)
+    })
+
+    it('answers with the amount and the share when a wedge is hovered', async () => {
+      const wrapper = mountPie()
+
+      await wrapper.findAll('[data-testid="wedge"]')[0].trigger('mouseenter')
+
+      expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('600.00')
+      expect(wrapper.find('[data-testid="centre-share"]').text()).toBe('60%')
+      expect(wrapper.find('[data-testid="centre-total"]').exists()).toBe(false)
+    })
+
+    it('names the slice by highlighting it, and shows its amount there too', async () => {
+      const wrapper = mountPie()
+
+      await wrapper.findAll('[data-testid="wedge"]')[1].trigger('mouseenter')
+
+      const rows = wrapper.findAll('[data-testid="legend-row"]')
+      expect(rows[1].attributes('aria-pressed')).toBe('true')
+      expect(rows[1].find('[data-testid="legend-amount"]').text()).toContain('300.00')
+      // Only the one asked about.
+      expect(rows[0].find('[data-testid="legend-amount"]').exists()).toBe(false)
+    })
+
+    it('puts the total back when the pointer leaves', async () => {
+      const wrapper = mountPie()
+      const wedge = wrapper.findAll('[data-testid="wedge"]')[0]
+
+      await wedge.trigger('mouseenter')
+      await wedge.trigger('mouseleave')
+
+      expect(wrapper.find('[data-testid="centre-total"]').exists()).toBe(true)
+    })
+
+    it('dims the others, so the one asked about is obvious', async () => {
+      const wrapper = mountPie()
+
+      await wrapper.findAll('[data-testid="wedge"]')[0].trigger('mouseenter')
+
+      const opacities = wrapper.findAll('[data-testid="wedge"]').map((w) => w.attributes('opacity'))
+      expect(opacities[0]).toBe('1')
+      expect(opacities[1]).toBe('0.35')
+    })
+
+    it('answers a tap, which is all a phone has', async () => {
+      const wrapper = mountPie()
+
+      await wrapper.findAll('[data-testid="wedge"]')[2].trigger('click')
+
+      expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('100.00')
+    })
+
+    it('switches to another wedge when that one is clicked', async () => {
+      const wrapper = mountPie()
+      const wedges = wrapper.findAll('[data-testid="wedge"]')
+
+      await wedges[0].trigger('mouseenter')
+      await wedges[0].trigger('click')
+      // What a pointer really does: it is over the second one before the click.
+      await wedges[0].trigger('mouseleave')
+      await wedges[1].trigger('mouseenter')
+      await wedges[1].trigger('click')
+
+      // Treating hover and click as one state made this read as clicking the one
+      // already chosen, so it cleared instead of switching.
+      expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('300.00')
+      expect(wrapper.find('[data-testid="centre-share"]').text()).toBe('30%')
+    })
+
+    it('switches between names the same way', async () => {
+      const wrapper = mountPie()
+      const rows = wrapper.findAll('[data-testid="legend-row"]')
+
+      await rows[0].trigger('mouseenter')
+      await rows[0].trigger('click')
+      await rows[0].trigger('mouseleave')
+      await rows[1].trigger('mouseenter')
+      await rows[1].trigger('click')
+
+      expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('300.00')
+    })
+
+    it('keeps a tapped slice on show after the pointer leaves', async () => {
+      const wrapper = mountPie()
+      const wedge = wrapper.findAll('[data-testid="wedge"]')[0]
+
+      await wedge.trigger('mouseenter')
+      await wedge.trigger('click')
+      await wedge.trigger('mouseleave')
+
+      // A tap is a decision, not a passing glance.
+      expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('600.00')
+    })
+
+    it('lets a second tap put the total back', async () => {
+      const wrapper = mountPie()
+      const wedge = wrapper.findAll('[data-testid="wedge"]')[2]
+
+      await wedge.trigger('mouseenter')
+      await wedge.trigger('click')
+      await wedge.trigger('click')
+
+      // A tap has no opposite, so tapping again has to be the way out, and on a
+      // phone the tap leaves a hover behind that would otherwise keep it on show.
+      expect(wrapper.find('[data-testid="centre-total"]').exists()).toBe(true)
+    })
+
+    it('answers the name beside the wedge as well', async () => {
+      const wrapper = mountPie()
+
+      // The better target on a phone by far, and the only one a keyboard reaches.
+      await wrapper.findAll('[data-testid="legend-row"]')[1].trigger('click')
+
+      expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('300.00')
+    })
+
+    it('answers keyboard focus on a name', async () => {
+      const wrapper = mountPie()
+
+      await wrapper.findAll('[data-testid="legend-row"]')[0].trigger('focus')
+
+      expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('600.00')
+    })
+
+    it('answers a single-slice chart, which is a circle rather than a wedge', async () => {
+      const wrapper = mountPie({ slices: [slices[0]] })
+
+      await wrapper.find('[data-testid="whole"]').trigger('mouseenter')
+
+      expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('600.00')
+      expect(wrapper.find('[data-testid="centre-share"]').text()).toBe('100%')
+    })
+  })
 })
