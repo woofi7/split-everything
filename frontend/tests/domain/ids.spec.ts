@@ -59,13 +59,17 @@ describe('computeFingerprint outside a secure context', () => {
     Object.defineProperty(crypto, 'subtle', { value: originalSubtle, configurable: true })
   })
 
-  it('says what is wrong instead of throwing an undefined property', async () => {
+  it('produces the same fingerprint the platform would have', async () => {
+    const withPlatform = await computeFingerprint(
+      new Date('2026-01-05T00:00:00Z'), 42.5, 'CAD', 'Metro')
+
     Object.defineProperty(crypto, 'subtle', { value: undefined, configurable: true })
 
-    // SHA-256 has to match the server's, so there is no honest fallback: the
-    // fingerprint decides whether a statement row is a duplicate.
-    await expect(
-      computeFingerprint(new Date('2026-01-05T00:00:00Z'), 42.5, 'CAD', 'Metro'),
-    ).rejects.toThrow(/secure connection/i)
+    const withFallback = await computeFingerprint(
+      new Date('2026-01-05T00:00:00Z'), 42.5, 'CAD', 'Metro')
+
+    // It decides whether a statement row is a duplicate, and it is compared with
+    // hashes the server computed, so a different answer here is worse than none.
+    expect(withFallback).toBe(withPlatform)
   })
 })
