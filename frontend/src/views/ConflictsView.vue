@@ -93,7 +93,7 @@ async function discard(operationId: string): Promise<void> {
           <div class="mt-3 flex gap-2">
             <button
               type="button"
-              class="tap-target flex-1 rounded-lg border text-sm"
+              class="btn btn-press btn-secondary flex-1"
               style="border-color: var(--border)"
               @click="resolve(conflict, 'KeepLocal')"
             >
@@ -101,7 +101,7 @@ async function discard(operationId: string): Promise<void> {
             </button>
             <button
               type="button"
-              class="tap-target flex-1 rounded-lg bg-brand-600 text-sm font-medium text-white"
+              class="btn btn-press btn-primary flex-1"
               @click="resolve(conflict, 'KeepRemote')"
             >
               Keep mine
@@ -120,7 +120,7 @@ async function discard(operationId: string): Promise<void> {
           <p class="mt-1 text-xs text-owing">{{ operation.lastError }}</p>
           <button
             type="button"
-            class="tap-target mt-3 rounded-lg border px-3 text-sm"
+            class="btn btn-press btn-secondary mt-3"
             style="border-color: var(--border)"
             @click="discard(operation.operationId)"
           >

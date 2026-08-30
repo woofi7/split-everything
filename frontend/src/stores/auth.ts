@@ -222,6 +222,22 @@ export const useAuthStore = defineStore('auth', () => {
     const current = tokens.value
     if (!current) return null
 
+    // Another tab may have already done this. Scanning a QR code opens a new tab
+    // each time, so a phone ends up with several on one origin, sharing storage
+    // but not memory. The server treats a replayed refresh token as theft and
+    // revokes every token for the account, so the second tab to ask would sign
+    // both of them out. Taking the newer token costs nothing and avoids that.
+    const stored = readStoredSession()
+    const storedIsNewerForSameAccount =
+      stored !== null &&
+      stored.user.id === user.value?.id &&
+      stored.tokens.refreshToken !== current.refreshToken
+
+    if (storedIsNewerForSameAccount) {
+      tokens.value = stored.tokens
+      return stored.tokens.accessToken
+    }
+
     try {
       const next = await requireApi().post<AuthTokens>('/auth/refresh', {
         refreshToken: current.refreshToken,
@@ -288,6 +304,18 @@ export const useAuthStore = defineStore('auth', () => {
   function isDeviceTakenError(error: unknown): boolean {
     if (!(error instanceof ApiError) || error.status !== 403) return false
     return error.message.includes('registered to another account')
+  }
+
+  /** The session as another tab may have left it. Null when absent or unreadable. */
+  function readStoredSession(): { user: AuthenticatedUser; tokens: AuthTokens } | null {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+
+    try {
+      return JSON.parse(raw) as { user: AuthenticatedUser; tokens: AuthTokens }
+    } catch {
+      return null
+    }
   }
 
   function clear(): void {

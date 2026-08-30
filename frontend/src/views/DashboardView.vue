@@ -45,7 +45,7 @@ const spendByGroup = computed(() =>
     <template #header-action>
       <RouterLink
         :to="{ name: 'new-group' }"
-        class="tap-target flex items-center rounded-lg bg-brand-600 px-3 text-sm font-medium text-white"
+        class="btn btn-press btn-primary"
       >
         New
       </RouterLink>
@@ -82,7 +82,7 @@ const spendByGroup = computed(() =>
       </p>
       <RouterLink
         :to="{ name: 'new-group' }"
-        class="tap-target mt-4 inline-flex items-center rounded-lg bg-brand-600 px-4 text-sm font-medium text-white"
+        class="btn btn-press btn-primary mt-4"
       >
         Create a group
       </RouterLink>

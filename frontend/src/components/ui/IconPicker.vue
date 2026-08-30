@@ -333,7 +333,7 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
           </span>
           <button
             type="button"
-            class="tap-target rounded-lg border px-3 text-sm"
+            class="btn btn-press btn-secondary"
             style="border-color: var(--border)"
             :disabled="!modelValue"
             @click="clear"

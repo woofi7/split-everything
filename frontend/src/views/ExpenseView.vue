@@ -146,7 +146,7 @@ async function remove(): Promise<void> {
           />
           <button
             type="submit"
-            class="tap-target rounded-lg border px-3 text-sm"
+            class="btn btn-press btn-secondary"
             style="border-color: var(--border)"
           >
             Post
@@ -158,7 +158,7 @@ async function remove(): Promise<void> {
 
       <button
         type="button"
-        class="tap-target rounded-lg border text-sm text-owing"
+        class="btn btn-press btn-danger w-full"
         style="border-color: var(--border)"
         @click="remove"
       >

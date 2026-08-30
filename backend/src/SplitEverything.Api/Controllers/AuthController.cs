@@ -122,7 +122,12 @@ public sealed class AuthController(
         => Response.Cookies.Append(RefreshCookieName, tokens.RefreshToken, new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
+            // Marked Secure only when the request arrived over one. A browser
+            // silently drops a Secure cookie sent over plain HTTP, which is how a
+            // phone testing against a LAN address is reached, so setting it
+            // unconditionally meant that device never held a session at all.
+            // Production is behind TLS, so this is Secure there.
+            Secure = Request.IsHttps,
             SameSite = SameSiteMode.Lax,
             Expires = tokens.RefreshTokenExpiresAt,
             Path = "/"

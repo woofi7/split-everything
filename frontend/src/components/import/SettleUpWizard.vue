@@ -259,7 +259,7 @@ const dateOf = (value: string | null) =>
       </p>
 
       <label
-        class="tap-target mt-3 flex cursor-pointer items-center justify-center rounded-lg border text-sm"
+        class="btn btn-press btn-secondary mt-3 w-full cursor-pointer"
         style="border-color: var(--border)"
       >
         Choose the CSV
@@ -410,7 +410,7 @@ const dateOf = (value: string | null) =>
                 <button
                   type="button"
                   data-testid="toggle-row"
-                  class="rounded-lg border px-2 py-1 text-xs"
+                  class="btn btn-press btn-secondary min-h-0 px-2 py-1 text-xs"
                   :class="skipped.has(row.rowNumber) ? 'border-brand-500 text-brand-400' : ''"
                   :style="skipped.has(row.rowNumber) ? undefined : 'border-color: var(--border)'"
                   :aria-pressed="skipped.has(row.rowNumber)"
@@ -427,7 +427,7 @@ const dateOf = (value: string | null) =>
       <div class="flex gap-2">
         <button
           type="button"
-          class="tap-target flex-1 rounded-lg border text-sm"
+          class="btn btn-press btn-secondary flex-1"
           style="border-color: var(--border)"
           @click="reset(); emit('cancel')"
         >
@@ -438,7 +438,7 @@ const dateOf = (value: string | null) =>
           v-if="!preview"
           type="button"
           data-testid="to-preview"
-          class="tap-target flex-1 rounded-lg bg-brand-600 text-sm font-medium text-white disabled:opacity-60"
+          class="btn btn-press btn-primary flex-1"
           :disabled="busy !== null"
           @click="loadPreview"
         >
@@ -449,7 +449,7 @@ const dateOf = (value: string | null) =>
           v-else
           type="button"
           data-testid="commit"
-          class="tap-target flex-1 rounded-lg bg-brand-600 text-sm font-medium text-white disabled:opacity-60"
+          class="btn btn-press btn-primary flex-1"
           :disabled="busy !== null || toImport === 0"
           @click="commit"
         >

@@ -201,7 +201,7 @@ async function unarchive(): Promise<void> {
         </label>
       </div>
 
-      <button type="submit" class="tap-target rounded-lg bg-brand-600 text-sm font-medium text-white">
+      <button type="submit" class="btn btn-press btn-primary">
         Save
       </button>
     </form>
@@ -259,7 +259,7 @@ async function unarchive(): Promise<void> {
         />
         <button
           type="button"
-          class="tap-target rounded-lg bg-brand-600 px-3 text-sm font-medium text-white"
+          class="btn btn-press btn-primary"
           @click="createInvite"
         >
           Invite
@@ -276,7 +276,7 @@ async function unarchive(): Promise<void> {
 
         <button
           type="button"
-          class="tap-target rounded-lg border px-3 text-sm"
+          class="btn btn-press btn-secondary"
           style="border-color: var(--border)"
           @click="copyInviteLink"
         >
@@ -289,12 +289,12 @@ async function unarchive(): Promise<void> {
       <button
         v-if="!group?.isArchived"
         type="button"
-        class="tap-target text-left text-sm"
+        class="btn btn-press btn-secondary w-full justify-start"
         @click="archive"
       >
         Archive this group
       </button>
-      <button v-else type="button" class="tap-target text-left text-sm" @click="unarchive">
+      <button v-else type="button" class="btn btn-press btn-secondary w-full justify-start" @click="unarchive">
         Reopen this group
       </button>
       <p class="text-xs text-[var(--text-muted)]">

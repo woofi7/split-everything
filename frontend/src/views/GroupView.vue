@@ -94,7 +94,7 @@ const plan = computed(() =>
                 params: { groupId },
                 query: { from: transfer.fromMemberId, to: transfer.toMemberId, amount: transfer.amount },
               }"
-              class="shrink-0 rounded-lg border px-2 py-1 text-xs"
+              class="btn btn-press btn-secondary shrink-0 min-h-0 px-2 py-1 text-xs"
               style="border-color: var(--border)"
             >
               {{ formatMoney(transfer.amount, group.baseCurrency) }}

@@ -9,7 +9,7 @@ import AppShell from '@/components/layout/AppShell.vue'
       <p class="font-medium">That page does not exist</p>
       <RouterLink
         :to="{ name: 'dashboard' }"
-        class="tap-target mt-4 inline-flex items-center rounded-lg bg-brand-600 px-4 text-sm font-medium text-white"
+        class="btn btn-press btn-primary mt-4"
       >
         Back to your groups
       </RouterLink>

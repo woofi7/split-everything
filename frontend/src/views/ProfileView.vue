@@ -102,7 +102,7 @@ async function deleteAccount(): Promise<void> {
         </select>
       </label>
 
-      <button type="submit" class="tap-target rounded-lg bg-brand-600 text-sm font-medium text-white">
+      <button type="submit" class="btn btn-press btn-primary">
         Save
       </button>
 
@@ -113,7 +113,7 @@ async function deleteAccount(): Promise<void> {
       <span class="text-sm">Light mode</span>
       <button
         type="button"
-        class="tap-target rounded-full border px-3 text-sm"
+        class="btn btn-press btn-secondary min-h-0 rounded-full px-3 py-1 text-sm"
         style="border-color: var(--border)"
         :aria-pressed="isLight"
         @click="auth.setTheme(isLight ? 'dark' : 'light')"
@@ -123,25 +123,42 @@ async function deleteAccount(): Promise<void> {
     </section>
 
     <section class="surface-card mb-4 flex flex-col gap-3 p-4">
-      <RouterLink :to="{ name: 'import' }" class="tap-target flex items-center text-sm">
+      <RouterLink :to="{ name: 'import' }" class="btn btn-press btn-secondary w-full justify-start">
         Import a Settle Up export or a statement
       </RouterLink>
-      <RouterLink :to="{ name: 'conflicts' }" class="tap-target flex items-center text-sm">
+      <RouterLink :to="{ name: 'conflicts' }" class="btn btn-press btn-secondary w-full justify-start">
         Changes needing attention
       </RouterLink>
     </section>
 
     <section class="surface-card flex flex-col gap-3 p-4">
-      <button type="button" class="tap-target text-left text-sm" @click="exportData">
+      <button
+        type="button"
+        class="btn btn-press btn-secondary w-full justify-start"
+        @click="exportData"
+      >
         Download all my data
       </button>
 
-      <button type="button" class="tap-target text-left text-sm" @click="signOut">Sign out</button>
+      <!-- Named for what it does to this device, and filled, because as a line of
+           bare text it read as a label rather than a button. -->
+      <button
+        type="button"
+        data-testid="disconnect"
+        class="btn btn-press btn-secondary w-full justify-start"
+        @click="signOut"
+      >
+        Disconnect this device
+      </button>
+      <p class="-mt-1 text-xs text-[var(--text-muted)]">
+        Signs you out here and asks for an account again. Your data stays on the
+        server, and this device still remembers who you are.
+      </p>
 
       <button
         v-if="!confirmingDelete"
         type="button"
-        class="tap-target text-left text-sm text-owing"
+        class="btn btn-press btn-danger w-full justify-start"
         @click="confirmingDelete = true"
       >
         Delete my account
@@ -155,7 +172,7 @@ async function deleteAccount(): Promise<void> {
         <div class="flex gap-2">
           <button
             type="button"
-            class="tap-target flex-1 rounded-lg border text-sm"
+            class="btn btn-press btn-secondary flex-1"
             style="border-color: var(--border)"
             @click="confirmingDelete = false"
           >
@@ -163,7 +180,7 @@ async function deleteAccount(): Promise<void> {
           </button>
           <button
             type="button"
-            class="tap-target flex-1 rounded-lg bg-owing text-sm font-medium text-white"
+            class="btn btn-press btn-danger flex-1"
             @click="deleteAccount"
           >
             Delete it

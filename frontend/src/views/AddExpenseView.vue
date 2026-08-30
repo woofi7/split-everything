@@ -297,7 +297,7 @@ async function save(): Promise<void> {
 
       <button
         type="submit"
-        class="tap-target rounded-lg bg-brand-600 font-medium text-white disabled:opacity-60"
+        class="btn btn-press btn-primary w-full"
         :disabled="isSaving || preview.length === 0"
       >
         {{ isSaving ? 'Saving' : 'Save expense' }}

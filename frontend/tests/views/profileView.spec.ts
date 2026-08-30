@@ -103,15 +103,36 @@ describe('ProfileView', () => {
     expect(textOf(wrapper)).toContain('returned 500')
   })
 
-  it('signs out and returns to sign-in', async () => {
+  it('disconnects the device and returns to sign-in', async () => {
     const { wrapper, auth } = await mountView(ProfileView)
 
-    const button = wrapper.findAll('button').find((b) => b.text() === 'Sign out')
-    await button!.trigger('click')
+    await wrapper.find('[data-testid="disconnect"]').trigger('click')
     await settle()
 
     expect(auth.isSignedIn).toBe(false)
     expect(replace).toHaveBeenCalledWith({ name: 'sign-in' })
+  })
+
+  it('still knows whose device it is after disconnecting', async () => {
+    const { wrapper, auth } = await mountView(ProfileView, {
+      rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
+    })
+
+    await wrapper.find('[data-testid="disconnect"]').trigger('click')
+    await settle()
+
+    // So the sign-in screen can offer the account back rather than starting over.
+    expect(auth.rememberedAccount?.email).toBe('alice@example.com')
+  })
+
+  it('shows its actions as buttons rather than lines of text', async () => {
+    const { wrapper } = await mountView(ProfileView)
+
+    // On a dark surface a bordered button with no fill was invisible, which is why
+    // signing out looked like it did not exist.
+    const disconnect = wrapper.find('[data-testid="disconnect"]')
+    expect(disconnect.classes()).toContain('btn-secondary')
+    expect(disconnect.classes()).toContain('btn-press')
   })
 
   it('asks for confirmation before deleting the account', async () => {
