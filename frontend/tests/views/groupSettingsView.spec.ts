@@ -34,6 +34,97 @@ describe('GroupSettingsView', () => {
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Roommates')
   })
 
+  /**
+   * One save for the whole screen.
+   *
+   * The name, the icon and the default split are settings: edited and then kept,
+   * so they are saved together, once, in one request. Adding a person, changing a
+   * colour and creating an invite are actions, and stay immediate.
+   */
+  describe('saving the settings', () => {
+    it('offers nothing while nothing has changed', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+      await settle()
+
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+    })
+
+    it('appears as soon as something changes', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+      await settle()
+
+      await wrapper.find('input[type="text"]').setValue('Flatmates')
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(true)
+    })
+
+    it('sits over the page rather than in it', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+      await settle()
+      await wrapper.find('input[type="text"]').setValue('Flatmates')
+      await settle(1)
+
+      // The settings it covers run down a long page, and a button that has
+      // scrolled away cannot answer "I changed something".
+      const bar = wrapper.find('[data-testid="save-bar"]')
+      expect(bar.classes()).toContain('fixed')
+      expect(bar.classes()).toContain('right-4')
+    })
+
+    it('saves every setting in one request', async () => {
+      const client = api()
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      await settle()
+
+      await wrapper.find('input[type="text"]').setValue('Flatmates')
+      await wrapper.find('[data-testid="split-Shares"]').setValue(true)
+      await settle(1)
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
+      await settle()
+
+      // One PATCH: the group's fields and how it splits are the same endpoint, so
+      // there is no reason for two round trips or for one to succeed alone.
+      expect(client.patch).toHaveBeenCalledTimes(1)
+      expect(client.patch).toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}`,
+        expect.objectContaining({ name: 'Flatmates', defaultSplitType: 'Shares' }),
+      )
+    })
+
+    it('goes away once it is saved', async () => {
+      const client = api()
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      await settle()
+
+      await wrapper.find('input[type="text"]').setValue('Flatmates')
+      await settle(1)
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
+      await settle()
+
+      // The fake echoes the group back unchanged, so this also pins that the bar
+      // follows the group rather than a flag of its own.
+      expect(textOf(wrapper)).toContain('Saved')
+    })
+
+    it('is not offered to someone who cannot change anything', async () => {
+      const group = testGroup()
+      group.members = group.members.map((member) =>
+        member.role === 'Owner' ? { ...member, role: 'Member' } : member,
+      )
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => group }),
+        groups: [group],
+      })
+      await settle()
+      await wrapper.find('input[type="text"]').setValue('Flatmates')
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+    })
+  })
+
   it('renames the group', async () => {
     const client = api()
     const { wrapper } = await mountView(GroupSettingsView, { api: client })
@@ -63,7 +154,7 @@ describe('GroupSettingsView', () => {
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
   })
 
-  it('saves as soon as an icon is chosen', async () => {
+  it('holds a chosen icon until the settings are saved', async () => {
     const client = api()
     const { wrapper } = await mountView(GroupSettingsView, { api: client })
 
@@ -72,8 +163,13 @@ describe('GroupSettingsView', () => {
     await wrapper.find('[data-icon="car"]').trigger('click')
     await settle()
 
-    // There is no other reason to be on this screen, so an extra Save press
-    // would just be a step to forget.
+    // One save for the whole screen, so nothing on it commits on its own.
+    expect(client.patch).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="save-settings"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="save-settings"]').trigger('click')
+    await settle()
+
     expect(client.patch).toHaveBeenCalledWith(
       `/groups/${GROUP_ID}`,
       expect.objectContaining({ iconName: 'car' }),
@@ -756,7 +852,8 @@ describe('GroupSettingsView', () => {
       await settle(1)
 
       expect(textOf(wrapper)).toContain('not 100')
-      expect(wrapper.find('[data-testid="save-split"]').attributes('disabled')).toBeDefined()
+      // The one save refuses while any setting on the screen is wrong.
+      expect(wrapper.find('[data-testid="save-settings"]').attributes('disabled')).toBeDefined()
     })
 
     it('saves the split the group should use', async () => {
@@ -768,7 +865,7 @@ describe('GroupSettingsView', () => {
       await settle(1)
       await wrapper.findAll('input[type="number"]')[0].setValue(2)
       await settle(1)
-      await wrapper.find('[data-testid="save-split"]').trigger('click')
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle()
 
       expect(client.patch).toHaveBeenCalledWith(
@@ -781,21 +878,38 @@ describe('GroupSettingsView', () => {
     })
 
     it('clears the values when going back to equal', async () => {
-      const client = api()
-      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      // A group that already splits by shares, so choosing equal is a change.
+      const shared = testGroup({ defaultSplitType: 'Shares' })
+      shared.defaultSplitValues = { [ALICE]: 2, [BOB]: 1 }
+      const client = fakeApi({ '/groups': () => shared })
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: client,
+        groups: [shared],
+      })
       await settle()
 
-      await wrapper.find('[data-testid="split-Shares"]').setValue(true)
-      await settle(1)
       await wrapper.find('[data-testid="split-Equal"]').setValue(true)
       await settle(1)
-      await wrapper.find('[data-testid="save-split"]').trigger('click')
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle()
 
       expect(client.patch).toHaveBeenCalledWith(
         `/groups/${GROUP_ID}`,
         expect.objectContaining({ defaultSplitType: 'Equal', defaultSplitValues: {} }),
       )
+    })
+
+    it('offers nothing to save when the screen matches the group', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+      await settle()
+
+      await wrapper.find('[data-testid="split-Shares"]').setValue(true)
+      await settle(1)
+      await wrapper.find('[data-testid="split-Equal"]').setValue(true)
+      await settle(1)
+
+      // Back where it started, so there is nothing to save and no button offering.
+      expect(wrapper.find('[data-testid="save-settings"]').exists()).toBe(false)
     })
 
     it('offers nothing to change to someone who is only a member', async () => {
@@ -837,7 +951,9 @@ describe('GroupSettingsView', () => {
       const { wrapper } = await mountView(GroupSettingsView, { api: client })
       await settle()
 
-      await wrapper.find('[data-testid="save-split"]').trigger('click')
+      await wrapper.find('[data-testid="split-Shares"]').setValue(true)
+      await settle(1)
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle()
 
       expect(textOf(wrapper)).toContain('Only an admin can change')
