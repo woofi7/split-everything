@@ -80,10 +80,9 @@ public enum SyncEntityType
     ExpenseItem = 4,
     Settlement = 5,
     ExpenseComment = 6,
-    // Categories were removed from the app. The value stays reserved rather than
-    // being reused, so any sync log row written before that still maps to
-    // something rather than to whatever took its number.
-    CategoryRule = 7,
+    // 7 was CategoryRule, and categories are gone. The number is not reused: the
+    // ones above and below keep theirs, so nothing that was written down means
+    // something different now.
     UserPreference = 8
 }
 

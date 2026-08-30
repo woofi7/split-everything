@@ -5,10 +5,9 @@
  * "e-mail", "virement Interac" for an e-transfer, and the app's own vocabulary kept
  * consistent - a group is a "groupe", settling up is "regler".
  *
- * This is the one file in the project that is not plain ASCII, deliberately:
- * French without its accents reads as broken French, and the rule exists to keep
- * typographic ornaments out of the source, not letters out of a language. The CI
- * check that enforces it names this file as its only exception.
+ * Accented, unlike the rest of the project: French without its accents reads as
+ * broken French. The plain-ASCII habit is about keeping typographic ornaments out
+ * of the source - em dashes, arrows, curly quotes - not letters out of a language.
  */
 export const fr: Record<string, string> = {
   // Conflicts

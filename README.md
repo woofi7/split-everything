@@ -167,9 +167,6 @@ npm test                                       # 1311 tests
 npm run typecheck
 npm run lint                                   # unused code and template mistakes
 npm run test:coverage                          # enforces per-layer thresholds
-
-# And the one rule no compiler enforces: the source is plain ASCII.
-python3 scripts/check-ascii.py
 ```
 
 Prefer `waitFor(condition)` from the view harness over `settle(n)` when a test
@@ -201,8 +198,7 @@ tests in both suites, so a drift fails a build instead of corrupting data:
 
 ## Deploying
 
-A release is a version tag. CI runs the ASCII check, both suites and the lint on
-every push; a tag also builds the two images and pushes them to Docker Hub as
+A release is a version tag. CI runs both suites and the lint on every push; a tag also builds the two images and pushes them to Docker Hub as
 `latest` plus three semver tags, the same release model as the other stack on that
 server.
 
