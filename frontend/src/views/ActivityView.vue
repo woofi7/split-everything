@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
+import GroupMenu from '@/components/groups/GroupMenu.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
@@ -111,13 +112,17 @@ function targetOf(entry: ActivityEntry) {
 
 <template>
   <AppShell
-    title="Activity"
-    :subtitle="groups.mainGroup?.name"
+    :title="groups.mainGroup?.name ?? 'Activity'"
+    :subtitle="groups.mainGroup ? 'Activity' : undefined"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-offline="isOffline || groups.isOffline"
     :is-syncing="expenses.isSyncing"
   >
+    <template #header-action>
+      <GroupMenu />
+    </template>
+
     <ul v-if="entries.length > 0" class="flex flex-col gap-2">
       <li v-for="entry in entries" :key="entry.id">
         <!-- A link where there is something to open, and plain text where there is

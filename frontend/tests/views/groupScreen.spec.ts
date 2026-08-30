@@ -27,11 +27,14 @@ const api = () => fakeApi({ '/groups': () => testGroup() })
  * these behaviours are asserted where they actually live.
  */
 describe('the group screen', () => {
-  it('shows the group name and member count', async () => {
+  it('names the group first and the screen second', async () => {
     const { wrapper } = await mountView(DashboardView, { api: api() })
 
-    expect(textOf(wrapper)).toContain('Roommates')
-    expect(textOf(wrapper)).toContain('2 people')
+    // Which group you are in is the thing worth reading first, and it is the same
+    // question on activity and stats. The member count it replaces is on the
+    // balances below and in the group's own settings.
+    expect(wrapper.find('h1').text()).toBe('Roommates')
+    expect(textOf(wrapper)).toContain('Dashboard')
   })
 
   it('lists each member balance', async () => {

@@ -11,6 +11,23 @@ vi.mock('vue-router', () => ({
 }))
 
 describe('ActivityView', () => {
+  it('names the group first and the screen second', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({ '/activity': () => ({ items: [] }), '/groups': () => [testGroup()] }),
+    })
+    await settle()
+
+    expect(wrapper.find('h1').text()).toBe('Roommates')
+    expect(textOf(wrapper)).toContain('Activity')
+  })
+
+  it('offers the group menu, since the feed is about a group', async () => {
+    const { wrapper } = await mountView(ActivityView, { api: fakeApi({ '/activity': () => ({ items: [] }) }) })
+    await settle()
+
+    expect(wrapper.find('[data-testid="group-menu"]').exists()).toBe(true)
+  })
+
   const feed = (items: unknown[]) =>
     fakeApi({ '/activity': () => ({ items }), '/groups': () => [testGroup()] })
 
@@ -97,6 +114,21 @@ describe('ActivityView', () => {
 })
 
 describe('StatsView', () => {
+  it('names the group first and the screen second', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+    await settle()
+
+    expect(wrapper.find('h1').text()).toBe('Roommates')
+    expect(textOf(wrapper)).toContain('Stats')
+  })
+
+  it('offers the group menu, since the screen is about a group', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+    await settle()
+
+    expect(wrapper.find('[data-testid="group-menu"]').exists()).toBe(true)
+  })
+
   const dashboard = (overrides: Record<string, unknown> = {}) => ({
     currency: 'CAD',
     totalSpend: 150,
@@ -157,7 +189,7 @@ describe('StatsView', () => {
   it('draws the spend-over-time bars scaled to the biggest bucket', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    const bars = wrapper.findAll('[role="img"] li > span')
+    const bars = wrapper.findAll('[data-testid="spend-chart"] li > span')
     expect(bars).toHaveLength(2)
     // The tallest bucket fills the chart; the other is proportional.
     expect(bars[0].attributes('style')).toContain('height: 100%')
@@ -171,7 +203,7 @@ describe('StatsView', () => {
     // resolved against nothing and the whole chart rendered flat. jsdom does no
     // layout, which is why the style assertion above passed while the chart was
     // empty on screen.
-    const items = wrapper.findAll('[role="img"] li')
+    const items = wrapper.findAll('[data-testid="spend-chart"] li')
     expect(items.length).toBeGreaterThan(0)
     for (const item of items) expect(item.classes()).toContain('h-full')
   })
@@ -196,7 +228,7 @@ describe('StatsView', () => {
       }),
     })
 
-    const bars = wrapper.findAll('[role="img"] li > span')
+    const bars = wrapper.findAll('[data-testid="spend-chart"] li > span')
     expect(bars[1].attributes('style')).toContain('height: 4%')
   })
 
@@ -204,7 +236,7 @@ describe('StatsView', () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
     // January had two payers, February one.
-    const bars = wrapper.findAll('[role="img"] li')
+    const bars = wrapper.findAll('[data-testid="spend-chart"] li')
     expect(bars[0].findAll('[data-testid="bar-segment"]')).toHaveLength(2)
     expect(bars[1].findAll('[data-testid="bar-segment"]')).toHaveLength(1)
 
@@ -217,7 +249,7 @@ describe('StatsView', () => {
   it('sizes each segment by that person share of the bucket', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    const segments = wrapper.findAll('[role="img"] li')[0].findAll('[data-testid="bar-segment"]')
+    const segments = wrapper.findAll('[data-testid="spend-chart"] li')[0].findAll('[data-testid="bar-segment"]')
     expect(segments[0].attributes('style')).toContain('height: 60%')
     expect(segments[1].attributes('style')).toContain('height: 40%')
   })
@@ -234,7 +266,7 @@ describe('StatsView', () => {
   it('describes the chart for a screen reader', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    const label = wrapper.find('[role="img"]').attributes('aria-label')
+    const label = wrapper.find('[data-testid="spend-chart"]').attributes('aria-label')
     expect(label).toContain('by who paid')
     expect(label).toContain('Alice')
   })
@@ -325,7 +357,7 @@ describe('StatsView', () => {
   it('leaves the chart out when there is nothing to plot', async () => {
     const { wrapper } = await mountView(StatsView, { api: api({ spendOverTime: [] }) })
 
-    expect(wrapper.find('[role="img"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="spend-chart"]').exists()).toBe(false)
   })
 })
 
