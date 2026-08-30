@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
+import { memberColor, memberColors } from '@/domain/memberColors'
 
 interface ActivityEntry {
   id: number
   groupId: string | null
   groupName: string | null
   kind: string
+  /** The membership that acted, which is what colours are keyed by. */
+  actorMemberId: string | null
   actorName: string | null
   /** What the entry is about, so an expense can be opened from here. */
   subjectType: string | null
@@ -55,6 +58,32 @@ async function load(): Promise<void> {
 
 const when = (iso: string) => new Date(iso).toLocaleString()
 
+const colours = computed(() =>
+  memberColors(
+    [...new Set(entries.value.map((entry) => entry.actorMemberId).filter((id): id is string => !!id))],
+  ),
+)
+
+/**
+ * The colour of whoever acted, as the card, matching the expense cards exactly.
+ *
+ * Mixed with the surface rather than used raw: the text has to stay readable, and
+ * mixing with the token keeps it right in both themes. An entry with nobody behind
+ * it, such as a system event, keeps the plain surface rather than borrowing
+ * somebody else's colour.
+ */
+function cardStyle(entry: ActivityEntry) {
+  if (!entry.actorMemberId) return undefined
+
+  const colour = colours.value[entry.actorMemberId] ?? memberColor(entry.actorMemberId)
+
+  return {
+    backgroundColor: `color-mix(in oklab, ${colour} 16%, var(--surface-raised))`,
+    borderColor: `color-mix(in oklab, ${colour} 35%, transparent)`,
+    borderLeftColor: colour,
+  }
+}
+
 /**
  * Where an entry leads.
  *
@@ -98,7 +127,9 @@ function targetOf(entry: ActivityEntry) {
           :to="targetOf(entry)!"
           data-testid="activity-row"
           data-linked="true"
-          class="surface-card tap-target block p-3"
+          class="tap-target block rounded-xl border border-l-4 p-3"
+          :class="entry.actorMemberId ? '' : 'surface-card'"
+          :style="cardStyle(entry)"
         >
           <span class="block text-sm">{{ entry.summary }}</span>
           <span class="mt-1 block text-xs text-[var(--text-muted)]">
@@ -107,7 +138,14 @@ function targetOf(entry: ActivityEntry) {
           </span>
         </RouterLink>
 
-        <div v-else data-testid="activity-row" data-linked="false" class="surface-card p-3">
+        <div
+          v-else
+          data-testid="activity-row"
+          data-linked="false"
+          class="rounded-xl border border-l-4 p-3"
+          :class="entry.actorMemberId ? '' : 'surface-card'"
+          :style="cardStyle(entry)"
+        >
           <p class="text-sm">{{ entry.summary }}</p>
           <p class="mt-1 text-xs text-[var(--text-muted)]">
             <template v-if="entry.groupName">{{ entry.groupName }} - </template>

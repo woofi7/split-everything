@@ -7,6 +7,7 @@ import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { memberColor, memberColors } from '@/domain/memberColors'
+import { formatMoney } from '@/domain/money'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +18,8 @@ const auth = useAuthStore()
 const groupId = computed(() => String(route.params.groupId))
 const expenseId = computed(() => String(route.params.expenseId))
 const commentDraft = ref('')
+const confirmingDelete = ref(false)
+const isDeleting = ref(false)
 const error = ref<string | null>(null)
 
 onMounted(async () => {
@@ -83,11 +86,16 @@ async function postComment(): Promise<void> {
 
 async function remove(): Promise<void> {
   error.value = null
+  isDeleting.value = true
+
   try {
     await expenses.remove(expenseId.value)
     await router.replace({ name: 'group', params: { groupId: groupId.value } })
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not delete the expense.'
+    confirmingDelete.value = false
+  } finally {
+    isDeleting.value = false
   }
 }
 </script>
@@ -211,13 +219,46 @@ async function remove(): Promise<void> {
       <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
 
       <button
+        v-if="!confirmingDelete"
         type="button"
+        data-testid="delete-expense"
         class="btn btn-press btn-danger w-full"
-        style="border-color: var(--border)"
-        @click="remove"
+        @click="confirmingDelete = true"
       >
         Delete this expense
       </button>
+
+      <!--
+        Asked rather than done. An expense is somebody else's balance as well as
+        yours, and the only way back is to add it again from memory.
+      -->
+      <div v-else class="surface-card flex flex-col gap-3 p-4">
+        <p class="text-sm font-medium">Delete this expense?</p>
+        <p class="text-xs text-[var(--text-muted)]">
+          {{ expense.description }} ({{ formatMoney(expense.amount, expense.currency) }}) goes for
+          everyone in {{ group?.name ?? 'this group' }}, and everyone's balance moves with it.
+        </p>
+
+        <div class="flex gap-2">
+          <button
+            type="button"
+            data-testid="cancel-delete"
+            class="btn btn-press btn-secondary flex-1"
+            @click="confirmingDelete = false"
+          >
+            Keep it
+          </button>
+          <button
+            type="button"
+            data-testid="confirm-delete"
+            class="btn btn-press btn-danger flex-1"
+            :disabled="isDeleting"
+            @click="remove"
+          >
+            {{ isDeleting ? 'Deleting' : 'Delete it' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <p v-else class="text-sm text-[var(--text-muted)]">

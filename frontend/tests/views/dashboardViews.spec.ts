@@ -355,12 +355,50 @@ describe('ActivityView opening an expense', () => {
     groupId: GROUP_ID,
     groupName: 'Roommates',
     kind: 'ExpenseAdded',
+    actorMemberId: 'm1',
     actorName: 'Alice',
     subjectType: 'Expense',
     subjectId: 'expense-1',
     summary: 'Alice added Dinner',
     occurredAt: '2026-01-05T12:00:00Z',
     ...overrides,
+  })
+
+  it('tints an entry with the colour of whoever acted', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({
+        '/activity': () => ({
+          items: [
+            entry({ id: 1, actorMemberId: 'm1', subjectId: 'expense-1' }),
+            entry({ id: 2, actorMemberId: 'm2', subjectId: 'expense-2' }),
+          ],
+        }),
+        '/groups': () => [testGroup()],
+      }),
+    })
+    await settle()
+
+    const rows = wrapper.findAll('[data-testid="activity-row"]')
+    const styles = rows.map((row) => row.attributes('style'))
+
+    expect(styles[0]).toContain('color-mix')
+    // Two people, two colours, matching their expense cards.
+    expect(styles[0]).not.toBe(styles[1])
+  })
+
+  it('leaves an entry with nobody behind it on the plain surface', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({
+        '/activity': () => ({ items: [entry({ actorMemberId: null })] }),
+        '/groups': () => [testGroup()],
+      }),
+    })
+    await settle()
+
+    // A system event must not borrow somebody else's colour.
+    const row = wrapper.find('[data-testid="activity-row"]')
+    expect(row.attributes('style')).toBeFalsy()
+    expect(row.classes()).toContain('surface-card')
   })
 
   it('links an expense entry to the expense', async () => {

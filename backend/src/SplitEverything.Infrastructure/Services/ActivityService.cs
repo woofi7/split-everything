@@ -48,7 +48,7 @@ public sealed class ActivityService(AppDbContext db, IClock clock) : IActivitySe
 
         var items = rows.Select(r => new ActivityEntryDto(
             r.Entry.Id, r.Entry.GroupId, r.GroupName, r.Entry.Kind,
-            r.Entry.ActorUserId, r.ActorName, r.ActorAvatar,
+            r.Entry.ActorUserId, r.Entry.ActorMemberId, r.ActorName, r.ActorAvatar,
             r.Entry.SubjectType, r.Entry.SubjectId,
             r.Entry.Summary, r.Entry.MetadataJson, r.Entry.OccurredAt)).ToList();
 
