@@ -67,6 +67,7 @@ export const fr: Record<string, string> = {
   'Suggested transfers': 'Virements suggérés',
   Use: 'Utiliser',
   'Who paid': 'Qui a payé',
+  'Still to settle': 'Reste à régler',
   'Who received it': "Qui l'a reçu",
   Note: 'Note',
   'Settle up': 'Régler',
@@ -358,6 +359,10 @@ export const fr: Record<string, string> = {
     'Ce navigateur bloque les notifications pour ce site. Autorisez-les dans ses paramètres de site, puis revenez.',
   'This browser cannot do notifications.': 'Ce navigateur ne gère pas les notifications.',
   'Notifications were not allowed.': "Les notifications n'ont pas été autorisées.",
+  'This server has no notification keys yet, so it cannot send any. Whoever runs it has to add them.':
+    "Ce serveur n'a pas encore de clés de notification, il ne peut donc rien envoyer. La personne qui l'administre doit les ajouter.",
+  'Could not turn notifications on. Try again.':
+    "Impossible d'activer les notifications. Réessayez.",
   'Could not change notifications.': 'Impossible de modifier les notifications.',
   'Install on this device': 'Installer sur cet appareil',
   Install: 'Installer',

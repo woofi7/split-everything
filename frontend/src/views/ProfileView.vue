@@ -7,7 +7,13 @@ import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
 import { getDeviceId } from '@/offline/db'
-import { pushState, registerForPush, unregisterPush, type PushState } from '@/native/push'
+import {
+  pushState,
+  registerForPush,
+  unregisterPush,
+  type PushOutcome,
+  type PushState,
+} from '@/native/push'
 import {
   canBeInstalled,
   canInstall,
@@ -91,8 +97,8 @@ async function toggleNotifications(): Promise<void> {
       await unregisterPush(useApi())
     } else {
       const deviceId = await getDeviceId()
-      const granted = await registerForPush(useApi(), deviceId)
-      if (!granted) error.value = t('Notifications were not allowed.')
+      const outcome = await registerForPush(useApi(), deviceId)
+      if (outcome !== 'on') error.value = whyNotNotifications(outcome)
     }
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : t('Could not change notifications.')
@@ -100,6 +106,24 @@ async function toggleNotifications(): Promise<void> {
     await readNotifications()
     isTogglingPush.value = false
   }
+}
+
+/**
+ * Why the switch did not stay on.
+ *
+ * Each of these needs a different person to do something about it, which is the
+ * whole reason they are told apart: 'denied' is the browser's site settings,
+ * 'unconfigured' is whoever runs the server, and 'failed' is worth another tap.
+ */
+function whyNotNotifications(outcome: PushOutcome): string {
+  if (outcome === 'denied') return t('Notifications were not allowed.')
+  if (outcome === 'unsupported') return t('This browser cannot do notifications.')
+  if (outcome === 'unconfigured') {
+    return t(
+      'This server has no notification keys yet, so it cannot send any. Whoever runs it has to add them.',
+    )
+  }
+  return t('Could not turn notifications on. Try again.')
 }
 
 /** Installing it, which the browser either offers or cannot do at all. */

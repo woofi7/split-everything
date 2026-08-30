@@ -35,6 +35,12 @@ services:
       - Auth__GoogleClientId=${GOOGLE_CLIENT_ID}
       - Auth__AppBaseUrl=${PUBLIC_URL}
       - Cors__AllowedOrigins__0=${PUBLIC_URL}
+      # Without these the notification switch in the profile cannot work: the API
+      # serves an empty public key, the browser has nothing to subscribe to, and
+      # the app can only report that the server is not set up for it.
+      - Push__VapidPublicKey=${VAPID_PUBLIC_KEY}
+      - Push__VapidPrivateKey=${VAPID_PRIVATE_KEY}
+      - Push__VapidSubject=${VAPID_SUBJECT}
       - ReceiptStorage__RootPath=/data/receipts
     volumes:
       - /mnt/user/appdata/split-everything/receipts:/data/receipts

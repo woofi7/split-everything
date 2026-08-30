@@ -13,6 +13,7 @@ using SplitEverything.Api.Infrastructure;
 using SplitEverything.Application.Abstractions;
 using SplitEverything.Infrastructure;
 using SplitEverything.Infrastructure.Auth;
+using SplitEverything.Infrastructure.Notifications;
 using SplitEverything.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -258,6 +259,19 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+}
+
+// Say so at startup when notifications cannot work. A deployment without a VAPID
+// pair serves an empty public key, every browser fails to subscribe, and the only
+// symptom is a switch in the profile that refuses to stay on - which looked for all
+// the world like the phone refusing permission.
+var push = app.Services.GetRequiredService<PushOptions>();
+if (string.IsNullOrWhiteSpace(push.VapidPublicKey) || string.IsNullOrWhiteSpace(push.VapidPrivateKey))
+{
+    app.Logger.LogWarning(
+        "Web Push is not configured: Push:VapidPublicKey or Push:VapidPrivateKey is empty. "
+        + "Notifications cannot be turned on until both are set. Generate a pair with "
+        + "node infra/vapid/generate.mjs");
 }
 
 app.Run();
