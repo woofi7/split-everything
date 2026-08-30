@@ -99,7 +99,19 @@ public sealed class ImportService(
             ? await LoadMembersAsync(forMembers, ct)
             : new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
 
-        var parsed = ParseRows(table, request.Mapping, request.MemberNameMapping, members, request.FallbackCurrency);
+        // A name bound to an account is answered for, whether or not that account is
+        // in the group yet: the import makes it a member. Standing in a placeholder
+        // id keeps the rest of this method as it is, and none of it leaves here.
+        var nameMapping = new Dictionary<string, Guid?>(
+            request.MemberNameMapping, StringComparer.OrdinalIgnoreCase);
+        foreach (var name in request.MemberUserMapping?.Keys ?? Enumerable.Empty<string>())
+        {
+            var trimmed = name?.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed) && nameMapping.GetValueOrDefault(trimmed) is null)
+                nameMapping[trimmed] = BoundToAnAccount;
+        }
+
+        var parsed = ParseRows(table, request.Mapping, nameMapping, members, request.FallbackCurrency);
 
         var duplicates = request.GroupId is { } forDuplicates
             ? await FindDuplicatesAsync(userId, parsed.Select(r => r.Fingerprint).ToList(), forDuplicates, ct)
@@ -115,7 +127,7 @@ public sealed class ImportService(
             .SelectMany(r => r.ParticipantNames.Append(r.PaidByName ?? string.Empty))
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Where(n => Resolve(n, request.MemberNameMapping, members) is null)
+            .Where(n => Resolve(n, nameMapping, members) is null)
             .OrderBy(n => n)
             .ToList();
 
@@ -149,6 +161,13 @@ public sealed class ImportService(
         var createdMemberIds = new List<Guid>();
         var warnings = new List<string>();
         var deviceId = GroupService.DeviceFor(userId);
+
+        // Names bound to an account come first: they decide who the rows belong to,
+        // and without them the step below would invent a placeholder wearing the
+        // same name and the export would land on a stranger.
+        await BindAccountsAsync(
+            userId, groupId, request.MemberUserMapping, members, nameMapping,
+            createdMemberIds, deviceId, ct);
 
         var parsed = ParseRows(table, request.Mapping, nameMapping, members, request.FallbackCurrency);
 
@@ -693,6 +712,97 @@ public sealed class ImportService(
         foreach (var member in members) map[member.DisplayName] = member.Id;
         return map;
     }
+
+    /// <summary>
+    /// Makes each account the user matched a name to into a member of the group.
+    ///
+    /// An export is somebody's group history, and the people in it usually have
+    /// accounts here already: binding a name to one means the import lands on the
+    /// real person, with their own colour and their own view of the group, rather
+    /// than on a placeholder that happens to share their name.
+    ///
+    /// A membership that already exists is reused, including one that was removed,
+    /// for the same reason redeeming an invite does: a second row for one account
+    /// would collide with the one-membership-per-user index and orphan whatever
+    /// history points at the first.
+    /// </summary>
+    private async Task BindAccountsAsync(
+        Guid userId,
+        Guid groupId,
+        IReadOnlyDictionary<string, Guid>? mapping,
+        Dictionary<string, Guid> members,
+        Dictionary<string, Guid?> nameMapping,
+        List<Guid> createdMemberIds,
+        string deviceId,
+        CancellationToken ct)
+    {
+        if (mapping is null || mapping.Count == 0) return;
+
+        foreach (var (rawName, accountId) in mapping)
+        {
+            var name = rawName?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+
+            var account = await db.Users.FirstOrDefaultAsync(u => u.Id == accountId, ct)
+                          ?? throw new NotFoundException($"User {accountId}");
+
+            var existing = await db.GroupMembers
+                .FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == accountId, ct);
+
+            if (existing is not null)
+            {
+                if (existing.Status != MembershipStatus.Active || existing.IsDeleted)
+                {
+                    existing.Status = MembershipStatus.Active;
+                    existing.IsDeleted = false;
+                    existing.LeftAt = null;
+                    await writer.RecordAsync(existing, SyncEntityType.GroupMember, groupId,
+                        SyncOperation.Update, deviceId, userId,
+                        GroupService.MemberPayload(existing), ct: ct);
+                    await db.SaveChangesAsync(ct);
+                }
+
+                members[name] = existing.Id;
+                nameMapping[name] = existing.Id;
+                continue;
+            }
+
+            var taken = await db.GroupMembers
+                .Where(m => m.GroupId == groupId && m.ColorHex != null)
+                .Select(m => m.ColorHex)
+                .ToListAsync(ct);
+
+            var member = new GroupMember
+            {
+                GroupId = groupId,
+                UserId = accountId,
+                DisplayName = account.DisplayName,
+                Role = GroupRole.Member,
+                Status = MembershipStatus.Active,
+                ColorHex = MemberPalette.Assign(account.PreferredColorHex, taken),
+                JoinedAt = clock.UtcNow,
+                CreatedAt = clock.UtcNow,
+                UpdatedAt = clock.UtcNow
+            };
+            db.GroupMembers.Add(member);
+            await db.SaveChangesAsync(ct);
+
+            await writer.RecordAsync(member, SyncEntityType.GroupMember, groupId,
+                SyncOperation.Create, deviceId, userId, GroupService.MemberPayload(member), ct: ct);
+            await db.SaveChangesAsync(ct);
+
+            members[name] = member.Id;
+            nameMapping[name] = member.Id;
+            createdMemberIds.Add(member.Id);
+        }
+    }
+
+    /// <summary>
+    /// Stands for "a name the user has bound to an account" while a preview is
+    /// worked out. It is never written anywhere: a preview creates nothing, and by
+    /// the time anything is created the real member id is known.
+    /// </summary>
+    private static readonly Guid BoundToAnAccount = new("00000000-0000-0000-0000-0000000000ff");
 
     private static Guid? Resolve(
         string name, IReadOnlyDictionary<string, Guid?> nameMapping, Dictionary<string, Guid> members)

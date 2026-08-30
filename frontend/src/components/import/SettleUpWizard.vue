@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
+import type { AddableUser } from '@/api/types'
 
 /**
  * The Settle Up export import.
@@ -97,8 +98,19 @@ function chooseDestination(value: string): void {
   existingGroupId.value = value
 }
 
-/** Exported name -> member id, or null to create someone for it. */
+/**
+ * Exported name to whoever it is, as one value per name.
+ *
+ * Three answers, and they are not the same thing, so the value says which:
+ * null creates somebody under that name, `member:<id>` is somebody already in the
+ * group being imported into, and `user:<id>` is an account anywhere in this app.
+ * An export is another group's history, so the third is the common case: the
+ * people in it usually have accounts here and only the names came across.
+ */
 const nameMapping = ref<Record<string, string | null>>({})
+
+/** Everyone with an account here, so a name can be bound to the real person. */
+const accounts = ref<AddableUser[]>([])
 const skipped = ref<Set<number>>(new Set())
 
 const currency = computed(() => analysis.value?.detectedCurrency ?? 'CAD')
@@ -107,6 +119,35 @@ const members = computed(() => {
   if (target.value !== 'existing') return []
   return groups.membersOf(existingGroupId.value).filter((member) => member.status === 'Active')
 })
+
+/**
+ * Accounts not already offered as a member of the target group.
+ *
+ * A member who has an account is the same person, so offering both would be two
+ * ways to say one thing and only one of them would carry the history.
+ */
+const otherAccounts = computed(() => {
+  const taken = new Set(members.value.map((member) => member.userId).filter(Boolean))
+  return accounts.value.filter((person) => !taken.has(person.id))
+})
+
+/** Split back into the two shapes the API takes. */
+function memberMappingForRequest(): Record<string, string | null> {
+  return Object.fromEntries(
+    Object.entries(nameMapping.value).map(([name, value]) => [
+      name,
+      value?.startsWith('member:') ? value.slice('member:'.length) : null,
+    ]),
+  )
+}
+
+function userMappingForRequest(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(nameMapping.value)
+      .filter(([, value]) => value?.startsWith('user:'))
+      .map(([name, value]) => [name, value!.slice('user:'.length)]),
+  )
+}
 
 const toImport = computed(() =>
   (preview.value?.rows ?? []).filter((row) => !skipped.value.has(row.rowNumber)).length,
@@ -138,6 +179,15 @@ async function onFile(event: Event): Promise<void> {
     newGroupName.value = chosen.name.replace(/\.csv$/i, '').trim()
     existingGroupId.value = groups.visibleGroups[0]?.id ?? ''
     nameMapping.value = Object.fromEntries(result.detectedMemberNames.map((name) => [name, null]))
+
+    // Everybody here, so a name from the export can be bound to the real person.
+    // A failure leaves the list empty rather than stopping the import: the field
+    // still works, it just offers fewer answers.
+    try {
+      accounts.value = await groups.addableUsers()
+    } catch {
+      accounts.value = []
+    }
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not read that export.'
   } finally {
@@ -200,7 +250,8 @@ async function loadPreview(): Promise<void> {
       request: JSON.stringify({
         groupId: groupIdForRequest(),
         mapping: mapping(),
-        memberNameMapping: nameMapping.value,
+        memberNameMapping: memberMappingForRequest(),
+        memberUserMapping: userMappingForRequest(),
         fallbackCurrency: currency.value,
       }),
     })
@@ -240,7 +291,8 @@ async function commit(): Promise<void> {
         groupId: groupIdForRequest(),
         newGroupName: target.value === 'new' ? newGroupName.value.trim() : null,
         mapping: mapping(),
-        memberNameMapping: nameMapping.value,
+        memberNameMapping: memberMappingForRequest(),
+        memberUserMapping: userMappingForRequest(),
         skipRowNumbers: [...skipped.value].sort((a, b) => a - b),
         createMissingMembers: true,
         skipDuplicates: false,
@@ -362,9 +414,32 @@ const dateOf = (value: string | null) =>
             :aria-label="`Who is ${name}`"
           >
             <option :value="null">Add as a new person</option>
-            <option v-for="member in members" :key="member.id" :value="member.id">
-              {{ member.displayName }}
-            </option>
+
+            <optgroup v-if="members.length > 0" label="Already in this group">
+              <option
+                v-for="member in members"
+                :key="member.id"
+                :value="`member:${member.id}`"
+              >
+                {{ member.displayName }}
+              </option>
+            </optgroup>
+
+            <!--
+              Everybody with an account here, not only the target group's members.
+              An export is another group's history: the people in it usually have
+              accounts already and only their names came across, so binding a name
+              to the real person is the point rather than the exception.
+            -->
+            <optgroup v-if="otherAccounts.length > 0" label="Everyone here">
+              <option
+                v-for="person in otherAccounts"
+                :key="person.id"
+                :value="`user:${person.id}`"
+              >
+                {{ person.displayName }} ({{ person.email }})
+              </option>
+            </optgroup>
           </select>
         </div>
       </div>
