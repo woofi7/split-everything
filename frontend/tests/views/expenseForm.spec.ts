@@ -163,8 +163,9 @@ describe('ExpenseFormView', () => {
     await wrapper.find('input[inputmode="decimal"]').setValue('60')
     await settle()
 
-    // The preview is the whole point: people check the numbers before saving.
-    expect(wrapper.text()).toContain('Each person owes')
+    // The preview is the whole point: people check the numbers before saving. It
+    // now sits on each person's chip rather than in a section of its own, which is
+    // what bought the room to fit the form on one screen.
     expect(wrapper.text()).toContain('30.00')
   })
 
@@ -194,7 +195,7 @@ describe('ExpenseFormView', () => {
   it('saves the expense locally and returns to the group', async () => {
     const { wrapper, expenses } = await mountView()
 
-    await wrapper.find('input[type="text"]').setValue('Groceries')
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Groceries')
     await wrapper.find('input[inputmode="decimal"]').setValue('60')
     await settle()
 
@@ -214,7 +215,7 @@ describe('ExpenseFormView', () => {
   it('queues the expense rather than waiting on the network', async () => {
     const { wrapper } = await mountView()
 
-    await wrapper.find('input[type="text"]').setValue('Groceries')
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Groceries')
     await wrapper.find('input[inputmode="decimal"]').setValue('60')
     await settle()
     await wrapper.find('form').trigger('submit')
@@ -235,7 +236,7 @@ describe('ExpenseFormView', () => {
 
     const percentageButton = wrapper
       .findAll('button[type="button"]')
-      .find((button) => button.text() === 'By percentage')
+      .find((button) => button.text() === 'Percent')
     await percentageButton!.trigger('click')
     await settle()
 
@@ -250,12 +251,12 @@ describe('ExpenseFormView', () => {
 
   it('accepts a valid percentage split', async () => {
     const { wrapper, expenses } = await mountView()
-    await wrapper.find('input[type="text"]').setValue('Rent')
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Rent')
     await wrapper.find('input[inputmode="decimal"]').setValue('100')
 
     const percentageButton = wrapper
       .findAll('button[type="button"]')
-      .find((button) => button.text() === 'By percentage')
+      .find((button) => button.text() === 'Percent')
     await percentageButton!.trigger('click')
     await settle()
 
@@ -425,12 +426,13 @@ describe('ExpenseFormView editing an expense', () => {
 
     // Read back out of the stored shares rather than recomputed, or the shares
     // people chose would be lost the moment they opened the form.
+    // The chosen split type is the filled button; the others are outlined.
     const selected = wrapper
       .findAll('button')
-      .filter((button) => button.classes().includes('text-brand-400'))
+      .filter((button) => button.classes().includes('btn-primary'))
       .map((button) => button.text())
 
-    expect(selected).toContain('By shares')
+    expect(selected).toContain('Shares')
 
     // The amount, plus one input per participant for their share.
     expect(wrapper.findAll('input[inputmode="decimal"]').length).toBe(3)
@@ -515,5 +517,63 @@ describe('ExpenseFormView editing an expense', () => {
     await settle()
 
     expect(textOf(wrapper)).toContain('not on this device')
+  })
+})
+
+describe('ExpenseFormView fits one screen', () => {
+  beforeEach(() => {
+    routeParams = {}
+    push.mockClear()
+    replace.mockClear()
+  })
+
+  it('asks for six things and no more', async () => {
+    const { wrapper } = await mountView()
+
+    // Adding an expense is what people open this app to do, usually one-handed, so
+    // a form that scrolls hides half the decision. Amount, date, description,
+    // category, who paid, and who it is between.
+    const fields = wrapper.findAll('input:not([type="checkbox"]), select')
+    expect(fields.length).toBeLessThanOrEqual(6)
+  })
+
+  it('does not ask which group, since the app is on one', async () => {
+    const { wrapper } = await mountView()
+
+    // The group name is in the subtitle instead, so it is never in doubt.
+    expect(wrapper.findAll('select')).toHaveLength(2)
+    expect(textOf(wrapper)).toContain('Roommates')
+  })
+
+  it('shows each share on the person rather than in a section below', async () => {
+    const { wrapper } = await mountView()
+
+    await wrapper.find('input[inputmode="decimal"]').setValue('60')
+    await settle()
+
+    // One block instead of two: the row of people and the preview were the same
+    // information twice.
+    const chips = wrapper.findAll('fieldset li')
+    expect(chips).toHaveLength(2)
+    expect(chips[0].text()).toContain('30.00')
+  })
+
+  it('keeps the save button reachable however many people are in the group', async () => {
+    const { wrapper } = await mountView()
+
+    // Sticky, so a group of ten cannot push it off the bottom.
+    expect(wrapper.find('button[type="submit"]').classes()).toContain('sticky')
+  })
+
+  it('fits the four split types on one row', async () => {
+    const { wrapper } = await mountView()
+
+    const labels = wrapper
+      .findAll('fieldset button[type="button"]')
+      .map((button) => button.text())
+
+    expect(labels).toEqual(['Equally', 'Percent', 'Shares', 'Exact'])
+    // Short enough that four abreast do not wrap on a phone.
+    for (const label of labels) expect(label.length).toBeLessThanOrEqual(7)
   })
 })
