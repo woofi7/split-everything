@@ -1,11 +1,20 @@
 <script setup lang="ts">
 import { LOCALES, t } from '@/i18n'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
+import { getDeviceId } from '@/offline/db'
+import { pushState, registerForPush, unregisterPush, type PushState } from '@/native/push'
+import {
+  canBeInstalled,
+  canInstall,
+  install,
+  installsByHand,
+  isInstalled,
+} from '@/native/install'
 import AccentChoice from '@/components/ui/AccentChoice.vue'
 
 const auth = useAuthStore()
@@ -55,6 +64,52 @@ const accent = computed(() => auth.accent.name)
 async function pickAccent(name: string): Promise<void> {
   error.value = null
   await auth.setAccent(name)
+}
+
+/**
+ * Notifications on this device.
+ *
+ * Asked rather than assumed: the browser owns the permission and the subscription,
+ * so the only honest answer comes from looking. Read again after every change,
+ * because a permission dialog can be dismissed and the switch has to reflect that.
+ */
+const notifications = ref<PushState>('off')
+const isTogglingPush = ref(false)
+
+async function readNotifications(): Promise<void> {
+  notifications.value = await pushState()
+}
+
+onMounted(readNotifications)
+
+async function toggleNotifications(): Promise<void> {
+  error.value = null
+  isTogglingPush.value = true
+
+  try {
+    if (notifications.value === 'on') {
+      await unregisterPush(useApi())
+    } else {
+      const deviceId = await getDeviceId()
+      const granted = await registerForPush(useApi(), deviceId)
+      if (!granted) error.value = t('Notifications were not allowed.')
+    }
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : t('Could not change notifications.')
+  } finally {
+    await readNotifications()
+    isTogglingPush.value = false
+  }
+}
+
+/** Installing it, which the browser either offers or cannot do at all. */
+const installed = ref(isInstalled())
+const installable = ref(canBeInstalled())
+const installByHand = ref(installsByHand())
+
+async function installApp(): Promise<void> {
+  const outcome = await install()
+  if (outcome === 'accepted') installed.value = true
 }
 
 /** The language it is read in, which is the same kind of setting. */
@@ -187,6 +242,81 @@ async function deleteAccount(): Promise<void> {
           {{ choice.label }}
         </button>
       </div>
+    </section>
+
+    <!--
+      Notifications, which needed a way in: the registration existed and nothing
+      ever called it. What it says depends on why it cannot be offered, because
+      those have different answers - a plain-HTTP address needs the app served
+      properly, a refused permission needs the browser's own settings.
+    -->
+    <section class="surface-card mb-4 p-4">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-sm">{{ t('Notifications on this device') }}</span>
+
+        <button
+          v-if="notifications === 'on' || notifications === 'off'"
+          type="button"
+          data-testid="notifications-toggle"
+          class="btn btn-press btn-secondary min-h-0 rounded-full px-3 py-1 text-sm"
+          style="border-color: var(--border)"
+          :aria-pressed="notifications === 'on'"
+          :disabled="isTogglingPush"
+          @click="toggleNotifications"
+        >
+          {{ isTogglingPush ? t('Working') : notifications === 'on' ? t('On') : t('Off') }}
+        </button>
+      </div>
+
+      <p
+        v-if="notifications !== 'on'"
+        data-testid="notifications-note"
+        class="mt-2 text-xs text-[var(--text-muted)]"
+      >
+        <template v-if="notifications === 'insecure'">
+          {{ t('Notifications need the app served over https. On a plain address like a local network one, the browser turns them off entirely.') }}
+        </template>
+        <template v-else-if="notifications === 'denied'">
+          {{ t('This browser is blocking notifications for this site. Allow them in its site settings, then come back.') }}
+        </template>
+        <template v-else-if="notifications === 'unsupported'">
+          {{ t('This browser cannot do notifications.') }}
+        </template>
+        <template v-else>
+          {{ t('Told about a new expense, a settlement or a comment while the app is closed.') }}
+        </template>
+      </p>
+    </section>
+
+    <!--
+      Installing it, so it opens like an application rather than a page: no browser
+      chrome, its own icon, and its own place in the app switcher. Chrome offers
+      this itself, iOS does not offer it at all and has to be told what to tap.
+    -->
+    <section v-if="!installed" class="surface-card mb-4 p-4">
+      <p class="text-sm">{{ t('Install on this device') }}</p>
+
+      <p class="mt-1 mb-3 text-xs text-[var(--text-muted)]">
+        <template v-if="installByHand">
+          {{ t('In Safari: Share, then Add to Home Screen. It then opens like an app, and notifications become possible.') }}
+        </template>
+        <template v-else-if="!installable">
+          {{ t('Installing needs the app served over https. A plain address like a local network one cannot be installed.') }}
+        </template>
+        <template v-else>
+          {{ t('Opens without browser chrome, keeps its own icon, and works offline.') }}
+        </template>
+      </p>
+
+      <button
+        v-if="canInstall"
+        type="button"
+        data-testid="install-app"
+        class="btn btn-press btn-primary w-full"
+        @click="installApp"
+      >
+        {{ t('Install') }}
+      </button>
     </section>
 
     <section class="surface-card mb-4 flex items-center justify-between p-4">

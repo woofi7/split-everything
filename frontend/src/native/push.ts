@@ -11,6 +11,39 @@ export type PushChannel = 'WebPush' | 'Apns' | 'Fcm'
  * fallback for anyone in a plain browser. Both end up registering the same shape
  * with the API, so the server does not care which shell a device came from.
  */
+/**
+ * Where notifications stand on this device.
+ *
+ * Five answers rather than a boolean, because the reasons differ in what somebody
+ * can do about them: an insecure origin needs the app served over https, a refused
+ * permission needs the browser's own site settings, and "off" is a switch away.
+ */
+export type PushState = 'unsupported' | 'insecure' | 'denied' | 'off' | 'on'
+
+export async function pushState(): Promise<PushState> {
+  if (Capacitor.isNativePlatform()) {
+    const { PushNotifications } = await import('@capacitor/push-notifications')
+    const status = await PushNotifications.checkPermissions()
+
+    if (status.receive === 'denied') return 'denied'
+    return status.receive === 'granted' ? 'on' : 'off'
+  }
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    // A plain-HTTP origin has no service worker at all, which is the common case
+    // on a local network and worth saying rather than calling unsupported.
+    return window.isSecureContext ? 'unsupported' : 'insecure'
+  }
+
+  if (typeof Notification === 'undefined') return 'unsupported'
+  if (Notification.permission === 'denied') return 'denied'
+
+  const registration = await navigator.serviceWorker.getRegistration()
+  const subscription = await registration?.pushManager.getSubscription()
+
+  return subscription ? 'on' : 'off'
+}
+
 export async function registerForPush(api: ApiClient, deviceId: string): Promise<boolean> {
   return Capacitor.isNativePlatform()
     ? registerNative(api, deviceId)
