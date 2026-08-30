@@ -124,7 +124,11 @@ watch(sentinel, (element) => {
     (entries) => {
       if (entries.some((entry) => entry.isIntersecting)) showMoreExpenses()
     },
-    { rootMargin: '400px' },
+    // Against the page rather than the window, because the page is what scrolls.
+    // Watching the window instead, the margin below would buy nothing: the foot of
+    // the list is clipped by the page long before the window has an opinion, so
+    // the next cards would only be built once the last one was already read.
+    { root: element.closest('[data-app-page]'), rootMargin: '400px' },
   )
   observer.observe(element)
 })

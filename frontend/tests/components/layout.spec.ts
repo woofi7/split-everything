@@ -156,12 +156,49 @@ describe('AppShell', () => {
     expect(wrapper.find('nav').exists()).toBe(false)
   })
 
-  it('leaves room for the nav so it never covers the last row', () => {
+  it('leaves room under the raised centre button of the nav', () => {
     const withNav = mountShell({})
     const withoutNav = mountShell({ showNav: false })
 
-    expect(withNav.find('main').classes()).toContain('pb-28')
-    expect(withoutNav.find('main').classes()).toContain('pb-8')
+    // The bar is a row of the frame rather than something over the page, so this
+    // is clearance for the button that stands proud of it, not for the bar.
+    expect(withNav.find('main').classes()).toContain('pb-10')
+    expect(withoutNav.find('main').classes()).toContain('pb-[max(2rem,env(safe-area-inset-bottom))]')
+  })
+
+  /**
+   * The shell is a frame the height of the screen, and the page scrolls inside it.
+   *
+   * Not a detail of styling: while the window was the thing that scrolled, a phone
+   * slid its own toolbar in and out as it went, and everything pinned to the
+   * bottom of the screen moved with it. A swipe across the screen that leaked a
+   * few pixels of scroll took the tab bar off the bottom of the screen with it.
+   */
+  describe('as a frame', () => {
+    it('scrolls the page rather than the window', () => {
+      const main = mountShell({}).find('main')
+
+      expect(main.classes()).toContain('overflow-y-auto')
+      // Without this a flex child refuses to be shorter than its content, and the
+      // frame grows instead of the page scrolling.
+      expect(main.classes()).toContain('min-h-0')
+      expect(main.classes()).toContain('flex-1')
+    })
+
+    it('names the page, so a gesture can move it and find its scroll', () => {
+      const wrapper = mountShell({})
+
+      expect(wrapper.find('[data-app-page]').element.tagName).toBe('MAIN')
+    })
+
+    it('holds the tab bar in the frame rather than over the page', () => {
+      const nav = mountShell({}).find('nav')
+
+      // Pinned, it was placed against the viewport, and a phone changes what that
+      // means every time it slides its toolbar about.
+      expect(nav.classes()).not.toContain('fixed')
+      expect(nav.classes()).toContain('shrink-0')
+    })
   })
 })
 

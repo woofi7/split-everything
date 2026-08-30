@@ -54,7 +54,10 @@ function choose(groupId: string): void {
   // browser holding a scroll position through a wholesale change of content lands
   // further down still. After the new screen is laid out, or there is nothing to
   // scroll to yet.
-  void nextTick(() => window.scrollTo(0, 0))
+  void nextTick(() => {
+    const page = document.querySelector<HTMLElement>('[data-app-page]')
+    if (page) page.scrollTop = 0
+  })
 }
 </script>
 

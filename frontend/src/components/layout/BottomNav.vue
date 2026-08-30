@@ -56,8 +56,19 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
 </script>
 
 <template>
+  <!--
+    A row of the frame rather than something pinned over the page.
+
+    Pinned, it was placed against the viewport, and a phone changes what that
+    means every time it slides its own toolbar in or out: the bar moved down the
+    screen, and off it. As a row in a frame the height of the screen, nothing about
+    scrolling can reach it.
+
+    Raised in the stack all the same, because the centre button stands proud of the
+    bar and has to be over the page rather than under it.
+  -->
   <nav
-    class="fixed inset-x-0 bottom-0 z-30 overflow-visible border-t bg-[var(--surface-raised)] pb-[env(safe-area-inset-bottom)]"
+    class="relative z-30 shrink-0 overflow-visible border-t bg-[var(--surface-raised)] pb-[env(safe-area-inset-bottom)]"
     style="border-color: var(--border)"
     aria-label="Main"
   >

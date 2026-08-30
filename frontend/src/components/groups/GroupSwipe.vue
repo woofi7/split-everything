@@ -245,7 +245,7 @@ function commit(): void {
   // whole of it.
   if (quiet) {
     groups.cycleMainGroup(step)
-    if (window.scrollY > 0) window.scrollTo(0, 0)
+    toTop()
     finish()
     return
   }
@@ -270,11 +270,9 @@ function commit(): void {
       /*
        * The new group's screen starts at the top, like any other page arrived at.
        * Left alone it starts wherever the old one was being read, which is not a
-       * place in this group at all, and a phone answers a scroll position that
-       * jumps by a few hundred pixels by sliding its own toolbar about, taking
-       * the tab bar with it. Done under the stand-in, so nothing of it shows.
+       * place in this group at all. Done under the stand-in, so none of it shows.
        */
-      if (window.scrollY > 0) window.scrollTo(0, 0)
+      toTop()
 
       faded.value = true
       after(SETTLE_MS, finish)
@@ -345,7 +343,7 @@ function abandon(): void {
  * fixed inside it is positioned against.
  */
 function movePage(x: number, ms: number): void {
-  page ??= document.querySelector<HTMLElement>('[data-swipe-page]')
+  page ??= document.querySelector<HTMLElement>('[data-app-page]')
   if (!page) return
 
   page.style.transition = ms > 0 ? `transform ${ms}ms cubic-bezier(0.22, 0.61, 0.36, 1)` : 'none'
@@ -360,6 +358,17 @@ function movePage(x: number, ms: number): void {
    * of the swipe, so reading a list while an expense arrives still holds still.
    */
   page.style.overflowAnchor = 'none'
+}
+
+/**
+ * Back to the top of the page.
+ *
+ * The page is what scrolls, not the window: the window is a frame the height of
+ * the screen and never moves, which is what keeps the tab bar still.
+ */
+function toTop(): void {
+  page ??= document.querySelector<HTMLElement>('[data-app-page]')
+  if (page && page.scrollTop > 0) page.scrollTop = 0
 }
 
 function releasePage(): void {
@@ -449,7 +458,7 @@ onUnmounted(() => {
       aria-hidden="true"
     >
       <div
-        class="mx-auto flex h-full max-w-2xl flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-28"
+        class="mx-auto flex h-full max-w-2xl flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-10"
       >
         <!-- Laid out like the header it is about to become. -->
         <div class="flex min-w-0 items-start gap-3">
