@@ -1,5 +1,16 @@
+import { ref } from 'vue'
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { settleWithin } from '@/startup'
+
+/**
+ * How long a navigation waits for a session to come back.
+ *
+ * Enough for a slow connection to answer in place, not enough to hold a screen
+ * blank on a stalled one. Nothing is lost by giving up early: the attempt is
+ * shared, so the sign-in page picks up the same one and moves on when it lands.
+ */
+const RESUME_BUDGET_MS = 4000
 
 const routes: RouteRecordRaw[] = [
   { path: '/', redirect: { name: 'dashboard' } },
@@ -67,6 +78,30 @@ export const router = createRouter({
   scrollBehavior: (_to, _from, saved) => saved ?? { top: 0 },
 })
 
+/**
+ * Whether a navigation is open.
+ *
+ * Kept here because the router is the only thing that knows: a screen is fetched
+ * on demand and the guard may have to bring a session back first, so the gap
+ * between a tap and a new screen is real and needs reporting.
+ */
+export const isNavigating = ref(false)
+
+router.beforeEach(() => {
+  isNavigating.value = true
+  return true
+})
+
+router.afterEach(() => {
+  isNavigating.value = false
+})
+
+// A cancelled or failed navigation ends too, and leaving the bar up forever would
+// be worse than never showing it.
+router.onError(() => {
+  isNavigating.value = false
+})
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
@@ -76,7 +111,10 @@ router.beforeEach(async (to) => {
   // Asked here rather than only at startup, so a session that ended mid-visit is
   // picked up again in place. A device that already belongs to someone gets
   // itself back in; the sign-in page is for devices that do not.
-  if (await auth.resumeSession()) return true
+  const resumed = auth.resumeSession()
+  if ((await settleWithin(resumed, RESUME_BUDGET_MS)) === 'finished' && (await resumed)) {
+    return true
+  }
 
   // Remember where they were headed, so an invite or a deep link survives the
   // detour through sign-in.

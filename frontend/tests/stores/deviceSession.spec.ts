@@ -234,6 +234,37 @@ describe('reconnecting the account a device belongs to', () => {
     expect(store.isSignedIn).toBe(false)
   })
 
+  it('shares one attempt between concurrent callers', async () => {
+    const { store, api } = knownDevice()
+
+    // The route guard and the sign-in page both ask, and on a mid-visit recovery
+    // they ask at once. Two attempts would each rotate the refresh token, and the
+    // server treats a replayed one as theft: it revokes the whole chain, so the
+    // second caller would sign the account out of everything.
+    const [first, second] = await Promise.all([store.resumeSession(), store.resumeSession()])
+
+    expect(first).toBe(true)
+    expect(second).toBe(true)
+    expect(api.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('can be asked again after an attempt has finished', async () => {
+    const { store } = knownDevice(
+      fakeApi({
+        probe: vi.fn(async () => null),
+        get: vi.fn(async () => {
+          throw new Error('Failed to fetch')
+        }),
+      }),
+    )
+
+    expect(await store.resumeSession()).toBe(false)
+
+    // Sharing must not mean remembering: a failure while offline has to be
+    // retryable when the connection comes back.
+    expect(await store.resumeSession()).toBe(false)
+  })
+
   it('reconnects once per load, so a refused session cannot loop', async () => {
     const { store, api } = knownDevice()
     await store.resumeSession()
