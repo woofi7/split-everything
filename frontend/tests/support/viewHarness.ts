@@ -48,6 +48,14 @@ export async function waitFor(
   throw new Error('Timed out waiting for the expected state.')
 }
 
+/**
+ * Turns the wheel a fixed number of times.
+ *
+ * Prefer `waitFor` for anything asynchronous: a count that is enough on a quiet
+ * machine is not enough under load, which has cost real time here twice. This is
+ * for letting reactivity catch up after a synchronous change, where the number of
+ * turns is not a guess.
+ */
 export async function settle(turns = 5): Promise<void> {
   for (let i = 0; i < turns; i++) {
     await flushPromises()

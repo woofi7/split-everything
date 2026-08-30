@@ -161,12 +161,15 @@ describe('the group screen', () => {
       expenses: [testExpense()],
     })
 
-    const link = wrapper
-      .findAllComponents(RouterLinkStub)
-      .find((candidate) => JSON.stringify(candidate.props().to).includes('settle'))
+    // There is a settle link at all: the section's own button.
+    expect(
+      wrapper
+        .findAllComponents(RouterLinkStub)
+        .some((candidate) => JSON.stringify(candidate.props().to).includes('settle')),
+    ).toBe(true)
 
-    // The first settle link is the section's own button; the transfer's carries the
-    // parties and the amount so the form opens filled in.
+    // And the transfer's carries the parties and the amount, so the form opens
+    // filled in.
     const prefilled = wrapper
       .findAllComponents(RouterLinkStub)
       .map((candidate) => candidate.props().to as { query?: Record<string, unknown> })

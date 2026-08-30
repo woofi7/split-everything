@@ -118,7 +118,7 @@ function toStatementRow(raw: string[], rowNumber: number, mapping: StatementMapp
   const date = parseFlexibleDate(cell(mapping.date))
   if (!date) problems.push('the date could not be read')
 
-  let amount: number | null = null
+  let amount: number | null
 
   if (mapping.debit !== undefined || mapping.credit !== undefined) {
     const debit = parseAmountInput(cell(mapping.debit))

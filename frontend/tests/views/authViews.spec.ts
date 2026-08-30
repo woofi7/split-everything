@@ -3,7 +3,7 @@ import { RouterLinkStub } from '@vue/test-utils'
 import SignInView from '@/views/SignInView.vue'
 import JoinView from '@/views/JoinView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
-import { fakeApi, mountView, settle, testGroup, textOf } from '../support/viewHarness'
+import { fakeApi, mountView, settle, textOf } from '../support/viewHarness'
 
 const push = vi.fn()
 const replace = vi.fn()

@@ -7,11 +7,14 @@ RUN npm ci
 
 COPY . .
 
-# Baked at build time, because Vite inlines them into the bundle.
+# Baked at build time, because Vite inlines them into the bundle. The version is
+# the tag this image was cut from, and it is what a crash report from a phone names.
 ARG VITE_API_BASE_URL=/api
 ARG VITE_GOOGLE_CLIENT_ID=
+ARG APP_VERSION=dev
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
-    VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+    VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID \
+    VITE_APP_VERSION=$APP_VERSION
 
 RUN npm run build
 

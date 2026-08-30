@@ -146,8 +146,10 @@ async function remove(): Promise<void> {
           {{ memberName(expense.paidByMemberId) }} paid on
           {{ new Date(expense.spentAt).toLocaleDateString(intlLocale) }}
         </p>
-        <p v-if="expense.currency !== groups.groups.find((g) => g.id === groupId)?.baseCurrency"
-           class="mt-1 text-xs text-[var(--text-muted)]">{{ t('Converted to the group currency when it syncs.') }}
+        <p
+          v-if="expense.currency !== groups.groups.find((g) => g.id === groupId)?.baseCurrency"
+          class="mt-1 text-xs text-[var(--text-muted)]"
+        >{{ t('Converted to the group currency when it syncs.') }}
         </p>
         <p v-if="expense.notes" class="mt-2 text-sm">{{ expense.notes }}</p>
       </section>

@@ -231,8 +231,10 @@ async function cancel(): Promise<void> {
         <p class="mt-1 text-sm text-[var(--text-muted)]">{{ t('The file is read on this device and never uploaded. Only the transactions you confirm are sent, and everything else is discarded when you leave this screen.') }}
         </p>
 
-        <label class="btn btn-press btn-secondary mt-3 w-full cursor-pointer"
-               style="border-color: var(--border)">{{ t('Choose a CSV or PDF') }}
+        <label
+          class="btn btn-press btn-secondary mt-3 w-full cursor-pointer"
+          style="border-color: var(--border)"
+        >{{ t('Choose a CSV or PDF') }}
           <input type="file" accept=".csv,.pdf,text/csv,application/pdf" class="hidden" @change="onFile" />
         </label>
       </div>

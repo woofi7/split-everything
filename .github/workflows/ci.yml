@@ -3,6 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+    # A release is a version tag, matching the other project on this server: the
+    # images are built and pushed from the tag, and the tag is what the compose
+    # file on the box pins to.
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -11,6 +15,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ascii:
+    name: Plain ASCII
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The project is written in plain ASCII: an em dash, an arrow or a curly
+      # quote pasted in from somewhere else is a bug in the source, not a style
+      # preference. The script names its own exceptions and says why.
+      - name: Check every tracked file
+        run: python3 scripts/check-ascii.py
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
@@ -79,6 +95,10 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
       # Thresholds live in vitest.config.ts, per layer, so this fails on its own
       # when coverage of the logic drops.
       - name: Test with coverage
@@ -98,33 +118,54 @@ jobs:
 
   images:
     name: Build and publish images
-    # Only after both suites pass, and never from a pull request: a fork must not
-    # be able to publish to the registry.
-    needs: [backend, frontend]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # On a version tag only, after every gate has passed. The same release model as
+    # the other project on this server: tag, images, then the box pulls them.
+    needs: [ascii, backend, frontend]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v5
 
       - uses: docker/setup-buildx-action@v3
 
+      # Docker Hub, under the same account as everything else on that machine.
       - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # :latest tracks the highest version tag, and the three semver tags let the
+      # compose file pin as loosely or as tightly as it likes.
+      - uses: docker/metadata-action@v5
+        id: api-meta
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/split-everything-api
+          tags: |
+            type=raw,value=latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - uses: docker/metadata-action@v5
+        id: web-meta
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/split-everything-web
+          tags: |
+            type=raw,value=latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
 
       - name: Publish the API image
         uses: docker/build-push-action@v6
         with:
           context: backend
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}-api:latest
-            ghcr.io/${{ github.repository }}-api:${{ github.sha }}
+          tags: ${{ steps.api-meta.outputs.tags }}
+          labels: ${{ steps.api-meta.outputs.labels }}
+          build-args: APP_VERSION=${{ github.ref_name }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
 
@@ -133,30 +174,32 @@ jobs:
         with:
           context: frontend
           push: true
+          tags: ${{ steps.web-meta.outputs.tags }}
+          labels: ${{ steps.web-meta.outputs.labels }}
           # Vite inlines these at build time, so they belong to the image rather
-          # than to the runtime environment.
+          # than to the runtime environment. The version travels with them, which
+          # is what a crash report from a phone names.
           build-args: |
+            APP_VERSION=${{ github.ref_name }}
             VITE_API_BASE_URL=/api
             VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
-          tags: |
-            ghcr.io/${{ github.repository }}-web:latest
-            ghcr.io/${{ github.repository }}-web:${{ github.sha }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
 
   deploy:
-    name: Tell Portainer to pull
+    name: Tell the server to pull
     needs: images
-    if: github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: production
     steps:
-      # Portainer pulls the new :latest and recreates the stack. The webhook URL
-      # is the credential, so it is a secret rather than a variable.
-      - name: Trigger the Portainer webhook
+      # Optional, and the one thing here the other project does not do: it pulls
+      # its own images on the box. This skips itself when the secret is unset, so
+      # the release is complete either way.
+      - name: Trigger the redeploy webhook
         run: |
           if [ -z "${{ secrets.PORTAINER_WEBHOOK_URL }}" ]; then
-            echo "PORTAINER_WEBHOOK_URL is not set; skipping the deploy trigger."
+            echo "PORTAINER_WEBHOOK_URL is not set; pull the new tag on the server."
             exit 0
           fi
 
@@ -166,9 +209,9 @@ jobs:
             --max-time 60 \
             "${{ secrets.PORTAINER_WEBHOOK_URL }}")
 
-          echo "Portainer responded with ${status}"
+          echo "The webhook responded with ${status}"
 
           case "$status" in
             2*) echo "Deploy triggered." ;;
-            *) echo "Portainer refused the webhook." >&2; exit 1 ;;
+            *) echo "The webhook was refused." >&2; exit 1 ;;
           esac
