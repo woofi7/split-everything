@@ -69,38 +69,39 @@ const hasSyncNews = computed(
         the title. It is the way out of every screen a tab cannot reach, so it
         should not have to be found.
       -->
-      <div
-        v-if="props.backTo || $slots['header-action']"
-        class="mb-3 flex items-center justify-between gap-3"
+      <RouterLink
+        v-if="props.backTo"
+        :to="props.backTo"
+        data-testid="back"
+        class="btn btn-press btn-secondary mb-3 h-10 w-10 shrink-0 rounded-full px-0"
+        :aria-label="`Back to ${props.backLabel}`"
       >
-        <RouterLink
-          v-if="props.backTo"
-          :to="props.backTo"
-          data-testid="back"
-          class="btn btn-press btn-secondary h-10 w-10 shrink-0 rounded-full px-0"
-          :aria-label="`Back to ${props.backLabel}`"
+        <svg
+          class="h-5 w-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          aria-hidden="true"
         >
-          <svg
-            class="h-5 w-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-            aria-hidden="true"
-          >
-            <path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </RouterLink>
-        <span v-else aria-hidden="true" />
+          <path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </RouterLink>
+
+      <!--
+        The page action sits on the title's line rather than on a row of its own:
+        it acts on this page, so reading the two together is the point. Aligned to
+        the top of the block so it tracks the title and not the subtitle under it.
+      -->
+      <div class="mb-4 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h1 class="truncate text-xl font-semibold">{{ title }}</h1>
+          <p v-if="subtitle" class="truncate text-sm text-[var(--text-muted)]">{{ subtitle }}</p>
+        </div>
 
         <div class="flex shrink-0 items-center gap-2">
           <slot name="header-action" />
         </div>
-      </div>
-
-      <div class="mb-4 min-w-0">
-        <h1 class="truncate text-xl font-semibold">{{ title }}</h1>
-        <p v-if="subtitle" class="truncate text-sm text-[var(--text-muted)]">{{ subtitle }}</p>
       </div>
 
       <!--
