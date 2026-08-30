@@ -5,6 +5,8 @@ import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
+import { memberColor, memberColors } from '@/domain/memberColors'
+import { formatMoney } from '@/domain/money'
 
 interface CategorySpend {
   categoryId: string | null
@@ -16,10 +18,18 @@ interface CategorySpend {
   share: number
 }
 
+interface SpendPointMember {
+  memberId: string
+  memberName: string
+  amount: number
+}
+
 interface SpendPoint {
   bucket: string
   amount: number
   expenseCount: number
+  /** Who paid within this bucket, largest first, summing to amount. */
+  byMember: SpendPointMember[]
 }
 
 interface MemberSpend {
@@ -76,6 +86,60 @@ async function load(): Promise<void> {
     isLoading.value = false
   }
 }
+
+/**
+ * Everyone who paid anything in the window, in a stable order, for the key under
+ * the chart. Taken across buckets rather than per bucket so the key does not
+ * change as you switch granularity.
+ */
+const chartPeople = computed(() => {
+  const seen = new Map<string, SpendPointMember>()
+
+  for (const point of dashboard.value?.spendOverTime ?? []) {
+    for (const member of point.byMember ?? []) {
+      if (!seen.has(member.memberId)) seen.set(member.memberId, member)
+    }
+  }
+
+  return [...seen.values()].sort((left, right) => left.memberName.localeCompare(right.memberName))
+})
+
+const colours = computed(() => memberColors(chartPeople.value.map((person) => person.memberId)))
+
+const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
+
+/**
+ * Each person's share of their own bucket, so the segments fill the bar whatever
+ * the bar's height. A bucket the server sent without a breakdown falls back to one
+ * whole segment rather than an empty bar.
+ */
+function segmentsOf(point: SpendPoint) {
+  const members = point.byMember ?? []
+  if (members.length === 0 || point.amount <= 0) {
+    return [{ memberId: 'total', memberName: 'Total', share: 1 }]
+  }
+
+  return members.map((member) => ({ ...member, share: member.amount / point.amount }))
+}
+
+function bucketTitle(point: SpendPoint): string {
+  const parts = (point.byMember ?? []).map(
+    (member) => `${member.memberName} ${formatMoney(member.amount, dashboard.value?.currency ?? 'CAD')}`,
+  )
+
+  const total = formatMoney(point.amount, dashboard.value?.currency ?? 'CAD')
+  return parts.length > 0
+    ? `${bucketLabel(point.bucket)}: ${total} (${parts.join(', ')})`
+    : `${bucketLabel(point.bucket)}: ${total}`
+}
+
+/** A stack of coloured blocks says nothing to a screen reader without this. */
+const chartDescription = computed(() => {
+  const points = dashboard.value?.spendOverTime ?? []
+  if (points.length === 0) return 'Spending over time'
+
+  return `Spending over time, by who paid: ${points.map(bucketTitle).join('; ')}`
+})
 
 /** Scaled against the largest bucket, so the bars are readable at any spend level. */
 const peak = computed(() =>
@@ -141,17 +205,44 @@ const bucketLabel = (bucket: string) =>
 
       <section v-if="dashboard.spendOverTime.length > 0" class="surface-card mb-4 p-4">
         <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">Spending over time</h2>
-        <ul class="flex h-32 items-end gap-1" role="img" aria-label="Spending over time">
+        <ul class="flex h-32 items-end gap-1" role="img" :aria-label="chartDescription">
           <li
             v-for="point in dashboard.spendOverTime"
             :key="point.bucket"
             class="flex h-full flex-1 items-end"
-            :title="`${bucketLabel(point.bucket)}: ${point.amount}`"
+            :title="bucketTitle(point)"
           >
+            <!--
+              Stacked by whoever paid, in that person's colour. The total alone says
+              how much a month cost; the split also says who carried it, which is the
+              thing a shared account argues about.
+            -->
             <span
-              class="block w-full rounded-t bg-brand-500"
+              class="flex w-full flex-col-reverse overflow-hidden rounded-t"
               :style="{ height: `${Math.max(4, (point.amount / peak) * 100)}%` }"
+            >
+              <span
+                v-for="member in segmentsOf(point)"
+                :key="member.memberId"
+                data-testid="bar-segment"
+                class="block w-full"
+                :style="{
+                  height: `${member.share * 100}%`,
+                  backgroundColor: colourOf(member.memberId),
+                }"
+              />
+            </span>
+          </li>
+        </ul>
+
+        <ul v-if="chartPeople.length > 0" class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          <li v-for="person in chartPeople" :key="person.memberId" class="flex items-center gap-1.5">
+            <span
+              class="h-2 w-2 shrink-0 rounded-full"
+              :style="{ backgroundColor: colourOf(person.memberId) }"
+              aria-hidden="true"
             />
+            <span class="text-[var(--text-muted)]">{{ person.memberName }}</span>
           </li>
         </ul>
         <div class="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]">

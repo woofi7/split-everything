@@ -95,10 +95,38 @@ public sealed class StatsService(
         var spendOverTime = expenses
             .GroupBy(e => Bucket(e.SpentAt, query.Granularity))
             .OrderBy(g => g.Key)
-            .Select(g => new SpendPointDto(
-                g.Key,
-                CurrencyPrecision.Round(g.Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency)), scope.Currency),
-                g.Count()))
+            .Select(g =>
+            {
+                var total = CurrencyPrecision.Round(
+                    g.Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency)), scope.Currency);
+
+                var byMember = g
+                    .GroupBy(e => e.PaidByMemberId)
+                    .Select(payer => new SpendPointMemberDto(
+                        payer.Key,
+                        names.GetValueOrDefault(payer.Key, "Someone"),
+                        CurrencyPrecision.Round(
+                            payer.Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency)), scope.Currency)))
+                    .Where(member => member.Amount != 0m)
+                    // Largest first, so a stack does not reshuffle its colours from
+                    // one bucket to the next.
+                    .OrderByDescending(member => member.Amount)
+                    .ThenBy(member => member.MemberName)
+                    .ToList();
+
+                // Rounding each share independently can leave the parts a cent off
+                // the whole, and a stacked bar whose parts do not sum to its total is
+                // a lie about both. The largest share absorbs it, as everywhere else.
+                var residue = CurrencyPrecision.Round(
+                    total - byMember.Sum(member => member.Amount), scope.Currency);
+
+                if (residue != 0m && byMember.Count > 0)
+                {
+                    byMember[0] = byMember[0] with { Amount = byMember[0].Amount + residue };
+                }
+
+                return new SpendPointDto(g.Key, total, g.Count(), byMember);
+            })
             .ToList();
 
         var byCategory = expenses
