@@ -289,8 +289,11 @@ public sealed class AuthService(
                 })
                 .ToListAsync(ct),
             expenses = await db.Expenses
+                // Paid by one of mine, or owed by one of mine. The payer id is a
+                // Guid and was also being checked for null, which no Guid ever is.
                 .Where(e => groupIds.Contains(e.GroupId)
-                            && (e.PaidByMemberId == null || memberIds.Contains(e.PaidByMemberId)
+                            && (memberIds.Contains(e.PaidByMemberId)
+                                || e.Payers.Any(y => memberIds.Contains(y.MemberId))
                                 || e.Splits.Any(s => memberIds.Contains(s.MemberId))))
                 .Select(e => new
                 {

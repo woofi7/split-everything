@@ -96,8 +96,12 @@ public sealed class FcmAccessTokenProvider(PushOptions options, IClock clock) : 
         {
             if (_token is not null && _expiresAt > clock.UtcNow.AddMinutes(2)) return _token;
 
-            var credential = Google.Apis.Auth.OAuth2.GoogleCredential
-                .FromJson(options.FcmServiceAccountJson)
+            // CredentialFactory rather than GoogleCredential.FromJson, which is
+            // deprecated: it accepted any credential type from a json blob, and the
+            // factory makes the caller name what it is expecting.
+            var credential = Google.Apis.Auth.OAuth2.CredentialFactory
+                .FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(options.FcmServiceAccountJson)
+                .ToGoogleCredential()
                 .CreateScoped("https://www.googleapis.com/auth/firebase.messaging");
 
             _token = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync(cancellationToken: ct);
