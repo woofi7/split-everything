@@ -191,6 +191,9 @@ export function fakeApi(routes: Record<string, unknown> = {}): FakeApi {
   return {
     get: vi.fn(async (path: string) => answer(path)),
     post: vi.fn(async (path: string) => answer(path)),
+    // A request whose 401 is an answer rather than a sign-out. Nothing routed
+    // means no session, which is what a fresh device looks like.
+    probe: vi.fn(async (path: string) => answer(path)),
     patch: vi.fn(async (path: string) => answer(path)),
     put: vi.fn(async (path: string) => answer(path)),
     delete: vi.fn(async (path: string) => answer(path)),

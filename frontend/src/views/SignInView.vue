@@ -30,7 +30,10 @@ const devName = ref('')
 
 
 onMounted(async () => {
-  if (auth.isSignedIn) {
+  // A device that already belongs to someone is not asked who it is. The router
+  // covers the protected screens; this covers arriving here directly, which is
+  // what a session ending mid-visit does.
+  if (auth.isSignedIn || (await auth.resumeSession())) {
     void router.replace(redirectTarget())
     return
   }
@@ -45,30 +48,6 @@ onMounted(async () => {
 
   mountGoogleButton()
 })
-
-/**
- * Signs back in as the account this device belongs to.
- *
- * Only reachable when the development form is available, because that is the only
- * way to sign someone in from a name alone. With Google the account is a hint on
- * its own button: the credential still has to come from Google.
- */
-async function continueAsRemembered(): Promise<void> {
-  const remembered = auth.rememberedAccount
-  if (!remembered) return
-
-  error.value = null
-  isSigningIn.value = true
-
-  try {
-    await auth.signInAsDeveloper(remembered.email)
-    await router.replace(redirectTarget())
-  } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not sign in.'
-  } finally {
-    isSigningIn.value = false
-  }
-}
 
 function redirectTarget(): string {
   const redirect = route.query.redirect
@@ -155,36 +134,13 @@ async function handleCredential(credential?: string): Promise<void> {
         SE
       </div>
 
-      <div v-if="auth.rememberedAccount" class="w-full">
-        <h2 class="text-xl font-semibold">Welcome back</h2>
-        <p class="mt-2 text-sm text-[var(--text-muted)]">
-          This device belongs to
-          <span class="text-[var(--text)]">{{ auth.rememberedAccount.displayName }}</span>
-          ({{ auth.rememberedAccount.email }}).
-        </p>
-
-        <button
-          v-if="capabilities?.developmentSignIn"
-          type="button"
-          data-testid="continue-as"
-          class="btn btn-press btn-primary mt-4 w-full"
-          :disabled="isSigningIn"
-          @click="continueAsRemembered"
-        >
-          Continue as {{ auth.rememberedAccount.displayName }}
-        </button>
-
-        <button
-          type="button"
-          data-testid="forget-device"
-          class="tap-target mt-2 w-full text-xs text-[var(--text-muted)] underline"
-          @click="auth.forgetDevice()"
-        >
-          Use a different account
-        </button>
-      </div>
-
-      <div v-else>
+      <!--
+        No "welcome back, continue as you" step. Being asked to confirm who you
+        are on your own phone is a question the device already has the answer to;
+        it reconnects on its own before this page renders, so reaching this page
+        means it could not, and the only useful thing here is a way in.
+      -->
+      <div>
         <h2 class="text-xl font-semibold">Shared expenses, settled properly</h2>
         <p class="mt-2 text-sm text-[var(--text-muted)]">
           Sign in with Google to see your groups. There is no password to remember.

@@ -58,21 +58,8 @@ describe('SignInView', () => {
     }
   }
 
-  it('asks for the account this device belongs to, by name', async () => {
-    const { wrapper } = await mountView(SignInView, {
-      signedIn: false,
-      rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
-    })
-
-    // The device already knows whose it is. Starting from a blank form asks a
-    // question it has the answer to.
-    const text = textOf(wrapper)
-    expect(text).toContain('Alice')
-    expect(text).toContain('alice@example.com')
-  })
-
-  it('offers to continue as the remembered account', async () => {
-    const { wrapper, auth, api } = await mountView(SignInView, {
+  it('signs the device back in as its own account, without asking', async () => {
+    const { api } = await mountView(SignInView, {
       signedIn: false,
       api: fakeApi({
         '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true }),
@@ -97,35 +84,113 @@ describe('SignInView', () => {
       }),
       rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
     })
-
-    await wrapper.find('[data-testid="continue-as"]').trigger('click')
     await settle()
 
+    // The device already knows whose it is. Asking is a question it has the
+    // answer to, so it answers it and leaves.
     expect(api.post).toHaveBeenCalledWith(
       '/auth/dev',
       expect.objectContaining({ email: 'alice@example.com' }),
     )
-    expect(replace).toHaveBeenCalled()
+    expect(replace).toHaveBeenCalledWith('/dashboard')
   })
 
-  it('can hand the device to someone else', async () => {
-    const { wrapper, auth } = await mountView(SignInView, {
+  it('never puts a confirm-who-you-are step on screen', async () => {
+    const { wrapper } = await mountView(SignInView, {
       signedIn: false,
+      api: fakeApi({
+        '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true }),
+        '/auth/dev': () => ({
+          user: {
+            id: 'user-1',
+            email: 'alice@example.com',
+            displayName: 'Alice',
+            avatarUrl: null,
+            defaultCurrency: 'CAD',
+            prefersLightTheme: false,
+          },
+          tokens: {
+            accessToken: 'a',
+            accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+            refreshToken: 'r',
+            refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+          },
+          isNewUser: false,
+          autoJoinedGroupIds: [],
+        }),
+      }),
       rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
     })
+    await settle()
 
-    await wrapper.find('[data-testid="forget-device"]').trigger('click')
-    await settle(1)
-
-    expect(auth.rememberedAccount).toBeNull()
-    expect(textOf(wrapper)).not.toContain('alice@example.com')
+    // Not "welcome back, continue as Alice": there is nothing to confirm.
+    expect(textOf(wrapper)).not.toContain('Continue as')
+    expect(wrapper.find('[data-testid="continue-as"]').exists()).toBe(false)
   })
 
-  it('starts from nobody when the device has never been used', async () => {
-    const { wrapper } = await mountView(SignInView, { signedIn: false })
+  it('keeps the redirect when it reconnects, so an invite still lands', async () => {
+    query = { redirect: '/join/invite-token' }
 
-    expect(wrapper.find('[data-testid="continue-as"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="forget-device"]').exists()).toBe(false)
+    await mountView(SignInView, {
+      signedIn: false,
+      api: fakeApi({
+        '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true }),
+        '/auth/dev': () => ({
+          user: {
+            id: 'user-1',
+            email: 'alice@example.com',
+            displayName: 'Alice',
+            avatarUrl: null,
+            defaultCurrency: 'CAD',
+            prefersLightTheme: false,
+          },
+          tokens: {
+            accessToken: 'a',
+            accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+            refreshToken: 'r',
+            refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+          },
+          isNewUser: false,
+          autoJoinedGroupIds: [],
+        }),
+      }),
+      rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
+    })
+    await settle()
+
+    expect(replace).toHaveBeenCalledWith('/join/invite-token')
+  })
+
+  it('asks who you are when the device belongs to nobody', async () => {
+    const { wrapper, api } = await mountView(SignInView, {
+      signedIn: false,
+      api: fakeApi({
+        '/auth/capabilities': () => ({ googleConfigured: false, developmentSignIn: true }),
+      }),
+    })
+    await settle()
+
+    // Nothing to reconnect to, so nothing is attempted and the form is the page.
+    expect(api.post).not.toHaveBeenCalledWith('/auth/dev', expect.anything())
+    expect(replace).not.toHaveBeenCalled()
+    expect(wrapper.find('input[type="email"]').exists()).toBe(true)
+  })
+
+  it('asks who you are when only Google can answer', async () => {
+    const { wrapper, api } = await mountView(SignInView, {
+      signedIn: false,
+      api: fakeApi({
+        '/auth/capabilities': () => ({ googleConfigured: true, developmentSignIn: false }),
+      }),
+      rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
+    })
+    await settle()
+
+    // An address is not a credential. Where Google is the only way in, the
+    // credential has to come from Google, so the page stays.
+    expect(api.post).not.toHaveBeenCalledWith('/auth/dev', expect.anything())
+    expect(replace).not.toHaveBeenCalled()
+    expect(wrapper.find('input[type="email"]').exists()).toBe(false)
   })
 
   it('tells Google which account to offer', async () => {

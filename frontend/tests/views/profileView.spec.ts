@@ -113,7 +113,7 @@ describe('ProfileView', () => {
     expect(replace).toHaveBeenCalledWith({ name: 'sign-in' })
   })
 
-  it('still knows whose device it is after disconnecting', async () => {
+  it('stops the device reconnecting on its own', async () => {
     const { wrapper, auth } = await mountView(ProfileView, {
       rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
     })
@@ -121,8 +121,10 @@ describe('ProfileView', () => {
     await wrapper.find('[data-testid="disconnect"]').trigger('click')
     await settle()
 
-    // So the sign-in screen can offer the account back rather than starting over.
-    expect(auth.rememberedAccount?.email).toBe('alice@example.com')
+    // Startup signs a remembered device back in without asking, so a disconnect
+    // that left the account behind would put you straight back where you were
+    // and the button would appear to do nothing.
+    expect(auth.rememberedAccount).toBeNull()
   })
 
   it('shows its actions as buttons rather than lines of text', async () => {

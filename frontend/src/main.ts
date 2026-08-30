@@ -30,8 +30,11 @@ async function bootstrap(): Promise<void> {
     getAccessToken: () => auth.accessToken,
     getDeviceId: () => deviceIdNow(),
     refreshAccessToken: () => auth.refresh(),
+    // Not a sign-out: nobody asked for this. Clearing the session and keeping
+    // the account means the sign-in page can put the device straight back in,
+    // rather than asking someone who has not gone anywhere to identify themselves.
     onUnauthorized: () => {
-      void auth.signOut()
+      auth.sessionExpired()
       void router.push({ name: 'sign-in' })
     },
   })

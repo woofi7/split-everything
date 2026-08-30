@@ -62,6 +62,9 @@ export const useAuthStore = defineStore('auth', () => {
   const rememberedAccount = ref<RememberedAccount | null>(null)
   let api: ApiClient | null = null
 
+  /** Whether this load has already signed the device back in on its own. */
+  let hasReconnected = false
+
   const isSignedIn = computed(() => user.value !== null && tokens.value !== null)
   const accessToken = computed(() => tokens.value?.accessToken ?? null)
 
@@ -175,19 +178,26 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * Signs in again on a device that already has a session, without asking.
+   * Gets a device that already belongs to someone back in, without asking.
    *
-   * The browser holds the refresh token in an httpOnly cookie the app cannot
-   * read, so the only way to find out whether a session is still good is to ask.
-   * Posting no token is what tells the server to use the cookie; the native
-   * shells send theirs in the body and never reach this path.
+   * Two ways, tried in order. The browser holds the refresh token in an httpOnly
+   * cookie the app cannot read, so the only way to find out whether that session
+   * is still good is to ask; posting no token is what tells the server to use the
+   * cookie. Failing that, the device is signed back in as the account it belongs
+   * to, where the server allows that.
    *
-   * Returns whether there is a session to work with, so startup can decide
-   * between letting someone in and asking who they are.
+   * Returns whether there is a session to work with. False is the only case that
+   * should ever put a sign-in page on screen.
    */
   async function resumeSession(): Promise<boolean> {
     if (isSignedIn.value) return true
+    if (await resumeFromCookie()) return true
 
+    return reconnectRememberedAccount()
+  }
+
+  /** The session the browser is still holding for us, if there is one. */
+  async function resumeFromCookie(): Promise<boolean> {
     try {
       // Probed, not posted: a 401 here means "no session", which is an answer.
       // The ordinary path would sign the app out and push to sign-in, discarding
@@ -208,6 +218,45 @@ export const useAuthStore = defineStore('auth', () => {
       // sign-in page explains itself from here.
       tokens.value = null
       user.value = null
+      return false
+    }
+  }
+
+  /**
+   * Signs the device back in as the account it belongs to, without asking.
+   *
+   * A device that already belongs to someone should not be presented with a
+   * sign-in page. The cookie covers the usual case; this covers the rest, which
+   * on a phone is most of them: a cookie cleared by the browser, a scan that
+   * opened a fresh profile, thirty days elapsed. Nothing here is a credential,
+   * so it only works where the server has said it will sign someone in from an
+   * address alone. Where Google is configured that answer is no, and the page
+   * asks, because only Google can produce the credential.
+   *
+   * Never after a deliberate sign-out: that clears the remembered account, and
+   * the whole point of the button is that the next start asks who you are.
+   */
+  async function reconnectRememberedAccount(): Promise<boolean> {
+    const remembered = rememberedAccount.value
+    if (!remembered) return false
+
+    // Once per load. A reconnect that succeeds and is then refused on the next
+    // request would otherwise bounce between the sign-in page and the dashboard
+    // forever, silently: no error, no way out, just a spinning phone. One attempt
+    // fixes the case this exists for, and the second time the page asks instead.
+    if (hasReconnected) return false
+
+    try {
+      const capabilities = await requireApi().get<{ developmentSignIn: boolean }>(
+        '/auth/capabilities',
+      )
+      if (!capabilities.developmentSignIn) return false
+
+      await signInAsDeveloper(remembered.email)
+      hasReconnected = true
+      return true
+    } catch {
+      // Offline, or the account is gone. The sign-in page explains itself.
       return false
     }
   }
@@ -253,6 +302,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * Signs out on purpose, from the profile.
+   *
+   * Deliberate, so it also forgets which account this device belongs to.
+   * Otherwise the next start would reconnect on its own and the button would do
+   * nothing you could see.
+   */
   async function signOut(): Promise<void> {
     const current = tokens.value
 
@@ -264,7 +320,17 @@ export const useAuthStore = defineStore('auth', () => {
       // Signing out locally matters more than telling the server about it.
     } finally {
       clear()
+      forgetDevice()
     }
+  }
+
+  /**
+   * The session ended on its own: a refresh chain the server no longer honours,
+   * or tokens revoked elsewhere. Not a decision anyone made, so the device keeps
+   * belonging to the same person and gets itself back in rather than asking.
+   */
+  function sessionExpired(): void {
+    clear()
   }
 
   async function updateProfile(changes: {
@@ -350,6 +416,7 @@ export const useAuthStore = defineStore('auth', () => {
     rememberedAccount,
     resumeSession,
     forgetDevice,
+    sessionExpired,
     attachApi,
     restore,
     signInWithGoogle,

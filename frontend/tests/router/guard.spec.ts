@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { router } from '@/router'
 import { useAuthStore } from '@/stores/auth'
@@ -18,6 +18,20 @@ const session = {
     refreshToken: 'refresh-1',
     refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   },
+}
+
+/** A server that will sign a known device back in from its address alone. */
+function reconnectableApi() {
+  return {
+    probe: vi.fn(async () => null),
+    get: vi.fn(async () => ({ googleConfigured: false, developmentSignIn: true })),
+    post: vi.fn(async () => ({
+      user: session.user,
+      tokens: session.tokens,
+      isNewUser: false,
+      autoJoinedGroupIds: [],
+    })),
+  }
 }
 
 describe('route guard', () => {
@@ -49,6 +63,33 @@ describe('route guard', () => {
     await router.push('/groups')
 
     expect(router.currentRoute.value.name).toBe('dashboard')
+  })
+
+  it('lets a device that already belongs to someone straight through', async () => {
+    localStorage.setItem(
+      'split-everything.device-account',
+      JSON.stringify({ email: 'alice@example.com', displayName: 'Alice', avatarUrl: null }),
+    )
+    const auth = useAuthStore()
+    auth.attachApi(reconnectableApi() as never)
+    auth.restore()
+
+    await router.push('/groups')
+
+    // No detour through sign-in: the device knows whose it is, so it gets itself
+    // back in rather than asking a question it has the answer to.
+    expect(router.currentRoute.value.name).toBe('dashboard')
+    expect(auth.isSignedIn).toBe(true)
+  })
+
+  it('still asks when the device belongs to nobody', async () => {
+    const auth = useAuthStore()
+    auth.attachApi(reconnectableApi() as never)
+    auth.restore()
+
+    await router.push('/groups')
+
+    expect(router.currentRoute.value.name).toBe('sign-in')
   })
 
   it('leaves the invite page public', async () => {
