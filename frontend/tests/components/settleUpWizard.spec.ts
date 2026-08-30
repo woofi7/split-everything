@@ -157,6 +157,45 @@ describe('SettleUpWizard', () => {
 
   const mountWizard = () => mount(SettleUpWizard)
 
+
+
+  /** The commit request, which travels as JSON alongside the file. */
+  function committedRequest() {
+    const call = client.upload.mock.calls.find(([path]) => path.endsWith('/commit'))
+    return JSON.parse((call![1] as { request: string }).request)
+  }
+
+  /** A group the wizard can import into, put where the wizard reads them from. */
+  function existingGroup(name: string) {
+    const group = {
+      id: `group-${name.toLowerCase()}`,
+      name,
+      description: null,
+      baseCurrency: 'CAD',
+      iconName: null,
+      colorHex: '#4f46e5',
+      isArchived: false,
+      lineageId: 'lineage-1',
+      members: [],
+      myNetBalance: 0,
+      totalSpend: 0,
+      expenseCount: 0,
+      updatedAt: new Date().toISOString(),
+    }
+    useGroupsStore().groups.push(group as never)
+    return group
+  }
+
+  /** Mounted, given a file, and moved on to the rows. */
+  async function previewed() {
+    const wrapper = mountWizard()
+    await choose(wrapper)
+    await wrapper.find('[data-testid="to-preview"]').trigger('click')
+    await flushPromises()
+    await flushPromises()
+    return wrapper
+  }
+
   it('reads the file and names the columns it found', async () => {
     const wrapper = mountWizard()
 
@@ -227,6 +266,17 @@ describe('SettleUpWizard', () => {
       .find((row) => row.text().includes('Debt settlement'))
 
     expect(settlement!.text()).toContain('Settlement')
+  })
+
+  it('fades an ignored row nearly out', async () => {
+    const wrapper = await previewed()
+
+    await wrapper.findAll('[data-testid="toggle-row"]')[0].trigger('click')
+    await flushPromises()
+
+    // The whole box, faint enough to skip over while still readable.
+    const first = wrapper.findAll('[data-testid="row"]')[0]
+    expect(first.classes()).toContain('opacity-25')
   })
 
   it('shows an ignored row as ignored', async () => {
@@ -507,5 +557,120 @@ describe('SettleUpWizard', () => {
 
     expect(wrapper.text()).toContain('Name the group')
     expect(client.upload).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * Where the rows are going, asked where they are read.
+   *
+   * The step above asks it as a radio pair while the answer is still being
+   * composed. Over the rows it is one question with one answer, so it is one
+   * control writing the same state.
+   */
+  describe('the destination over the rows', () => {
+    it('offers a new group and every existing one', async () => {
+      existingGroup('Roommates')
+      const wrapper = await previewed()
+
+      const options = wrapper
+        .findAll('[data-testid="destination"] option')
+        .map((option) => option.text())
+
+      expect(options[0]).toContain('A new group')
+      expect(options.some((text) => text.includes('Roommates'))).toBe(true)
+    })
+
+    it('names the new group it would create', async () => {
+      const wrapper = await previewed()
+
+      // Taken from the file, so the option says what will actually appear.
+      expect(wrapper.find('[data-testid="destination"] option').text())
+        .toContain('World tour')
+    })
+
+    it('sends the group that was chosen there', async () => {
+      const group = existingGroup('Roommates')
+      const wrapper = await previewed()
+
+      await wrapper.find('[data-testid="destination"]').setValue(group.id)
+      await flushPromises()
+      await wrapper.find('[data-testid="commit"]').trigger('click')
+      await flushPromises()
+
+      expect(committedRequest().groupId).toBe(group.id)
+    })
+
+    it('goes back to a new group when that is chosen', async () => {
+      const group = existingGroup('Roommates')
+      const wrapper = await previewed()
+
+      await wrapper.find('[data-testid="destination"]').setValue(group.id)
+      await flushPromises()
+      await wrapper.find('[data-testid="destination"]').setValue('new')
+      await flushPromises()
+      await wrapper.find('[data-testid="commit"]').trigger('click')
+      await flushPromises()
+
+      const request = committedRequest()
+      expect(request.groupId).toBeNull()
+      expect(request.newGroupName).toBe('World tour')
+    })
+  })
+
+  /**
+   * What a person checks a row against.
+   *
+   * The title says what it was, the amount says how much, and the two names say
+   * whether it belongs to anybody in this group. All three used to be spread along
+   * one line of dashes with the date, which is where they were hardest to read.
+   */
+  describe('what each row says', () => {
+    it('leads with the purpose', async () => {
+      const wrapper = await previewed()
+
+      const first = wrapper.findAll('[data-testid="row"]')[0]
+      expect(first.find('p').text()).toContain('Flights YYC to YUL')
+    })
+
+    it('names who it came from and who it was for', async () => {
+      const wrapper = await previewed()
+
+      const first = wrapper.findAll('[data-testid="row"]')[0]
+      expect(first.find('[data-testid="row-from"]').text()).toBe('Emma')
+      expect(first.find('[data-testid="row-to"]').text()).toBe('Nicolas, Emma')
+    })
+
+    it('names one person on each side of a transfer', async () => {
+      const wrapper = await previewed()
+
+      const transfer = wrapper
+        .findAll('[data-testid="row"]')
+        .find((row) => row.text().includes('Settlement'))
+
+      expect(transfer!.find('[data-testid="row-from"]').text()).toBe('Emma')
+      expect(transfer!.find('[data-testid="row-to"]').text()).toBe('Nicolas')
+    })
+
+    it('shows the amount alongside', async () => {
+      const wrapper = await previewed()
+
+      expect(wrapper.findAll('[data-testid="row"]')[0].text()).toContain('418.86')
+    })
+
+    it('says a name is missing rather than leaving a gap', async () => {
+      // The preview comes back from the client, so the client is what changes.
+      client.upload = vi.fn(async (path: string) => {
+        if (path.endsWith('/analyze')) return analysis
+        if (path.endsWith('/preview')) {
+          return { ...preview, rows: [{ ...preview.rows[0], paidByName: null, participantNames: [] }] }
+        }
+        return {}
+      }) as never
+      const wrapper = await previewed()
+
+      // A blank reads as a rendering fault, and an export really can omit them.
+      const row = wrapper.find('[data-testid="row"]')
+      expect(row.find('[data-testid="row-from"]').text()).toBe('Not named')
+      expect(row.find('[data-testid="row-to"]').text()).toBe('Not named')
+    })
   })
 })
