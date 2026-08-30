@@ -10,7 +10,15 @@
     <title>Split Everything</title>
   </head>
   <body>
-    <div id="app"></div>
+    <!--
+      Replaced the moment the app mounts. It is here so a start that stalls shows
+      something a person can act on instead of a white screen.
+    -->
+    <div id="app">
+      <p style="max-width:26rem;margin:15vh auto 0;text-align:center;font:400 15px/1.5 system-ui,sans-serif;color:#94a3b8">
+        Loading Split Everything
+      </p>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

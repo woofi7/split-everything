@@ -192,6 +192,40 @@ export class SplitEverythingDb extends Dexie {
 
 export const db = new SplitEverythingDb()
 
+/**
+ * Another tab is holding the replica at an older schema version.
+ *
+ * IndexedDB will not upgrade a database while an older connection is open, and it
+ * does not fail either: it waits, with no timeout. Dexie asks the other
+ * connection to step aside, but a tab a phone has frozen in the background cannot
+ * run any code to hear that, so the wait never ends and every read on this tab
+ * hangs with it. Silently, and before the first render, which is how it produced
+ * a white screen rather than an error.
+ *
+ * Reported rather than thrown, because there is nothing the code can do about it
+ * and everything the person can: close the other tabs.
+ */
+const blockedListeners = new Set<() => void>()
+let isBlocked = false
+
+db.on('blocked', () => {
+  isBlocked = true
+  for (const listener of blockedListeners) listener()
+})
+
+export function onDatabaseBlocked(listener: () => void): void {
+  blockedListeners.add(listener)
+  // Late subscribers hear about it too: the event fires while the app is still
+  // starting up, which is exactly when the listener is being attached.
+  if (isBlocked) listener()
+}
+
+/** Test seam: the blocked flag outlives a single test otherwise. */
+export function resetBlockedState(): void {
+  isBlocked = false
+  blockedListeners.clear()
+}
+
 const DEVICE_ID_KEY = 'deviceId'
 const CURSOR_PREFIX = 'cursor:'
 
