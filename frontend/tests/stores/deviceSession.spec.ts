@@ -11,7 +11,9 @@ import { resetDatabase } from '@/offline/db'
  * shell that never wrote it, dropped someone at a blank sign-in form while a
  * perfectly good session sat in the cookie jar.
  *
- * Two ways in, both silent. A session the server will still honour signs in from
+ * Nothing is asked at all on a device that has never signed in here: no session,
+ * no cookie, so a request would only be refused. Otherwise there are two ways in,
+ * both silent. A session the server will still honour signs in from
  * the cookie. Failing that, the device is signed back in as the account it
  * belongs to, where the server will do that from an address alone. A sign-in page
  * is what is left when neither works, which on a device someone has already used
@@ -58,6 +60,17 @@ function storeWith(api = fakeApi()) {
   return { store, api }
 }
 
+/** A device that has been used before, whatever is left of its session. */
+function knownDevice(api = fakeApi({ probe: vi.fn(async () => null) })) {
+  localStorage.setItem(
+    'split-everything.device-account',
+    JSON.stringify({ email: 'alice@example.com', displayName: 'Alice', avatarUrl: null }),
+  )
+  const { store } = storeWith(api)
+  store.restore()
+  return { store, api }
+}
+
 describe('resuming a session on a known device', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
@@ -65,8 +78,8 @@ describe('resuming a session on a known device', () => {
     await resetDatabase()
   })
 
-  it('signs in from the cookie when there is nothing stored locally', async () => {
-    const { store, api } = storeWith()
+  it('signs in from the cookie when no session is stored locally', async () => {
+    const { store, api } = knownDevice(fakeApi())
 
     const resumed = await store.resumeSession()
 
@@ -78,12 +91,25 @@ describe('resuming a session on a known device', () => {
   })
 
   it('asks the server who the session belongs to', async () => {
-    const { store, api } = storeWith()
+    const { store, api } = knownDevice(fakeApi())
 
     await store.resumeSession()
 
     expect(api.get).toHaveBeenCalledWith('/auth/me')
     expect(store.accessToken).toBe('access-2')
+  })
+
+  it('asks the server nothing on a device that has never signed in here', async () => {
+    const { store, api } = storeWith()
+
+    const resumed = await store.resumeSession()
+
+    // The sign-in page was opening with a refused refresh in the console on every
+    // visit. There is no cookie without an account: both are written together.
+    expect(resumed).toBe(false)
+    expect(api.probe).not.toHaveBeenCalled()
+    expect(api.get).not.toHaveBeenCalled()
+    expect(api.post).not.toHaveBeenCalled()
   })
 
   it('does nothing when it is already signed in', async () => {
@@ -98,19 +124,8 @@ describe('resuming a session on a known device', () => {
     expect(api.probe).not.toHaveBeenCalled()
   })
 
-  it('reports no session when the cookie is gone', async () => {
-    const { store } = storeWith(
-      fakeApi({ probe: vi.fn(async () => null) }),
-    )
-
-    const resumed = await store.resumeSession()
-
-    expect(resumed).toBe(false)
-    expect(store.isSignedIn).toBe(false)
-  })
-
   it('stays signed out when the refresh works but the account cannot be read', async () => {
-    const { store } = storeWith(
+    const { store } = knownDevice(
       fakeApi({
         get: vi.fn(async () => {
           throw new Error('Unauthorized')
@@ -125,8 +140,15 @@ describe('resuming a session on a known device', () => {
   })
 
   it('does not throw when the server cannot be reached at all', async () => {
-    const { store } = storeWith(
-      fakeApi({ probe: vi.fn(async () => null) }),
+    const { store } = knownDevice(
+      fakeApi({
+        probe: vi.fn(async () => {
+          throw new Error('Failed to fetch')
+        }),
+        get: vi.fn(async () => {
+          throw new Error('Failed to fetch')
+        }),
+      }),
     )
 
     await expect(store.resumeSession()).resolves.toBe(false)
@@ -139,17 +161,6 @@ describe('reconnecting the account a device belongs to', () => {
     localStorage.clear()
     await resetDatabase()
   })
-
-  /** A device that has been used before, with no session left anywhere. */
-  function knownDevice(api = fakeApi({ probe: vi.fn(async () => null) })) {
-    localStorage.setItem(
-      'split-everything.device-account',
-      JSON.stringify({ email: 'alice@example.com', displayName: 'Alice', avatarUrl: null }),
-    )
-    const { store } = storeWith(api)
-    store.restore()
-    return { store, api }
-  }
 
   it('signs back in as the remembered account when the cookie is gone', async () => {
     const { store, api } = knownDevice()

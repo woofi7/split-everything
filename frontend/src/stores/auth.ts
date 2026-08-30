@@ -191,6 +191,17 @@ export const useAuthStore = defineStore('auth', () => {
    */
   async function resumeSession(): Promise<boolean> {
     if (isSignedIn.value) return true
+
+    // Nothing to resume on a device that has never signed in here, or was
+    // deliberately disconnected: the refresh cookie is written at the same moment
+    // as the remembered account and removed at the same moment too, so with no
+    // account there is no cookie to ask about. Asking anyway put a refused
+    // request in the console on every visit to the sign-in page.
+    //
+    // The cost is a browser that cleared local storage but kept its cookies: it
+    // has to be signed in once by hand, which writes both again.
+    if (!rememberedAccount.value) return false
+
     if (await resumeFromCookie()) return true
 
     return reconnectRememberedAccount()

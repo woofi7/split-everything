@@ -27,6 +27,10 @@ onMounted(() => {
 })
 
 async function safeSync(): Promise<void> {
+  // The listeners fire whether or not anyone is signed in, and coming back to a
+  // sign-in page is exactly one of the moments they fire on.
+  if (!auth.isSignedIn) return
+
   try {
     await expenses.sync()
     await groups.loadAll()

@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { db, resetDatabase } from '@/offline/db'
 import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
-import { settle, waitFor } from '../support/viewHarness'
+import { settle, signInForTests, waitFor } from '../support/viewHarness'
 
 /**
  * A local write has to reach the server on its own.
@@ -92,6 +92,8 @@ describe('a local write syncs itself', () => {
 
   beforeEach(async () => {
     setActivePinia(createPinia())
+    // The sync path refuses to talk to the server as nobody.
+    signInForTests()
     await resetDatabase()
     await seedGroup()
   })

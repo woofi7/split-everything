@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { db, resetDatabase, type LocalExpense } from '@/offline/db'
 import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
-import { settle, waitFor } from '../support/viewHarness'
+import { settle, signInForTests, waitFor } from '../support/viewHarness'
 
 /**
  * Repairing a replica whose queue and pending markers have drifted apart.
@@ -124,6 +124,8 @@ describe('reconcile', () => {
 
   beforeEach(async () => {
     setActivePinia(createPinia())
+    // The sync path refuses to talk to the server as nobody.
+    signInForTests()
     await resetDatabase()
     await seedGroup()
   })
@@ -281,11 +283,42 @@ describe('reconcile', () => {
   })
 })
 
+describe('reconcile with nobody signed in', () => {
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    await resetDatabase()
+    await seedGroup()
+  })
+
+  it('repairs the queue but sends nothing', async () => {
+    const api = fakeSyncApi()
+    const store = useExpensesStore()
+    store.attachSync(new SyncEngine(api, () => true))
+    await db.expenses.put(strandedExpense())
+    await store.hydrate()
+
+    await store.reconcile()
+    await settle(3)
+
+    // Startup runs this on every load, sign-in page included, and it ends by
+    // draining the queue. That drain was an unauthorized pull in the console
+    // before anyone had signed in.
+    expect(api.push).not.toHaveBeenCalled()
+    expect(api.pull).not.toHaveBeenCalled()
+
+    // The repair itself is local, so it still happens: the operation is queued
+    // and waiting for a session.
+    expect(await db.outbox.count()).toBe(1)
+  })
+})
+
 describe('discarding a refused change', () => {
   let api: ReturnType<typeof fakeSyncApi>
 
   beforeEach(async () => {
     setActivePinia(createPinia())
+    // The sync path refuses to talk to the server as nobody.
+    signInForTests()
     await resetDatabase()
     await seedGroup()
   })

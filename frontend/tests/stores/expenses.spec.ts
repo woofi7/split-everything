@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { signInForTests } from '../support/viewHarness'
 import { db, resetDatabase } from '@/offline/db'
 import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
@@ -66,6 +67,8 @@ async function seedGroup(baseCurrency = 'CAD') {
 describe('expenses store', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
+    // The sync path refuses to talk to the server as nobody.
+    signInForTests()
     await resetDatabase()
     await seedGroup()
   })
@@ -331,6 +334,8 @@ describe('expenses store', () => {
     await first.add(draft)
 
     setActivePinia(createPinia())
+    // The sync path refuses to talk to the server as nobody.
+    signInForTests()
     const revived = useExpensesStore()
     revived.attachSync(new SyncEngine(fakeSyncApi(), () => false))
     await revived.hydrate()

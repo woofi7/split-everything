@@ -224,6 +224,24 @@ export function fakeSyncApi() {
   }
 }
 
+/**
+ * Puts a session in the auth store.
+ *
+ * The sync path refuses to talk to the server as nobody, so a store-level test
+ * that drives a push or a pull needs a session for the same reason the app does.
+ */
+export function signInForTests(): ReturnType<typeof useAuthStore> {
+  const auth = useAuthStore()
+  auth.user = testUser as never
+  auth.tokens = {
+    accessToken: 'access-1',
+    accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+    refreshToken: 'refresh-1',
+    refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+  } as never
+  return auth
+}
+
 export interface MountViewOptions {
   api?: FakeApi
   groups?: LocalGroup[]
@@ -271,16 +289,7 @@ export async function mountView(
   const api = options.api ?? fakeApi()
   setApiClient(api as never)
 
-  const auth = useAuthStore()
-  if (options.signedIn !== false) {
-    auth.user = testUser as never
-    auth.tokens = {
-      accessToken: 'access-1',
-      accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
-      refreshToken: 'refresh-1',
-      refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
-    } as never
-  }
+  const auth = options.signedIn === false ? useAuthStore() : signInForTests()
   if (options.rememberedAccount) auth.rememberedAccount = options.rememberedAccount
   auth.attachApi(api as never)
 
