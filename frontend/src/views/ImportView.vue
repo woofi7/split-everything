@@ -19,6 +19,15 @@ const router = useRouter()
 
 const worker = new StatementWorkerClient()
 const session = ref<StatementReviewSession | null>(null)
+
+/**
+ * Which of the two ways in is being used, so the other stops being offered.
+ *
+ * The statement reader shows its own state as soon as it has a file; the export
+ * wizard keeps its file to itself and says so.
+ */
+const settleUpActive = ref(false)
+const statementActive = ref(false)
 const progress = ref<{ stage: string; ratio: number } | null>(null)
 const usedOcr = ref(false)
 const error = ref<string | null>(null)
@@ -47,6 +56,7 @@ async function onFile(event: Event): Promise<void> {
 
   error.value = null
   message.value = null
+  statementActive.value = true
   progress.value = { stage: 'Reading the file', ratio: 0 }
 
   try {
@@ -63,6 +73,8 @@ async function onFile(event: Event): Promise<void> {
     if (parsed.rows.length === 0) {
       error.value =
         'No transactions could be read from that file. Bank layouts vary a lot; try the CSV export instead.'
+      // Nothing came of it, so the other way in is worth offering again.
+      statementActive.value = false
       return
     }
 
@@ -93,6 +105,9 @@ async function onFile(event: Event): Promise<void> {
     session.value = created
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not read that file.'
+    // A file that could not be read leaves nothing behind, so both ways in come
+    // back rather than stranding someone on the one that just failed.
+    statementActive.value = false
   } finally {
     progress.value = null
     // Clear the picker, so re-choosing the same file re-parses it.
@@ -205,7 +220,12 @@ async function cancel(): Promise<void> {
 <template>
   <AppShell title="Import" :back-to="{ name: 'profile' }" back-label="Profile">
     <section v-if="!session" class="flex flex-col gap-4">
-      <div class="surface-card p-4">
+      <!--
+        Two ways in, until one of them is being used. Leaving the other on screen
+        offers a second question nobody asked and a second file input to pick by
+        mistake, which is how an export ended up in the statement reader.
+      -->
+      <div v-if="!settleUpActive" data-testid="statement-import" class="surface-card p-4">
         <h2 class="font-medium">A bank or credit card statement</h2>
         <p class="mt-1 text-sm text-[var(--text-muted)]">
           The file is read on this device and never uploaded. Only the transactions you confirm are
@@ -219,7 +239,13 @@ async function cancel(): Promise<void> {
         </label>
       </div>
 
-      <SettleUpWizard @imported="onImported" @cancel="() => undefined" />
+      <SettleUpWizard
+        v-show="!statementActive"
+        data-testid="settleup-import"
+        @imported="onImported"
+        @cancel="() => undefined"
+        @active="settleUpActive = $event"
+      />
 
       <div v-if="progress" class="surface-card p-4" aria-live="polite">
         <p class="text-sm">{{ progress.stage }}</p>
