@@ -19,7 +19,6 @@ import { signInForTests, waitFor } from '../support/viewHarness'
 
 const groupId = 'group-1'
 const alice = 'member-alice'
-const bob = 'member-bob'
 
 function fakeSyncApi() {
   return {

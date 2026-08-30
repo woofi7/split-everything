@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * The French strings, keyed by the English ones.
  *

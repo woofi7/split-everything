@@ -88,7 +88,9 @@ async function parsePdf(
 
 async function runOcr(
   request: Extract<StatementWorkerRequest, { kind: 'pdf' }>,
-  document: { numPages: number; getPage: (n: number) => Promise<any> },
+  // The library's own document type, imported for the type only: a hand-written
+  // shape of the two methods used below drifts from it the moment it changes.
+  document: import('pdfjs-dist').PDFDocumentProxy,
 ): Promise<string> {
   const { createWorker } = await import('tesseract.js')
   const ocr = await createWorker('eng')
@@ -104,8 +106,17 @@ async function runOcr(
       const context = canvas.getContext('2d')
       if (!context) throw new Error('This device cannot render the PDF for reading.')
 
-      await page.render({ canvasContext: context as unknown as CanvasRenderingContext2D, viewport })
-        .promise
+      /*
+       * Both the canvas and its context, which the library now asks for. It used
+       * to take the context alone, and typing the document properly is what
+       * surfaced that: an OffscreenCanvas is not the HTMLCanvasElement the types
+       * name, but it is what a worker has and what the renderer actually uses.
+       */
+      await page.render({
+        canvas: canvas as unknown as HTMLCanvasElement,
+        canvasContext: context as unknown as CanvasRenderingContext2D,
+        viewport,
+      }).promise
 
       const blob = await canvas.convertToBlob({ type: 'image/png' })
       const result = await ocr.recognize(blob)

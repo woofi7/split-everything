@@ -526,7 +526,18 @@ function readSplitType(value: unknown): SplitType {
   return 'Equal'
 }
 
-function toLocalExpense(payload: Record<string, any>, entry: SyncLogEntry): LocalExpense {
+/*
+ * What a sync payload looks like before anything has checked it.
+ *
+ * The server's own shape is known, but a row in the log may have been written by a
+ * client older or newer than this one, so every field below is read defensively and
+ * coerced. Typing it as unknown would only move the casts inside; naming it here
+ * says the looseness is the boundary rather than an oversight.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type WirePayload = Record<string, any>
+
+function toLocalExpense(payload: WirePayload, entry: SyncLogEntry): LocalExpense {
   return {
     id: String(payload.id ?? entry.entityId),
     groupId: String(payload.groupId ?? entry.groupId),
@@ -540,13 +551,13 @@ function toLocalExpense(payload: Record<string, any>, entry: SyncLogEntry): Loca
     splitType: readSplitType(payload.splitType),
     receiptId: payload.receiptId ?? null,
     notes: payload.notes ?? null,
-    splits: (payload.splits ?? []).map((split: any) => ({
+    splits: (payload.splits ?? []).map((split: WirePayload) => ({
       memberId: String(split.memberId),
       amount: Number(split.amount ?? 0),
       amountInBaseCurrency: Number(split.amountInBaseCurrency ?? split.amount ?? 0),
       inputValue: split.inputValue ?? null,
     })),
-    items: (payload.items ?? []).map((item: any) => ({
+    items: (payload.items ?? []).map((item: WirePayload) => ({
       id: item.id ?? null,
       description: String(item.description ?? ''),
       amount: Number(item.amount ?? 0),
@@ -562,7 +573,7 @@ function toLocalExpense(payload: Record<string, any>, entry: SyncLogEntry): Loca
   }
 }
 
-function toLocalSettlement(payload: Record<string, any>, entry: SyncLogEntry): LocalSettlement {
+function toLocalSettlement(payload: WirePayload, entry: SyncLogEntry): LocalSettlement {
   return {
     id: String(payload.id ?? entry.entityId),
     groupId: String(payload.groupId ?? entry.groupId),
@@ -580,7 +591,7 @@ function toLocalSettlement(payload: Record<string, any>, entry: SyncLogEntry): L
   }
 }
 
-function toLocalComment(payload: Record<string, any>, entry: SyncLogEntry): LocalComment {
+function toLocalComment(payload: WirePayload, entry: SyncLogEntry): LocalComment {
   return {
     id: String(payload.id ?? entry.entityId),
     expenseId: String(payload.expenseId ?? ''),

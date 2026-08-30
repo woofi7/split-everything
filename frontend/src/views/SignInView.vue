@@ -61,7 +61,21 @@ function redirectTarget(): string {
  * when the script is blocked or the device is offline.
  */
 function mountGoogleButton(): void {
-  const google = (window as unknown as { google?: any }).google
+  // The one corner of Google's SDK this app uses, described here because the
+  // library ships no types worth depending on.
+  const google = (
+    window as unknown as {
+      google?: {
+        accounts: {
+          id: {
+            initialize: (options: Record<string, unknown>) => void
+            renderButton: (target: HTMLElement, options: Record<string, unknown>) => void
+            prompt?: () => void
+          }
+        }
+      }
+    }
+  ).google
   const clientId = googleClientId()
 
   if (!google?.accounts?.id || !clientId) {

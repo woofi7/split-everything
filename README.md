@@ -156,16 +156,25 @@ that the in-memory provider does not enforce.
 
 ```bash
 cd backend
-dotnet test                                    # 748 tests
+dotnet test                                    # 901 tests
 dotnet test --settings coverlet.runsettings \
   --collect:"XPlat Code Coverage" \
   --results-directory TestResults
 python3 ../scripts/check-coverage.py 'TestResults/*/coverage.cobertura.xml'
 
 cd frontend
-npm test                                       # 557 tests
+npm test                                       # 1311 tests
+npm run typecheck
+npm run lint                                   # unused code and template mistakes
 npm run test:coverage                          # enforces per-layer thresholds
+
+# And the one rule no compiler enforces: the source is plain ASCII.
+python3 scripts/check-ascii.py
 ```
+
+Prefer `waitFor(condition)` from the view harness over `settle(n)` when a test
+waits on asynchronous work. A fixed number of ticks passes on a quiet machine and
+fails under load, which has cost real time here twice.
 
 Coverage floors are enforced in CI: 95% of lines on the backend (100% on the
 application layer), and per-layer thresholds on the frontend, with 95% on the
@@ -192,20 +201,32 @@ tests in both suites, so a drift fails a build instead of corrupting data:
 
 ## Deploying
 
-Push to `main`. CI runs both suites, publishes two images to GHCR, and calls a
-Portainer webhook to pull them.
+A release is a version tag. CI runs the ASCII check, both suites and the lint on
+every push; a tag also builds the two images and pushes them to Docker Hub as
+`latest` plus three semver tags, the same release model as the other stack on that
+server.
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 On the host:
 
 ```bash
-cp .env.example .env    # fill it in; nothing has a default
-docker compose up -d
+cp docker-compose.example.yml docker-compose.yml
+cp .env.example .env              # fill it in; nothing has a default
+docker compose pull && docker compose up -d
 ```
 
-Both containers answer on one hostname behind Traefik, with `/api` and `/hubs`
-routed to the API at a higher priority. One hostname means no cross-origin
-requests, a first-party refresh cookie, and no CORS to configure. See
-[infra/traefik/README.md](infra/traefik/README.md).
+`APP_TAG` decides what runs: `latest`, or a pinned `v1.0.0` when a rollback needs
+to be exact. The images publish their own health endpoints and the compose file
+checks them, so a wedged API is restarted rather than left serving nothing.
+
+Two containers, one hostname: point the reverse proxy at `:8090` for the app and
+send `/api` and `/hubs` to `:8091` for the API (`/hubs` is a WebSocket). One
+hostname means no cross-origin requests, a first-party refresh cookie, and nothing
+to configure in `Cors__AllowedOrigins`.
 
 Backups run in their own container: a gzipped `pg_dump` on start and then daily,
 pruned to `BACKUP_RETENTION_DAYS`. Restore with `infra/backup/restore.sh`, which

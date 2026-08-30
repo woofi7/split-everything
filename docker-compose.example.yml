@@ -1,0 +1,123 @@
+# Split Everything, as it runs on the homelab box.
+#
+# Copy this next to an .env file (see .env.example), pull, and bring it up. It is
+# laid out the same way as the other stack on that server: named containers, images
+# from Docker Hub pinned by tag, appdata under /mnt/user/appdata, and ports
+# published for whatever reverse proxy fronts the machine.
+#
+# The API and the web app are two images. Put them behind one hostname so the
+# browser makes no cross-origin requests and the refresh cookie stays first-party:
+# /api and /hubs to the API, everything else to the web app.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: split-everything-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # Postgres refuses to initialise a non-empty data directory otherwise.
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - /mnt/user/appdata/split-everything/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - internal
+
+  api:
+    image: ${DOCKERHUB_USERNAME}/split-everything-api:${APP_TAG}
+    container_name: split-everything-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      # At least 32 bytes: the app refuses to start with anything shorter rather
+      # than padding it out. Generate one with: openssl rand -base64 48
+      - Auth__JwtSigningKey=${JWT_SIGNING_KEY}
+      - Auth__JwtIssuer=${PUBLIC_URL}
+      - Auth__JwtAudience=${PUBLIC_URL}
+      - Auth__GoogleClientId=${GOOGLE_CLIENT_ID}
+      - Auth__AppBaseUrl=${PUBLIC_URL}
+      # Empty unless a browser somewhere else has to reach this API: served under
+      # one hostname there are no cross-origin requests to allow.
+      - Cors__AllowedOrigins__0=${PUBLIC_URL}
+      - Push__VapidPublicKey=${VAPID_PUBLIC_KEY}
+      - Push__VapidPrivateKey=${VAPID_PRIVATE_KEY}
+      - Push__VapidSubject=${VAPID_SUBJECT}
+      - Push__FcmProjectId=${FCM_PROJECT_ID}
+      - Push__FcmServiceAccountJson=${FCM_SERVICE_ACCOUNT_JSON}
+      - Push__ApnsKeyId=${APNS_KEY_ID}
+      - Push__ApnsTeamId=${APNS_TEAM_ID}
+      - Push__ApnsBundleId=${APNS_BUNDLE_ID}
+      - Push__ApnsPrivateKey=${APNS_PRIVATE_KEY}
+      - Email__SmtpHost=${SMTP_HOST}
+      - Email__SmtpPort=${SMTP_PORT}
+      - Email__Username=${SMTP_USERNAME}
+      - Email__Password=${SMTP_PASSWORD}
+      - Email__FromAddress=${SMTP_FROM_ADDRESS}
+      - ReceiptStorage__RootPath=/data/receipts
+    volumes:
+      - /mnt/user/appdata/split-everything/receipts:/data/receipts
+    ports:
+      # Behind the proxy: send /api and /hubs here. /hubs is a WebSocket.
+      - '8091:8080'
+    # Liveness rather than readiness: readiness asks the database, and a brief
+    # Postgres restart would mark the API unhealthy and take it out of rotation.
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8080/api/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - internal
+
+  web:
+    image: ${DOCKERHUB_USERNAME}/split-everything-web:${APP_TAG}
+    container_name: split-everything-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - '8090:8080'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8080/healthz || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - internal
+
+  backup:
+    image: postgres:17-alpine
+    container_name: split-everything-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PGHOST=postgres
+      - PGDATABASE=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS}
+    volumes:
+      - ./infra/backup/backup.sh:/usr/local/bin/backup.sh:ro
+      - /mnt/user/appdata/split-everything/backups:/backups
+    entrypoint: ['/bin/sh', '/usr/local/bin/backup.sh']
+    networks:
+      - internal
+
+networks:
+  internal:
