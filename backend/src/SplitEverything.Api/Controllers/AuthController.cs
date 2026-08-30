@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using SplitEverything.Api.Infrastructure;
 using SplitEverything.Application.Abstractions;
 using SplitEverything.Application.Contracts.Auth;
 using GoogleSignInResult = SplitEverything.Application.Contracts.Auth.SignInResult;
@@ -13,6 +15,7 @@ public sealed class AuthController(
 {
     /// <summary>Exchanges a Google ID token for our own tokens.</summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("google")]
     public async Task<ActionResult<GoogleSignInResult>> SignInWithGoogle(
         GoogleSignInRequest request, CancellationToken ct)
@@ -30,6 +33,7 @@ public sealed class AuthController(
     /// has been registered.
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("dev")]
     public async Task<ActionResult<GoogleSignInResult>> SignInAsDeveloper(
         DevelopmentSignInRequest request, CancellationToken ct)
@@ -47,6 +51,7 @@ public sealed class AuthController(
     public ActionResult<AuthCapabilities> Capabilities() => Ok(auth.GetCapabilities());
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthTokens>> Refresh(RefreshRequest? request, CancellationToken ct)
     {

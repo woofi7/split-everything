@@ -97,8 +97,22 @@ describe('SpendPie', () => {
     const wrapper = mountPie()
 
     const svg = wrapper.find('svg')
-    expect(svg.attributes('role')).toBe('img')
+    // A group rather than an image: role="img" tells a screen reader that
+    // everything inside is one picture, which hides wedges that can be pressed.
+    expect(svg.attributes('role')).toBe('group')
     expect(svg.attributes('aria-label')).toContain('Roommates')
+  })
+
+  it('names every wedge, since each one can be pressed', () => {
+    const wrapper = mountPie()
+
+    const labels = wrapper
+      .findAll('[data-testid="wedge"]')
+      .map((wedge) => wedge.attributes('aria-label'))
+
+    expect(labels[0]).toContain('Roommates')
+    expect(labels[0]).toContain('600.00')
+    expect(labels[0]).toContain('60%')
   })
 
   /**

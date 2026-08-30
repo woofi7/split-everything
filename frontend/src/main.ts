@@ -4,7 +4,7 @@ import App from './App.vue'
 import { router } from './router'
 import { ApiClient } from './api/client'
 import { setApiClient } from './api/provider'
-import { apiBaseUrl } from './api/config'
+import { apiBaseUrl, appVersion } from './api/config'
 import { SyncEngine } from './offline/syncEngine'
 import { HttpSyncApi } from './api/syncApi'
 import { deviceIdNow, getDeviceId, isReplicaResponsive, onDatabaseBlocked } from './offline/db'
@@ -14,11 +14,19 @@ import { useExpensesStore } from './stores/expenses'
 import { createRealtimeConnection } from './offline/realtime'
 import {
   BLOCKED_MESSAGE,
+  RENDER_MESSAGE,
   WEDGED_MESSAGE,
   settleWithin,
   showStartupProblem,
 } from './startup'
+import { setLocale, t } from './i18n'
 import './styles/main.css'
+import {
+  describeVueError,
+  installErrorReporting,
+  reportClientError,
+  watchForUncaughtErrors,
+} from './diagnostics'
 
 async function bootstrap(): Promise<void> {
   const app = createApp(App)
@@ -26,6 +34,10 @@ async function bootstrap(): Promise<void> {
 
   const auth = useAuthStore()
   auth.restore()
+
+  // Before the first render and before anything can fail: the panels startup puts
+  // up are translated too, and the account's language comes back with its session.
+  setLocale(auth.user?.locale)
 
   const api = new ApiClient({
     baseUrl: apiBaseUrl(),
@@ -45,6 +57,38 @@ async function bootstrap(): Promise<void> {
 
   // Views resolve the client through the provider rather than building their own.
   setApiClient(api)
+
+  /*
+   * Where a failure in here goes.
+   *
+   * On a phone there is no console to read, so a broken screen said nothing at all
+   * and finding the cause meant a cable and a reproduction. Now it says what broke,
+   * on which screen, in which build, and it arrives in the server's log next to the
+   * requests that led to it.
+   *
+   * Wired here because it needs the client, and installed before the app is
+   * mounted, since the first render is one of the places this happens.
+   */
+  installErrorReporting({
+    send: (report) => api.post('/diagnostics/client-error', report),
+    route: () => String(router.currentRoute.value.name ?? router.currentRoute.value.path),
+    deviceId: () => deviceIdNow() ?? undefined,
+    appVersion: appVersion(),
+  })
+
+  const stopWatchingErrors = watchForUncaughtErrors()
+  void stopWatchingErrors
+
+  /*
+   * A render error used to leave a blank screen and a console message nobody could
+   * see. Reported, and then shown: a screen that cannot render is not something to
+   * carry on quietly from, and the same panel startup uses says so.
+   */
+  app.config.errorHandler = (error, _instance, info) => {
+    console.error('Vue error', error, info)
+    reportClientError(describeVueError(error, info))
+    showStartupProblem(t(RENDER_MESSAGE))
+  }
   auth.attachApi(api)
   const groupsStore = useGroupsStore()
   groupsStore.attachApi(api)
@@ -66,19 +110,24 @@ async function bootstrap(): Promise<void> {
   const blocked = new Promise<'blocked'>((resolve) => {
     onDatabaseBlocked(() => {
       resolve('blocked')
-      showStartupProblem(BLOCKED_MESSAGE)
+      showStartupProblem(t(BLOCKED_MESSAGE))
     })
   })
 
   const started = prepare(auth, expenses).catch((error: unknown) => {
     // The app is still worth showing: each screen loads its own data.
     console.error('Startup work failed; showing the app anyway.', error)
+    reportClientError({
+      kind: 'startup',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
   })
 
   const outcome = await Promise.race([settleWithin(started), blocked])
 
   if (outcome === 'blocked') {
-    showStartupProblem(BLOCKED_MESSAGE)
+    showStartupProblem(t(BLOCKED_MESSAGE))
     return
   }
 
@@ -105,7 +154,7 @@ async function bootstrap(): Promise<void> {
 async function watchReplica(): Promise<void> {
   if (await isReplicaResponsive()) return
 
-  showStartupProblem(WEDGED_MESSAGE)
+  showStartupProblem(t(WEDGED_MESSAGE))
 }
 
 /**

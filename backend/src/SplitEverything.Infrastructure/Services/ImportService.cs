@@ -10,7 +10,6 @@ using SplitEverything.Domain.Common;
 using SplitEverything.Domain.Entities;
 using SplitEverything.Infrastructure.Import;
 using SplitEverything.Infrastructure.Persistence;
-using SplitEverything.Infrastructure.Persistence.Seed;
 using SplitEverything.Infrastructure.Sync;
 
 namespace SplitEverything.Infrastructure.Services;
@@ -779,7 +778,7 @@ public sealed class ImportService(
                 DisplayName = account.DisplayName,
                 Role = GroupRole.Member,
                 Status = MembershipStatus.Active,
-                ColorHex = MemberPalette.Assign(account.PreferredColorHex, taken),
+                ColorHex = MemberPalette.Assign(taken),
                 JoinedAt = clock.UtcNow,
                 CreatedAt = clock.UtcNow,
                 UpdatedAt = clock.UtcNow

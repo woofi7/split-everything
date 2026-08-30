@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -113,7 +114,7 @@ function targetOf(entry: ActivityEntry) {
 <template>
   <AppShell
     :title="groups.mainGroup?.name ?? 'Activity'"
-    :subtitle="groups.mainGroup ? 'Activity' : undefined"
+    :subtitle="groups.mainGroup ? t('Activity') : undefined"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-offline="isOffline || groups.isOffline"
@@ -165,8 +166,7 @@ function targetOf(entry: ActivityEntry) {
             aria-hidden="true"
             class="shrink-0 rounded-lg border px-2.5 py-1 text-xs text-[var(--text-muted)]"
             style="border-color: var(--border); background: var(--surface-raised)"
-          >
-            View
+          >{{ t('View') }}
           </span>
         </RouterLink>
 
@@ -187,16 +187,13 @@ function targetOf(entry: ActivityEntry) {
       </li>
     </ul>
 
-    <p v-else-if="isLoading" class="py-12 text-center text-sm text-[var(--text-muted)]">
-      Loading activity
+    <p v-else-if="isLoading" class="py-12 text-center text-sm text-[var(--text-muted)]">{{ t('Loading activity') }}
     </p>
 
-    <p v-else-if="isOffline" class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
-      The activity feed needs a connection. Your groups and expenses still work offline.
+    <p v-else-if="isOffline" class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">{{ t('The activity feed needs a connection. Your groups and expenses still work offline.') }}
     </p>
 
-    <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
-      Nothing has happened yet.
+    <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">{{ t('Nothing has happened yet.') }}
     </p>
   </AppShell>
 </template>

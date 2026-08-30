@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -48,10 +49,10 @@ const makeDefault = ref(false)
 
 /** Short, so all four fit one row on a phone without wrapping. */
 const splitTypes: Array<{ value: SplitType; label: string }> = [
-  { value: 'Equal', label: 'Equally' },
-  { value: 'Percentage', label: 'Percent' },
-  { value: 'Shares', label: 'Shares' },
-  { value: 'ExactAmount', label: 'Exact' },
+  { value: 'Equal', label: t('Equally') },
+  { value: 'Percentage', label: t('Percent') },
+  { value: 'Shares', label: t('Shares') },
+  { value: 'ExactAmount', label: t('Exact') },
 ]
 
 onMounted(async () => {
@@ -76,7 +77,7 @@ onMounted(async () => {
 function prefillFromExpense(): void {
   const existing = expenses.expenses.find((candidate) => candidate.id === editingId.value)
   if (!existing) {
-    error.value = 'That expense is not on this device.'
+    error.value = t('That expense is not on this device.')
     return
   }
 
@@ -191,7 +192,7 @@ const previewProblem = computed(() => {
     )
     return null
   } catch (caught) {
-    return caught instanceof Error ? caught.message : 'That split does not add up.'
+    return caught instanceof Error ? caught.message : t('That split does not add up.')
   }
 })
 
@@ -276,7 +277,7 @@ async function save(): Promise<void> {
   error.value = null
 
   if (!group.value) {
-    error.value = 'Pick a group first.'
+    error.value = t('Pick a group first.')
     return
   }
 
@@ -304,7 +305,7 @@ async function save(): Promise<void> {
       )
     } catch {
       // Worth saying, but not worth refusing to save the expense over.
-      error.value = 'Saved, but the group default could not be changed.'
+      error.value = t('Saved, but the group default could not be changed.')
     }
   }
 
@@ -324,7 +325,7 @@ async function save(): Promise<void> {
       await router.replace({ name: 'group', params: { groupId: group.value.id } })
     }
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not save the expense.'
+    error.value = caught instanceof Error ? caught.message : t('Could not save the expense.')
   } finally {
     isSaving.value = false
   }
@@ -333,7 +334,7 @@ async function save(): Promise<void> {
 
 <template>
   <AppShell
-    :title="isEditing ? 'Edit expense' : 'Add expense'"
+    :title="isEditing ? t('Edit expense') : t('Add expense')"
     :back-to="backTarget"
     :back-label="isEditing ? 'Expense' : 'Dashboard'"
   >
@@ -350,7 +351,9 @@ async function save(): Promise<void> {
       <!-- The amount leads: it is the one field nobody can leave blank. -->
       <div class="flex items-end gap-3">
         <label class="flex min-w-0 flex-1 flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Amount ({{ currency }})</span>
+          <span class="text-xs text-[var(--text-muted)]">
+            {{ t('Amount ({currency})', { currency }) }}
+          </span>
           <input
             v-model="amountInput"
             type="text"
@@ -363,7 +366,7 @@ async function save(): Promise<void> {
         </label>
 
         <label class="flex shrink-0 flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Date</span>
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Date') }}</span>
           <input
             v-model="spentAt"
             type="date"
@@ -374,13 +377,13 @@ async function save(): Promise<void> {
       </div>
 
       <label class="flex flex-col gap-1">
-        <span class="text-xs text-[var(--text-muted)]">What was it</span>
+        <span class="text-xs text-[var(--text-muted)]">{{ t('What was it') }}</span>
         <input
           v-model="description"
           type="text"
           required
           maxlength="500"
-          placeholder="Groceries"
+          :placeholder="t('Groceries')"
           class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
           style="border-color: var(--border)"
         />
@@ -393,7 +396,7 @@ async function save(): Promise<void> {
           feature; a dropdown here would look like it did that and would not.
         -->
         <label v-if="!isEditing" class="flex min-w-0 flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Group</span>
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Group') }}</span>
           <select
             :value="groupId"
             data-testid="group"
@@ -408,7 +411,7 @@ async function save(): Promise<void> {
         </label>
 
         <label class="flex min-w-0 flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Who paid</span>
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Who paid') }}</span>
           <select
             v-model="paidByMemberId"
             data-testid="paid-by"
@@ -423,7 +426,7 @@ async function save(): Promise<void> {
       </div>
 
       <fieldset class="flex flex-col gap-2">
-        <legend class="text-xs text-[var(--text-muted)]">Split</legend>
+        <legend class="text-xs text-[var(--text-muted)]">{{ t('Split') }}</legend>
         <div class="flex gap-1.5">
           <button
             v-for="option in splitTypes"
@@ -439,7 +442,7 @@ async function save(): Promise<void> {
       </fieldset>
 
       <fieldset class="flex flex-col gap-2">
-        <legend class="text-xs text-[var(--text-muted)]">Between</legend>
+        <legend class="text-xs text-[var(--text-muted)]">{{ t('Between') }}</legend>
 
         <!--
           Each person carries their own share, so the preview that used to sit in a
@@ -508,8 +511,7 @@ async function save(): Promise<void> {
       </p>
       <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
 
-      <p class="text-center text-[11px] text-[var(--text-muted)]">
-        Saved on this device straight away, and synced when you are back online.
+      <p class="text-center text-[11px] text-[var(--text-muted)]">{{ t('Saved on this device straight away, and synced when you are back online.') }}
       </p>
 
       <!-- Reachable whatever the group size does to the height above it. -->
@@ -518,7 +520,7 @@ async function save(): Promise<void> {
         class="btn btn-press btn-primary sticky bottom-2 mt-1 w-full"
         :disabled="isSaving || preview.length === 0"
       >
-        {{ isSaving ? 'Saving' : isEditing ? 'Save changes' : 'Save expense' }}
+        {{ isSaving ? t('Saving') : isEditing ? t('Save changes') : t('Save expense') }}
       </button>
     </form>
   </AppShell>

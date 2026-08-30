@@ -63,7 +63,7 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var user = await TestData.SeedUserAsync(Db);
 
         var updated = await Auth.UpdateProfileAsync(user.Id,
-            new UpdateProfileRequest(null, null, null, null, null, "teal"));
+            new UpdateProfileRequest(null, null, null, ThemeName: "teal"));
 
         updated.ThemeName.ShouldBe("teal");
         (await Auth.GetMeAsync(user.Id)).ThemeName.ShouldBe("teal");
@@ -75,7 +75,7 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var user = await TestData.SeedUserAsync(Db);
 
         var updated = await Auth.UpdateProfileAsync(user.Id,
-            new UpdateProfileRequest(null, null, null, null, null, "  Rose "));
+            new UpdateProfileRequest(null, null, null, ThemeName: "  Rose "));
 
         // Case and whitespace must not fork the value, or a client comparing names
         // would not recognise its own choice.
@@ -89,7 +89,7 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 
         // Anything else would be a colour the client cannot draw.
         await Should.ThrowAsync<ValidationException>(() => Auth.UpdateProfileAsync(
-            user.Id, new UpdateProfileRequest(null, null, null, null, null, "chartreuse")));
+            user.Id, new UpdateProfileRequest(null, null, null, ThemeName: "chartreuse")));
     }
 
     [Fact]
@@ -97,10 +97,10 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     {
         var user = await TestData.SeedUserAsync(Db);
         await Auth.UpdateProfileAsync(user.Id,
-            new UpdateProfileRequest(null, null, null, null, null, "amber"));
+            new UpdateProfileRequest(null, null, null, ThemeName: "amber"));
 
         var cleared = await Auth.UpdateProfileAsync(user.Id,
-            new UpdateProfileRequest(null, null, null, null, null, ""));
+            new UpdateProfileRequest(null, null, null, ThemeName: ""));
 
         // Empty clears it, as with every other clearable field on this API.
         cleared.ThemeName.ShouldBeNull();
@@ -111,7 +111,7 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     {
         var user = await TestData.SeedUserAsync(Db);
         await Auth.UpdateProfileAsync(user.Id,
-            new UpdateProfileRequest(null, null, null, null, null, "sky"));
+            new UpdateProfileRequest(null, null, null, ThemeName: "sky"));
 
         var renamed = await Auth.UpdateProfileAsync(user.Id,
             new UpdateProfileRequest("Alice A", null, null, null));
@@ -138,5 +138,73 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         AppThemes.IsKnown("INDIGO").ShouldBeTrue();
         AppThemes.IsKnown("chartreuse").ShouldBeFalse();
         AppThemes.IsKnown(null).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_new_account_reads_the_app_in_english()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+
+        (await Auth.GetMeAsync(user.Id)).Locale.ShouldBe("en");
+    }
+
+    [Fact]
+    public async Task A_language_can_be_chosen()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+
+        var updated = await Auth.UpdateProfileAsync(user.Id,
+            new UpdateProfileRequest(null, null, null, Locale: "fr"));
+
+        updated.Locale.ShouldBe("fr");
+        (await Auth.GetMeAsync(user.Id)).Locale.ShouldBe("fr");
+    }
+
+    [Fact]
+    public async Task A_regional_language_is_taken_for_its_language()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+
+        // A browser offering fr-CA means French, and refusing it would be pedantry.
+        var updated = await Auth.UpdateProfileAsync(user.Id,
+            new UpdateProfileRequest(null, null, null, Locale: "fr-CA"));
+
+        updated.Locale.ShouldBe("fr");
+    }
+
+    [Fact]
+    public async Task A_language_the_app_is_not_written_in_is_refused()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+
+        // Half a screen in a language nobody asked for has no way out of it.
+        await Should.ThrowAsync<ValidationException>(() => Auth.UpdateProfileAsync(
+            user.Id, new UpdateProfileRequest(null, null, null, Locale: "de")));
+    }
+
+    [Fact]
+    public async Task A_language_can_be_put_back_to_the_default()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        await Auth.UpdateProfileAsync(user.Id, new UpdateProfileRequest(null, null, null, Locale: "fr"));
+
+        var cleared = await Auth.UpdateProfileAsync(user.Id,
+            new UpdateProfileRequest(null, null, null, Locale: ""));
+
+        cleared.Locale.ShouldBe("en");
+    }
+
+    [Fact]
+    public void The_languages_are_the_two_the_app_is_written_in()
+    {
+        AppLocales.Tags.ShouldBe(new[] { "en", "fr" });
+        AppLocales.Default.ShouldBe("en");
+        AppLocales.IsKnown("FR").ShouldBeTrue();
+        AppLocales.IsKnown("de").ShouldBeFalse();
+        AppLocales.IsKnown(null).ShouldBeFalse();
+        AppLocales.Resolve("fr_CA").ShouldBe("fr");
+        AppLocales.Resolve("de").ShouldBeNull();
+        // Reading a stored value never leaves a screen with no language at all.
+        AppLocales.Normalize("es").ShouldBe("en");
     }
 }

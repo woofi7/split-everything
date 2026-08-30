@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
@@ -21,23 +22,23 @@ const state = computed(() => {
       key: 'rejected',
       label:
         props.rejectedCount === 1
-          ? '1 change needs attention'
-          : `${props.rejectedCount} changes need attention`,
+          ? t('1 change needs attention')
+          : t('{count} changes need attention', { count: props.rejectedCount }),
       tone: 'text-owing',
     }
   }
-  if (props.isSyncing) return { key: 'syncing', label: 'Syncing', tone: 'text-[var(--text-muted)]' }
+  if (props.isSyncing) return { key: 'syncing', label: t('Syncing'), tone: 'text-[var(--text-muted)]' }
   if (props.pendingCount > 0) {
     return {
       key: 'pending',
       label: props.isOffline
-        ? `Offline, ${props.pendingCount} waiting`
-        : `${props.pendingCount} waiting to sync`,
+        ? t('Offline, {count} waiting', { count: props.pendingCount })
+        : t('{count} waiting to sync', { count: props.pendingCount }),
       tone: 'text-brand-400',
     }
   }
-  if (props.isOffline) return { key: 'offline', label: 'Offline', tone: 'text-[var(--text-muted)]' }
-  return { key: 'synced', label: 'All synced', tone: 'text-[var(--text-muted)]' }
+  if (props.isOffline) return { key: 'offline', label: t('Offline'), tone: 'text-[var(--text-muted)]' }
+  return { key: 'synced', label: t('All synced'), tone: 'text-[var(--text-muted)]' }
 })
 
 /**

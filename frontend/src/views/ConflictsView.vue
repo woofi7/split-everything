@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { onMounted, ref } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import { db, type LocalConflict, type OutboxOperation } from '@/offline/db'
@@ -41,7 +42,7 @@ async function resetToServer(): Promise<void> {
     confirmingReset.value = false
     await load()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not reload from the server.'
+    error.value = caught instanceof Error ? caught.message : t('Could not reload from the server.')
   } finally {
     isResetting.value = false
   }
@@ -72,7 +73,7 @@ async function resolve(conflict: LocalConflict, resolution: 'KeepLocal' | 'KeepR
     await expenses.sync()
     await load()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not resolve that conflict.'
+    error.value = caught instanceof Error ? caught.message : t('Could not resolve that conflict.')
   }
 }
 
@@ -86,19 +87,17 @@ async function discard(operationId: string): Promise<void> {
 
 <template>
   <AppShell
-    title="Needs attention"
+    :title="t('Needs attention')"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-syncing="expenses.isSyncing"
     :back-to="{ name: 'profile' }"
-    back-label="Profile"
+    :back-label="t('Profile')"
   >
     <section v-if="conflicts.length > 0" class="mb-6">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">
-        Edited on two devices at once
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Edited on two devices at once') }}
       </h2>
-      <p class="mb-3 text-xs text-[var(--text-muted)]">
-        Both versions were kept. Pick the one to keep - nothing was overwritten.
+      <p class="mb-3 text-xs text-[var(--text-muted)]">{{ t('Both versions were kept. Pick the one to keep - nothing was overwritten.') }}
       </p>
 
       <ul class="flex flex-col gap-3">
@@ -109,11 +108,11 @@ async function discard(operationId: string): Promise<void> {
 
           <dl class="mt-2 grid grid-cols-2 gap-3 text-sm">
             <div>
-              <dt class="text-xs text-[var(--text-muted)]">On the server</dt>
+              <dt class="text-xs text-[var(--text-muted)]">{{ t('On the server') }}</dt>
               <dd>{{ field(conflict.storedPayloadJson, 'description') }}</dd>
             </div>
             <div>
-              <dt class="text-xs text-[var(--text-muted)]">Your version</dt>
+              <dt class="text-xs text-[var(--text-muted)]">{{ t('Your version') }}</dt>
               <dd>{{ field(conflict.incomingPayloadJson, 'description') }}</dd>
             </div>
           </dl>
@@ -124,15 +123,13 @@ async function discard(operationId: string): Promise<void> {
               class="btn btn-press btn-secondary flex-1"
               style="border-color: var(--border)"
               @click="resolve(conflict, 'KeepLocal')"
-            >
-              Keep the server version
+            >{{ t('Keep the server version') }}
             </button>
             <button
               type="button"
               class="btn btn-press btn-primary flex-1"
               @click="resolve(conflict, 'KeepRemote')"
-            >
-              Keep mine
+            >{{ t('Keep mine') }}
             </button>
           </div>
         </li>
@@ -140,7 +137,7 @@ async function discard(operationId: string): Promise<void> {
     </section>
 
     <section v-if="rejected.length > 0">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">Changes the server refused</h2>
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Changes the server refused') }}</h2>
 
       <ul class="flex flex-col gap-3">
         <li v-for="operation in rejected" :key="operation.operationId" class="surface-card p-4">
@@ -151,16 +148,14 @@ async function discard(operationId: string): Promise<void> {
             class="btn btn-press btn-secondary mt-3"
             style="border-color: var(--border)"
             @click="discard(operation.operationId)"
-          >
-            Discard this change
+          >{{ t('Discard this change') }}
           </button>
         </li>
       </ul>
     </section>
 
     <section v-if="waiting.length > 0" class="mt-4">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">
-        Changes waiting to be sent
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Changes waiting to be sent') }}
       </h2>
 
       <ul class="flex flex-col gap-3">
@@ -188,8 +183,7 @@ async function discard(operationId: string): Promise<void> {
     <p
       v-if="conflicts.length === 0 && rejected.length === 0 && waiting.length === 0"
       class="surface-card p-6 text-center text-sm text-[var(--text-muted)]"
-    >
-      Nothing needs your attention.
+    >{{ t('Nothing needs your attention.') }}
     </p>
 
     <!--
@@ -197,12 +191,10 @@ async function discard(operationId: string): Promise<void> {
       a replica that has gone wrong cannot be worked around from anywhere else.
     -->
     <section class="mt-6">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">This device</h2>
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('This device') }}</h2>
 
       <div v-if="!confirmingReset" class="surface-card p-4">
-        <p class="text-sm text-[var(--text-muted)]">
-          If this device is showing something the others are not, it can throw away
-          what it has stored and ask the server for all of it again.
+        <p class="text-sm text-[var(--text-muted)]">{{ t('If this device is showing something the others are not, it can throw away what it has stored and ask the server for all of it again.') }}
         </p>
         <button
           type="button"
@@ -210,14 +202,12 @@ async function discard(operationId: string): Promise<void> {
           class="btn btn-press btn-secondary mt-3"
           style="border-color: var(--border)"
           @click="confirmingReset = true"
-        >
-          Reload everything from the server
+        >{{ t('Reload everything from the server') }}
         </button>
       </div>
 
       <div v-else class="surface-card flex flex-col gap-3 p-4">
-        <p class="text-sm">
-          Everything stored on this device is replaced by the server's version.
+        <p class="text-sm">{{ t("Everything stored on this device is replaced by the server's version.") }}
         </p>
         <p v-if="waiting.length > 0 || rejected.length > 0" class="text-sm text-owing">
           {{ waiting.length + rejected.length }} change(s) that have not reached the
@@ -229,8 +219,7 @@ async function discard(operationId: string): Promise<void> {
             class="btn btn-press btn-secondary flex-1"
             style="border-color: var(--border)"
             @click="confirmingReset = false"
-          >
-            Cancel
+          >{{ t('Cancel') }}
           </button>
           <button
             type="button"
@@ -239,7 +228,7 @@ async function discard(operationId: string): Promise<void> {
             :disabled="isResetting"
             @click="resetToServer"
           >
-            {{ isResetting ? 'Reloading' : 'Reload from the server' }}
+            {{ isResetting ? t('Reloading') : t('Reload from the server') }}
           </button>
         </div>
       </div>

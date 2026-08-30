@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, intlLocale } from '@/i18n'
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -223,13 +224,13 @@ function cardStyle(memberId: string) {
 }
 
 const spentOn = (iso: string) =>
-  new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  new Date(iso).toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
 </script>
 
 <template>
   <AppShell
     :title="group?.name ?? 'Dashboard'"
-    :subtitle="group ? 'Dashboard' : undefined"
+    :subtitle="group ? t('Dashboard') : undefined"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-offline="groups.isOffline"
@@ -253,13 +254,13 @@ const spentOn = (iso: string) =>
       <!-- The shape of the group's spending, first: it is what the screen is for. -->
       <section class="surface-card mb-4 p-4">
         <SpendPie :slices="paidByMember" :currency="currency">
-          <template #heading>Who paid</template>
+          <template #heading>{{ t('Who paid') }}</template>
         </SpendPie>
       </section>
 
       <section v-if="balances.length > 0" class="surface-card mb-4 p-4">
         <div class="flex items-center justify-between gap-2">
-          <p class="text-sm text-[var(--text-muted)]">Balances</p>
+          <p class="text-sm text-[var(--text-muted)]">{{ t('Balances') }}</p>
 
           <!--
             Here rather than in a card of its own. A card holding one number and
@@ -271,8 +272,7 @@ const spentOn = (iso: string) =>
             data-testid="settle-up"
             class="btn btn-press btn-secondary min-h-0 shrink-0 px-3 py-1.5 text-xs"
             style="border-color: var(--border)"
-          >
-            Settle up
+          >{{ t('Settle up') }}
           </RouterLink>
         </div>
 
@@ -294,24 +294,24 @@ const spentOn = (iso: string) =>
                 data-testid="your-balance"
                 class="shrink-0 rounded-full px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide"
                 style="background: var(--surface-sunken); color: var(--text-muted)"
-              >
-                You
+              >{{ t('You') }}
               </span>
             </span>
             <MoneyAmount :amount="member.net" :currency="currency" signed size="sm" />
           </li>
         </ul>
 
-        <p v-if="plan.length === 0" class="mt-3 text-sm text-[var(--text-muted)]">
-          Everyone is settled up.
+        <p v-if="plan.length === 0" class="mt-3 text-sm text-[var(--text-muted)]">{{ t('Everyone is settled up.') }}
         </p>
 
         <div v-else class="mt-4 border-t pt-3" style="border-color: var(--border)">
           <div class="flex items-center justify-between gap-2">
             <h3 class="min-w-0 text-sm font-medium text-[var(--text-muted)]">
               {{ showSimplified
-                ? `Settle up in ${plan.length} transfer${plan.length === 1 ? '' : 's'}`
-                : 'Who owes whom' }}
+                ? plan.length === 1
+                  ? t('Settle up in 1 transfer')
+                  : t('Settle up in {count} transfers', { count: plan.length })
+                : t('Who owes whom') }}
             </h3>
             <!-- Beside the list it switches, rather than above the one it does not. -->
             <button
@@ -320,7 +320,7 @@ const spentOn = (iso: string) =>
               class="btn btn-press btn-quiet min-h-0 shrink-0 px-2 py-1 text-xs text-brand-400"
               @click="showSimplified = !showSimplified"
             >
-              {{ showSimplified ? 'Show who owes whom' : 'Simplify' }}
+              {{ showSimplified ? t('Show who owes whom') : t('Simplify') }}
             </button>
           </div>
           <ul class="mt-2 flex flex-col gap-2 text-sm">
@@ -360,7 +360,7 @@ const spentOn = (iso: string) =>
       </section>
 
       <section>
-        <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">Expenses</h2>
+        <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Expenses') }}</h2>
 
         <ul v-if="groupExpenses.length > 0" class="flex flex-col gap-2">
           <li v-for="expense in visibleExpenses" :key="expense.id">
@@ -376,9 +376,8 @@ const spentOn = (iso: string) =>
                   <span
                     v-if="expense.pending"
                     class="shrink-0 rounded-full bg-brand-600/20 px-1.5 py-0.5 text-[10px] text-brand-400"
-                    title="Saved on this device, waiting to sync"
-                  >
-                    Waiting
+                    :title="t('Saved on this device, waiting to sync')"
+                  >{{ t('Waiting') }}
                   </span>
                 </span>
                 <span class="truncate text-xs text-[var(--text-muted)]">
@@ -392,8 +391,7 @@ const spentOn = (iso: string) =>
           </li>
         </ul>
 
-        <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
-          No expenses yet. Add the first one with the button below.
+        <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">{{ t('No expenses yet. Add the first one with the button below.') }}
         </p>
 
         <!--
@@ -418,17 +416,14 @@ const spentOn = (iso: string) =>
       </section>
     </template>
 
-    <p v-else-if="groups.isLoading" class="py-12 text-center text-[var(--text-muted)]">
-      Loading your groups
+    <p v-else-if="groups.isLoading" class="py-12 text-center text-[var(--text-muted)]">{{ t('Loading your groups') }}
     </p>
 
     <div v-else class="surface-card p-6 text-center">
-      <p class="font-medium">No groups yet</p>
-      <p class="mt-1 text-sm text-[var(--text-muted)]">
-        Create one for the people you share costs with, or open an invite someone sent you.
+      <p class="font-medium">{{ t('No groups yet') }}</p>
+      <p class="mt-1 text-sm text-[var(--text-muted)]">{{ t('Create one for the people you share costs with, or open an invite someone sent you.') }}
       </p>
-      <RouterLink :to="{ name: 'new-group' }" class="btn btn-press btn-primary mt-4">
-        New group
+      <RouterLink :to="{ name: 'new-group' }" class="btn btn-press btn-primary mt-4">{{ t('New group') }}
       </RouterLink>
     </div>
 

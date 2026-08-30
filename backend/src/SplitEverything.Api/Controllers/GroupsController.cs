@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using SplitEverything.Api.Infrastructure;
 using SplitEverything.Application.Abstractions;
 using SplitEverything.Application.Contracts.Groups;
 using SplitEverything.Application.Contracts.Settlements;
@@ -115,10 +117,12 @@ public sealed class GroupsController(
 
     /// <summary>Unauthenticated peek, so the sign-in page can name the group.</summary>
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpGet("/api/invites/{token}")]
     public async Task<ActionResult<InvitePreviewDto>> PreviewInvite(string token, CancellationToken ct)
         => Ok(await invites.PreviewAsync(token, ct));
 
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("/api/invites/{token}/redeem")]
     public async Task<ActionResult<RedeemInviteResult>> RedeemInvite(string token, CancellationToken ct)
         => Ok(await invites.RedeemAsync(UserId, token, ct));

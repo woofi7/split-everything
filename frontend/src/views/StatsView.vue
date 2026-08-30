@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
@@ -154,7 +155,7 @@ const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(me
 function segmentsOf(point: SpendPoint) {
   const members = point.byMember ?? []
   if (members.length === 0 || point.amount <= 0) {
-    return [{ memberId: 'total', memberName: 'Total', share: 1 }]
+    return [{ memberId: 'total', memberName: t('Total'), share: 1 }]
   }
 
   return members.map((member) => ({ ...member, share: member.amount / point.amount }))
@@ -264,7 +265,7 @@ const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.va
 <template>
   <AppShell
     :title="groups.mainGroup?.name ?? 'Stats'"
-    :subtitle="groups.mainGroup ? 'Stats' : undefined"
+    :subtitle="groups.mainGroup ? t('Stats') : undefined"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-offline="isOffline"
@@ -291,7 +292,7 @@ const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.va
         style="border-color: var(--border)"
         @change="load"
       >
-        <option value="">All groups</option>
+        <option value="">{{ t('All groups') }}</option>
         <option v-for="group in groups.visibleGroups" :key="group.id" :value="group.id">
           {{ group.name }}
         </option>
@@ -303,24 +304,24 @@ const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.va
         style="border-color: var(--border)"
         @change="load"
       >
-        <option value="day">Daily</option>
-        <option value="week">Weekly</option>
-        <option value="month">Monthly</option>
+        <option value="day">{{ t('Daily') }}</option>
+        <option value="week">{{ t('Weekly') }}</option>
+        <option value="month">{{ t('Monthly') }}</option>
       </select>
     </div>
 
     <template v-if="dashboard">
       <section class="surface-card mb-4 grid grid-cols-3 gap-3 p-4 text-center">
         <div>
-          <p class="text-xs text-[var(--text-muted)]">Total</p>
+          <p class="text-xs text-[var(--text-muted)]">{{ t('Total') }}</p>
           <MoneyAmount :amount="dashboard.totalSpend" :currency="dashboard.currency" size="sm" />
         </div>
         <div>
-          <p class="text-xs text-[var(--text-muted)]">Your share</p>
+          <p class="text-xs text-[var(--text-muted)]">{{ t('Your share') }}</p>
           <MoneyAmount :amount="dashboard.myShare" :currency="dashboard.currency" size="sm" />
         </div>
         <div>
-          <p class="text-xs text-[var(--text-muted)]">You paid</p>
+          <p class="text-xs text-[var(--text-muted)]">{{ t('You paid') }}</p>
           <MoneyAmount :amount="dashboard.myPaid" :currency="dashboard.currency" size="sm" />
         </div>
       </section>
@@ -332,8 +333,7 @@ const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.va
           a line reporting the same total as the card above is furniture.
         -->
         <div class="mb-3 flex items-baseline justify-between gap-2">
-          <h2 class="min-w-0 truncate text-sm font-medium text-[var(--text-muted)]">
-            Spending over time
+          <h2 class="min-w-0 truncate text-sm font-medium text-[var(--text-muted)]">{{ t('Spending over time') }}
           </h2>
 
           <p
@@ -455,7 +455,7 @@ const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.va
       </section>
 
       <section v-if="dashboard.byMember.length > 0" class="surface-card p-4">
-        <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">Who owes whom</h2>
+        <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">{{ t('Who owes whom') }}</h2>
         <ul class="flex flex-col gap-2 text-sm">
           <li v-for="member in dashboard.byMember" :key="member.memberId" class="flex justify-between">
             <span>{{ member.memberName }}</span>
@@ -465,12 +465,10 @@ const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.va
       </section>
     </template>
 
-    <p v-else-if="isLoading" class="py-12 text-center text-sm text-[var(--text-muted)]">
-      Loading stats
+    <p v-else-if="isLoading" class="py-12 text-center text-sm text-[var(--text-muted)]">{{ t('Loading stats') }}
     </p>
 
-    <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
-      Stats need a connection. Your groups and expenses still work offline.
+    <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">{{ t('Stats need a connection. Your groups and expenses still work offline.') }}
     </p>
   </AppShell>
 </template>

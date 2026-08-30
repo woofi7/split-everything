@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { intlLocale, t } from '@/i18n'
 import { computed, ref } from 'vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
@@ -231,7 +232,7 @@ async function onFile(event: Event): Promise<void> {
       accounts.value = []
     }
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not read that export.'
+    error.value = caught instanceof Error ? caught.message : t('Could not read that export.')
   } finally {
     busy.value = null
     // Cleared so choosing the same file again re-reads it.
@@ -304,7 +305,7 @@ async function loadPreview(): Promise<void> {
       preview.value.rows.filter((row) => row.isDuplicate).map((row) => row.rowNumber),
     )
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not read those rows.'
+    error.value = caught instanceof Error ? caught.message : t('Could not read those rows.')
   } finally {
     busy.value = null
   }
@@ -347,14 +348,14 @@ async function commit(): Promise<void> {
     emit('imported', result)
     reset()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not import that export.'
+    error.value = caught instanceof Error ? caught.message : t('Could not import that export.')
   } finally {
     busy.value = null
   }
 }
 
 const dateOf = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString() : 'No date'
+  value ? new Date(value).toLocaleDateString(intlLocale.value) : t('No date')
 </script>
 
 <template>
@@ -366,17 +367,14 @@ const dateOf = (value: string | null) =>
 
     <!-- Step one: the file. -->
     <div v-if="!analysis" class="surface-card p-4">
-      <h2 class="font-medium">A Settle Up export</h2>
-      <p class="mt-1 text-sm text-[var(--text-muted)]">
-        Export a group from Settle Up and choose the file here. Nothing is imported
-        until you have seen the rows.
+      <h2 class="font-medium">{{ t('A Settle Up export') }}</h2>
+      <p class="mt-1 text-sm text-[var(--text-muted)]">{{ t('Export a group from Settle Up and choose the file here. Nothing is imported until you have seen the rows.') }}
       </p>
 
       <label
         class="btn btn-press btn-secondary mt-3 w-full cursor-pointer"
         style="border-color: var(--border)"
-      >
-        Choose the CSV
+      >{{ t('Choose the CSV') }}
         <input type="file" accept=".csv,text/csv" class="hidden" @change="onFile" />
       </label>
     </div>
@@ -397,11 +395,10 @@ const dateOf = (value: string | null) =>
 
       <!-- Step two: where it goes. -->
       <div class="surface-card flex flex-col gap-3 p-4">
-        <h2 class="text-sm font-medium text-[var(--text-muted)]">Import into</h2>
+        <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Import into') }}</h2>
 
         <label class="flex items-center gap-2 text-sm">
-          <input v-model="target" type="radio" value="new" />
-          A new group
+          <input v-model="target" type="radio" value="new" />{{ t('A new group') }}
         </label>
 
         <input
@@ -410,14 +407,13 @@ const dateOf = (value: string | null) =>
           data-testid="new-group-name"
           type="text"
           maxlength="120"
-          placeholder="Group name"
+          :placeholder="t('Group name')"
           class="tap-target rounded-lg border bg-[var(--surface)] px-3 text-sm"
           style="border-color: var(--border)"
         />
 
         <label class="flex items-center gap-2 text-sm">
-          <input v-model="target" type="radio" value="existing" />
-          An existing group
+          <input v-model="target" type="radio" value="existing" />{{ t('An existing group') }}
         </label>
 
         <select
@@ -435,10 +431,8 @@ const dateOf = (value: string | null) =>
 
       <!-- Step three: who is who. -->
       <div class="surface-card flex flex-col gap-3 p-4">
-        <h2 class="text-sm font-medium text-[var(--text-muted)]">People in the export</h2>
-        <p class="text-xs text-[var(--text-muted)]">
-          Settle Up exports names, not accounts. Anyone left unmatched is added to the
-          group under that name, and can claim it later from an invite.
+        <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('People in the export') }}</h2>
+        <p class="text-xs text-[var(--text-muted)]">{{ t('Settle Up exports names, not accounts. Anyone left unmatched is added to the group under that name, and can claim it later from an invite.') }}
         </p>
 
         <div
@@ -455,9 +449,9 @@ const dateOf = (value: string | null) =>
             style="border-color: var(--border)"
             :aria-label="`Who is ${name}`"
           >
-            <option :value="null">Add as a new person</option>
+            <option :value="null">{{ t('Add as a new person') }}</option>
 
-            <optgroup v-if="members.length > 0" label="Already in this group">
+            <optgroup v-if="members.length > 0" :label="t('Already in this group')">
               <option
                 v-for="member in members"
                 :key="member.id"
@@ -473,7 +467,7 @@ const dateOf = (value: string | null) =>
               accounts already and only their names came across, so binding a name
               to the real person is the point rather than the exception.
             -->
-            <optgroup v-if="otherAccounts.length > 0" label="Everyone here">
+            <optgroup v-if="otherAccounts.length > 0" :label="t('Everyone here')">
               <option
                 v-for="person in otherAccounts"
                 :key="person.id"
@@ -506,7 +500,7 @@ const dateOf = (value: string | null) =>
             question.
           -->
           <label class="flex flex-col gap-1">
-            <span class="text-xs text-[var(--text-muted)]">Import all of these into</span>
+            <span class="text-xs text-[var(--text-muted)]">{{ t('Import all of these into') }}</span>
             <select
               :value="destination"
               data-testid="destination"
@@ -550,7 +544,7 @@ const dateOf = (value: string | null) =>
                   payer and everybody who shared it.
                 -->
                 <dl class="mt-1 grid grid-cols-[2.5rem_1fr] gap-x-2 text-xs">
-                  <dt class="text-[var(--text-muted)]">From</dt>
+                  <dt class="text-[var(--text-muted)]">{{ t('From') }}</dt>
                   <dd data-testid="row-from" class="truncate">
                     {{ row.paidByName ?? 'Not named' }}
                   </dd>
@@ -565,11 +559,9 @@ const dateOf = (value: string | null) =>
                   {{ dateOf(row.spentAt) }}
                 </p>
 
-                <p v-if="row.isSettlement" class="text-xs text-brand-400">
-                  Settlement, not an expense
+                <p v-if="row.isSettlement" class="text-xs text-brand-400">{{ t('Settlement, not an expense') }}
                 </p>
-                <p v-if="row.isDuplicate" class="text-xs text-[var(--text-muted)]">
-                  Already recorded
+                <p v-if="row.isDuplicate" class="text-xs text-[var(--text-muted)]">{{ t('Already recorded') }}
                 </p>
                 <p v-if="row.problems.length > 0" class="text-xs text-owing">
                   {{ row.problems.join('; ') }}
@@ -593,7 +585,7 @@ const dateOf = (value: string | null) =>
                   :aria-pressed="skipped.has(row.rowNumber)"
                   @click="toggleRow(row.rowNumber)"
                 >
-                  {{ skipped.has(row.rowNumber) ? 'Restore' : 'Ignore' }}
+                  {{ skipped.has(row.rowNumber) ? t('Restore') : t('Ignore') }}
                 </button>
               </div>
             </div>
@@ -607,8 +599,7 @@ const dateOf = (value: string | null) =>
           class="btn btn-press btn-secondary flex-1"
           style="border-color: var(--border)"
           @click="reset(); emit('cancel')"
-        >
-          Cancel
+        >{{ t('Cancel') }}
         </button>
 
         <button
@@ -618,8 +609,7 @@ const dateOf = (value: string | null) =>
           class="btn btn-press btn-primary flex-1"
           :disabled="busy !== null"
           @click="loadPreview"
-        >
-          See the rows
+        >{{ t('See the rows') }}
         </button>
 
         <button

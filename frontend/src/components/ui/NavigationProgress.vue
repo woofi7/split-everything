@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { onUnmounted, ref, watch } from 'vue'
 
 /**
@@ -45,7 +46,7 @@ onUnmounted(() => clearTimeout(timer))
     class="nav-progress"
     data-testid="navigation-progress"
     role="status"
-    aria-label="Loading"
+    :aria-label="t('Loading')"
   >
     <div class="nav-progress-bar" />
   </div>

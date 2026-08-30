@@ -41,32 +41,25 @@ public static class MemberPalette
            && Colors.Any(colour => string.Equals(colour, colorHex, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// The colour for a new member: the one they prefer where it is free, and the
-    /// first free one otherwise.
+    /// The colour for a new member: the first one in the palette that nobody in
+    /// the group has.
     ///
     /// A group with more members than the palette has colours has to repeat one,
-    /// and repeating in palette order is at least predictable. Preferring the
-    /// person's own choice is the point of them having one, so it wins even in a
-    /// group that has run out.
+    /// and repeating in palette order is at least predictable.
+    ///
+    /// There used to be a wish to honour here, a colour the person preferred in
+    /// every group they joined. It was only ever set from one screen, that screen
+    /// is gone, and a colour belongs to the group rather than to the person: two
+    /// people the same colour in one group defeats the point of having them.
     /// </summary>
-    public static string Assign(string? preferred, IEnumerable<string?> taken)
+    public static string Assign(IEnumerable<string?> taken)
     {
         var used = taken
             .Where(colour => colour is not null)
             .Select(colour => colour!.ToLowerInvariant())
             .ToHashSet();
 
-        if (IsKnown(preferred) && !used.Contains(preferred!.ToLowerInvariant()))
-            return Normalize(preferred!);
-
-        var free = Colors.FirstOrDefault(colour => !used.Contains(colour.ToLowerInvariant()));
-        if (free is not null) return free;
-
-        // Out of colours. The person's own choice if they have one, so at least the
-        // repeat is the one they asked for.
-        return IsKnown(preferred) ? Normalize(preferred!) : Colors[used.Count % Colors.Count];
+        return Colors.FirstOrDefault(colour => !used.Contains(colour.ToLowerInvariant()))
+               ?? Colors[used.Count % Colors.Count];
     }
-
-    private static string Normalize(string colorHex)
-        => Colors.First(colour => string.Equals(colour, colorHex, StringComparison.OrdinalIgnoreCase));
 }

@@ -40,7 +40,7 @@ public sealed class GroupService(
         db.Groups.Add(group);
 
         var owner = NewMember(group.Id, userId, user.DisplayName, GroupRole.Owner,
-            MemberPalette.Assign(user.PreferredColorHex, []));
+            MemberPalette.Assign([]));
         db.GroupMembers.Add(owner);
 
         // Filled as they are made, so two of them never take the same colour.
@@ -54,7 +54,7 @@ public sealed class GroupService(
             {
                 var member = NewMember(group.Id, null, n!, GroupRole.Member);
                 member.ColorHex = MemberPalette.Assign(
-                    null, placeholderColors.Append(owner.ColorHex));
+                    placeholderColors.Append(owner.ColorHex));
                 placeholderColors.Add(member.ColorHex);
                 return member;
             })
@@ -334,7 +334,7 @@ public sealed class GroupService(
                 return MemberDto(existing, invitee.AvatarUrl);
 
             existing.ColorHex ??= MemberPalette.Assign(
-                invitee.PreferredColorHex, await TakenColorsAsync(groupId, ct: ct));
+                await TakenColorsAsync(groupId, ct: ct));
             existing.Status = MembershipStatus.Active;
             existing.LeftAt = null;
             existing.IsDeleted = false;
@@ -352,7 +352,7 @@ public sealed class GroupService(
         }
 
         var member = NewMember(groupId, invitee.Id, invitee.DisplayName, GroupRole.Member,
-            MemberPalette.Assign(invitee.PreferredColorHex, await TakenColorsAsync(groupId, ct: ct)));
+            MemberPalette.Assign(await TakenColorsAsync(groupId, ct: ct)));
         db.GroupMembers.Add(member);
 
         await writer.RecordAsync(member, SyncEntityType.GroupMember, groupId, SyncOperation.Create,
@@ -802,7 +802,7 @@ public sealed class GroupService(
         if (holder is not null)
         {
             holder.ColorHex = previous
-                ?? MemberPalette.Assign(null, await TakenColorsAsync(groupId, ct: ct));
+                ?? MemberPalette.Assign(await TakenColorsAsync(groupId, ct: ct));
             await writer.RecordAsync(holder, SyncEntityType.GroupMember, groupId, SyncOperation.Update,
                 deviceId, userId, MemberPayload(holder), ct: ct);
         }

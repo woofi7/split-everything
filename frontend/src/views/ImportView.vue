@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, intlLocale } from '@/i18n'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -57,7 +58,7 @@ async function onFile(event: Event): Promise<void> {
   error.value = null
   message.value = null
   statementActive.value = true
-  progress.value = { stage: 'Reading the file', ratio: 0 }
+  progress.value = { stage: t('Reading the file'), ratio: 0 }
 
   try {
     const parsed = file.name.toLowerCase().endsWith('.pdf')
@@ -104,7 +105,7 @@ async function onFile(event: Event): Promise<void> {
 
     session.value = created
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not read that file.'
+    error.value = caught instanceof Error ? caught.message : t('Could not read that file.')
     // A file that could not be read leaves nothing behind, so both ways in come
     // back rather than stranding someone on the one that just failed.
     statementActive.value = false
@@ -174,7 +175,7 @@ async function commit(): Promise<void> {
     const payload = await session.value.buildCommitPayload()
 
     if (payload.rows.length === 0) {
-      error.value = 'Assign at least one transaction to a group first.'
+      error.value = t('Assign at least one transaction to a group first.')
       return
     }
 
@@ -190,7 +191,7 @@ async function commit(): Promise<void> {
     message.value = `Imported ${result.createdExpenses} transactions.`
     await router.replace({ name: 'dashboard' })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not import those transactions.'
+    error.value = caught instanceof Error ? caught.message : t('Could not import those transactions.')
   } finally {
     isCommitting.value = false
   }
@@ -203,7 +204,7 @@ async function onImported(result: {
 }): Promise<void> {
   await expenses.sync()
 
-  const parts = [`${result.createdExpenses} expenses`]
+  const parts = [t('{count} expenses', { count: result.createdExpenses })]
   if (result.createdSettlements > 0) parts.push(`${result.createdSettlements} settlements`)
   message.value = `Imported ${parts.join(' and ')}.`
 
@@ -218,7 +219,7 @@ async function cancel(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Import" :back-to="{ name: 'profile' }" back-label="Profile">
+  <AppShell :title="t('Import')" :back-to="{ name: 'profile' }" :back-label="t('Profile')">
     <section v-if="!session" class="flex flex-col gap-4">
       <!--
         Two ways in, until one of them is being used. Leaving the other on screen
@@ -226,15 +227,12 @@ async function cancel(): Promise<void> {
         mistake, which is how an export ended up in the statement reader.
       -->
       <div v-if="!settleUpActive" data-testid="statement-import" class="surface-card p-4">
-        <h2 class="font-medium">A bank or credit card statement</h2>
-        <p class="mt-1 text-sm text-[var(--text-muted)]">
-          The file is read on this device and never uploaded. Only the transactions you confirm are
-          sent, and everything else is discarded when you leave this screen.
+        <h2 class="font-medium">{{ t('A bank or credit card statement') }}</h2>
+        <p class="mt-1 text-sm text-[var(--text-muted)]">{{ t('The file is read on this device and never uploaded. Only the transactions you confirm are sent, and everything else is discarded when you leave this screen.') }}
         </p>
 
         <label class="btn btn-press btn-secondary mt-3 w-full cursor-pointer"
-               style="border-color: var(--border)">
-          Choose a CSV or PDF
+               style="border-color: var(--border)">{{ t('Choose a CSV or PDF') }}
           <input type="file" accept=".csv,.pdf,text/csv,application/pdf" class="hidden" @change="onFile" />
         </label>
       </div>
@@ -262,9 +260,7 @@ async function cancel(): Promise<void> {
     </section>
 
     <section v-else class="flex flex-col gap-4">
-      <div v-if="usedOcr" class="surface-card p-3 text-xs text-[var(--text-muted)]">
-        That statement had no text layer, so it was read from the images. Check the amounts before
-        importing.
+      <div v-if="usedOcr" class="surface-card p-3 text-xs text-[var(--text-muted)]">{{ t('That statement had no text layer, so it was read from the images. Check the amounts before importing.') }}
       </div>
 
       <div v-if="summary" class="surface-card p-3 text-sm">
@@ -282,7 +278,7 @@ async function cancel(): Promise<void> {
             <div class="min-w-0">
               <p class="truncate text-sm font-medium">{{ row.description }}</p>
               <p class="text-xs text-[var(--text-muted)]">
-                {{ row.date ? row.date.toLocaleDateString() : 'No date' }}
+                {{ row.date ? row.date.toLocaleDateString(intlLocale) : t('No date') }}
                 <template v-if="row.isForeignCurrency"> - {{ row.currency }}</template>
               </p>
               <p v-if="row.problems.length > 0" class="text-xs text-owing">
@@ -307,7 +303,7 @@ async function cancel(): Promise<void> {
               :value="row.groupId ?? ''"
               @change="assign(row.rowNumber, ($event.target as HTMLSelectElement).value)"
             >
-              <option value="">Personal, not split</option>
+              <option value="">{{ t('Personal, not split') }}</option>
               <option v-for="group in groups.visibleGroups" :key="group.id" :value="group.id">
                 Split in {{ group.name }}
               </option>
@@ -320,7 +316,7 @@ async function cancel(): Promise<void> {
               :style="row.action === 'ignore' ? undefined : 'border-color: var(--border)'"
               @click="setAction(row.rowNumber, row.action === 'ignore' ? 'personal' : 'ignore')"
             >
-              {{ row.action === 'ignore' ? 'Ignored' : 'Ignore' }}
+              {{ row.action === 'ignore' ? t('Ignored') : t('Ignore') }}
             </button>
           </div>
         </li>
@@ -334,8 +330,7 @@ async function cancel(): Promise<void> {
           class="btn btn-press btn-secondary flex-1"
           style="border-color: var(--border)"
           @click="cancel"
-        >
-          Cancel
+        >{{ t('Cancel') }}
         </button>
         <button
           type="button"
@@ -343,7 +338,7 @@ async function cancel(): Promise<void> {
           :disabled="isCommitting || (summary?.toCommit ?? 0) === 0"
           @click="commit"
         >
-          {{ isCommitting ? 'Importing' : `Import ${summary?.toCommit ?? 0}` }}
+          {{ isCommitting ? t('Importing') : t('Import {count}', { count: summary?.toCommit ?? 0 }) }}
         </button>
       </div>
     </section>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { ICONS, iconSearchFields, resolveIcon, type IconChoice } from '@/domain/icons'
@@ -243,27 +244,26 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
       >
         <header class="flex items-center justify-between gap-3 border-b p-4" style="border-color: var(--border)">
           <h2 id="icon-picker-title" class="text-base font-semibold">
-            {{ title ?? 'Choose an icon' }}
+            {{ title ?? t('Choose an icon') }}
           </h2>
           <button
             type="button"
             class="tap-target rounded-lg px-2 text-sm text-[var(--text-muted)]"
-            aria-label="Close"
+            :aria-label="t('Close')"
             @click="close"
-          >
-            Close
+          >{{ t('Close') }}
           </button>
         </header>
 
         <div class="p-4 pb-2">
-          <label class="sr-only" for="icon-search">Search icons</label>
+          <label class="sr-only" for="icon-search">{{ t('Search icons') }}</label>
           <input
             id="icon-search"
             ref="searchInput"
             v-model="query"
             type="search"
             autocomplete="off"
-            placeholder="Search: rent, groceries, uber, wifi"
+            :placeholder="t('Search: rent, groceries, uber, wifi')"
             class="tap-target w-full rounded-lg border bg-[var(--surface)] px-3"
             style="border-color: var(--border)"
             role="combobox"
@@ -276,7 +276,7 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
           </p>
         </div>
 
-        <div id="icon-results" class="flex-1 overflow-y-auto px-4 pb-2" role="listbox" aria-label="Icons">
+        <div id="icon-results" class="flex-1 overflow-y-auto px-4 pb-2" role="listbox" :aria-label="t('Icons')">
           <template v-for="section in sections" :key="section.heading ?? 'results'">
             <h3
               v-if="section.heading"
@@ -318,8 +318,7 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
             </ul>
           </template>
 
-          <p v-if="results.length === 0" class="py-8 text-center text-sm text-[var(--text-muted)]">
-            No icon matches that. Try a plainer word, like food or travel.
+          <p v-if="results.length === 0" class="py-8 text-center text-sm text-[var(--text-muted)]">{{ t('No icon matches that. Try a plainer word, like food or travel.') }}
           </p>
         </div>
 
@@ -337,8 +336,7 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
             style="border-color: var(--border)"
             :disabled="!modelValue"
             @click="clear"
-          >
-            Remove icon
+          >{{ t('Remove icon') }}
           </button>
         </footer>
       </div>

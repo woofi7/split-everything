@@ -230,18 +230,6 @@ public sealed class AuthService(
             user.DefaultCurrency = GroupAccess.NormalizeCurrency(request.DefaultCurrency, "Default currency");
         if (request.PrefersLightTheme is { } light)
             user.PrefersLightTheme = light;
-        if (request.PreferredColorHex is not null)
-        {
-            var wanted = request.PreferredColorHex.Trim();
-
-            // Empty clears it, as with the other clearable fields. Anything else has
-            // to be a colour this app hands out, or a group could end up storing a
-            // value nothing knows how to render.
-            if (wanted.Length == 0) user.PreferredColorHex = null;
-            else if (MemberPalette.IsKnown(wanted)) user.PreferredColorHex = wanted;
-            else throw new ValidationException("That is not one of the colours to choose from.");
-        }
-
         if (request.ThemeName is not null)
         {
             var wanted = request.ThemeName.Trim();
@@ -255,7 +243,17 @@ public sealed class AuthService(
         }
 
         if (request.Locale is not null)
-            user.Locale = request.Locale.Trim();
+        {
+            var wanted = request.Locale.Trim();
+
+            // Empty puts it back to the default, as everywhere else on this API.
+            // Anything the app has no strings for is refused rather than stored:
+            // a screen half in a language nobody asked for has no way out of it.
+            if (wanted.Length == 0) user.Locale = AppLocales.Default;
+            else if (wanted.Length <= 10 && AppLocales.Resolve(wanted) is { } language)
+                user.Locale = language;
+            else throw new ValidationException("The app is available in English and French.");
+        }
 
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
@@ -439,5 +437,5 @@ public sealed class AuthService(
 
     private static AuthenticatedUser Map(User user)
         => new(user.Id, user.Email, user.DisplayName, user.AvatarUrl,
-            user.DefaultCurrency, user.PrefersLightTheme, user.PreferredColorHex, user.ThemeName);
+            user.DefaultCurrency, user.PrefersLightTheme, user.ThemeName, user.Locale);
 }

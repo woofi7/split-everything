@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, intlLocale } from '@/i18n'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -49,11 +50,11 @@ const colours = computed(() =>
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
 const SPLIT_LABELS: Record<string, string> = {
-  Equal: 'Equally',
-  Percentage: 'By percentage',
-  Shares: 'By shares',
-  ExactAmount: 'Exact amounts',
-  Itemized: 'By item',
+  Equal: t('Equally'),
+  Percentage: t('By percentage'),
+  Shares: t('By shares'),
+  ExactAmount: t('Exact amounts'),
+  Itemized: t('By item'),
 }
 
 const splitTypeLabel = computed(() =>
@@ -84,14 +85,14 @@ async function removeComment(commentId: string): Promise<void> {
   try {
     await expenses.removeComment(commentId)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not delete that comment.'
+    error.value = caught instanceof Error ? caught.message : t('Could not delete that comment.')
   }
 }
 
 async function postComment(): Promise<void> {
   error.value = null
   if (!myMemberId.value) {
-    error.value = 'You are not a member of this group.'
+    error.value = t('You are not a member of this group.')
     return
   }
 
@@ -99,7 +100,7 @@ async function postComment(): Promise<void> {
     await expenses.comment(expenseId.value, commentDraft.value, myMemberId.value)
     commentDraft.value = ''
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not post the comment.'
+    error.value = caught instanceof Error ? caught.message : t('Could not post the comment.')
   }
 }
 
@@ -111,7 +112,7 @@ async function remove(): Promise<void> {
     await expenses.remove(expenseId.value)
     await router.replace({ name: 'group', params: { groupId: groupId.value } })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not delete the expense.'
+    error.value = caught instanceof Error ? caught.message : t('Could not delete the expense.')
     confirmingDelete.value = false
   } finally {
     isDeleting.value = false
@@ -138,24 +139,22 @@ async function remove(): Promise<void> {
           <span
             v-if="expense.pending"
             class="rounded-full bg-brand-600/20 px-2 py-0.5 text-xs text-brand-400"
-          >
-            Waiting to sync
+          >{{ t('Waiting to sync') }}
           </span>
         </div>
         <p class="mt-1 text-sm text-[var(--text-muted)]">
           {{ memberName(expense.paidByMemberId) }} paid on
-          {{ new Date(expense.spentAt).toLocaleDateString() }}
+          {{ new Date(expense.spentAt).toLocaleDateString(intlLocale) }}
         </p>
         <p v-if="expense.currency !== groups.groups.find((g) => g.id === groupId)?.baseCurrency"
-           class="mt-1 text-xs text-[var(--text-muted)]">
-          Converted to the group currency when it syncs.
+           class="mt-1 text-xs text-[var(--text-muted)]">{{ t('Converted to the group currency when it syncs.') }}
         </p>
         <p v-if="expense.notes" class="mt-2 text-sm">{{ expense.notes }}</p>
       </section>
 
       <section class="surface-card p-4">
         <div class="mb-2 flex items-baseline justify-between gap-2">
-          <h2 class="text-sm font-medium text-[var(--text-muted)]">Split</h2>
+          <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Split') }}</h2>
           <!--
             How, not just how much. Two expenses with identical shares can have
             been divided by quite different rules, and the rule is what someone
@@ -189,13 +188,13 @@ async function remove(): Promise<void> {
       </section>
 
       <section v-if="expense.items.length > 0" class="surface-card p-4">
-        <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">Items</h2>
+        <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Items') }}</h2>
         <ul class="flex flex-col gap-2 text-sm">
           <li v-for="item in expense.items" :key="item.description" class="flex justify-between gap-3">
             <span class="min-w-0">
               <span class="block truncate">{{ item.description }}</span>
               <span class="block truncate text-xs text-[var(--text-muted)]">
-                {{ item.memberIds.map(memberName).join(', ') || 'Everyone' }}
+                {{ item.memberIds.map(memberName).join(', ') || t('Everyone') }}
               </span>
             </span>
             <MoneyAmount :amount="item.amount * item.quantity" :currency="expense.currency" size="sm" />
@@ -231,8 +230,7 @@ async function remove(): Promise<void> {
               class="btn btn-press btn-quiet min-h-0 shrink-0 px-2 py-1 text-xs"
               :aria-label="`Delete your comment: ${comment.body}`"
               @click="removeComment(comment.id)"
-            >
-              Delete
+            >{{ t('Delete') }}
             </button>
           </li>
         </ul>
@@ -242,7 +240,7 @@ async function remove(): Promise<void> {
             v-model="commentDraft"
             type="text"
             maxlength="4000"
-            placeholder="Add a comment"
+            :placeholder="t('Add a comment')"
             class="tap-target flex-1 rounded-lg border bg-[var(--surface)] px-3"
             style="border-color: var(--border)"
           />
@@ -250,8 +248,7 @@ async function remove(): Promise<void> {
             type="submit"
             class="btn btn-press btn-secondary"
             style="border-color: var(--border)"
-          >
-            Post
+          >{{ t('Post') }}
           </button>
         </form>
       </section>
@@ -263,8 +260,7 @@ async function remove(): Promise<void> {
         :to="{ name: 'edit-expense', params: { groupId, expenseId } }"
         data-testid="edit-expense"
         class="btn btn-press btn-secondary w-full"
-      >
-        Edit this expense
+      >{{ t('Edit this expense') }}
       </RouterLink>
 
       <button
@@ -273,8 +269,7 @@ async function remove(): Promise<void> {
         data-testid="delete-expense"
         class="btn btn-press btn-danger w-full"
         @click="confirmingDelete = true"
-      >
-        Delete this expense
+      >{{ t('Delete this expense') }}
       </button>
 
       <!--
@@ -282,7 +277,7 @@ async function remove(): Promise<void> {
         yours, and the only way back is to add it again from memory.
       -->
       <div v-else class="surface-card flex flex-col gap-3 p-4">
-        <p class="text-sm font-medium">Delete this expense?</p>
+        <p class="text-sm font-medium">{{ t('Delete this expense?') }}</p>
         <p class="text-xs text-[var(--text-muted)]">
           {{ expense.description }} ({{ formatMoney(expense.amount, expense.currency) }}) goes for
           everyone in {{ group?.name ?? 'this group' }}, and everyone's balance moves with it.
@@ -294,8 +289,7 @@ async function remove(): Promise<void> {
             data-testid="cancel-delete"
             class="btn btn-press btn-secondary flex-1"
             @click="confirmingDelete = false"
-          >
-            Keep it
+          >{{ t('Keep it') }}
           </button>
           <button
             type="button"
@@ -304,14 +298,13 @@ async function remove(): Promise<void> {
             :disabled="isDeleting"
             @click="remove"
           >
-            {{ isDeleting ? 'Deleting' : 'Delete it' }}
+            {{ isDeleting ? t('Deleting') : t('Delete it') }}
           </button>
         </div>
       </div>
     </div>
 
-    <p v-else class="text-sm text-[var(--text-muted)]">
-      That expense is not on this device yet.
+    <p v-else class="text-sm text-[var(--text-muted)]">{{ t('That expense is not on this device yet.') }}
     </p>
   </AppShell>
 </template>

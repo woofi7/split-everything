@@ -1,3 +1,4 @@
+import { intlLocale } from '@/i18n'
 /**
  * Money handling shared by every screen.
  *
@@ -50,10 +51,18 @@ export function roundMoney(amount: number, currency?: string | null): number {
   return Number((rounded / factor).toFixed(decimals))
 }
 
+/**
+ * Money, in the language the app is being read in.
+ *
+ * The locale decides where the symbol goes and what separates the thousands, and
+ * French puts the symbol after the number. It defaults to the app's own setting
+ * rather than to the browser's, because the app's is the one the person chose, and
+ * a caller can still name one for a test.
+ */
 export function formatMoney(
   amount: number,
   currency: string,
-  locale = 'en-CA',
+  locale = intlLocale.value,
 ): string {
   const decimals = currencyDecimals(currency)
 

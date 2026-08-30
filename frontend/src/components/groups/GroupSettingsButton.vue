@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -25,8 +26,8 @@ const group = computed(() => groups.mainGroup)
     data-testid="group-settings-link"
     class="btn btn-press btn-secondary h-11 w-11 shrink-0 rounded-full px-0"
     style="border-color: var(--border)"
-    aria-label="Group settings"
-    title="Group settings"
+    :aria-label="t('Group settings')"
+    :title="t('Group settings')"
   >
     <FontAwesomeIcon :icon="faGear" class="h-4 w-4" />
   </RouterLink>

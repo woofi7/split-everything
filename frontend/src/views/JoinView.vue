@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -47,7 +48,7 @@ onMounted(async () => {
   try {
     preview.value = await useApi().get<InvitePreview>(`/invites/${token.value}`)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'That invite could not be found.'
+    error.value = caught instanceof Error ? caught.message : t('That invite could not be found.')
     return
   }
 
@@ -77,7 +78,7 @@ async function redeem(): Promise<void> {
     await groups.loadAll()
     await router.replace({ name: 'group', params: { groupId: result.groupId } })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not join that group.'
+    error.value = caught instanceof Error ? caught.message : t('Could not join that group.')
   } finally {
     isJoining.value = false
   }
@@ -85,7 +86,7 @@ async function redeem(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Join a group" :show-nav="false">
+  <AppShell :title="t('Join a group')" :show-nav="false">
     <div v-if="preview" class="flex flex-col items-center gap-5 py-8 text-center">
       <span
         class="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-600 text-2xl text-white"
@@ -110,11 +111,12 @@ async function redeem(): Promise<void> {
         :disabled="isJoining"
         @click="join"
       >
-        {{ auth.isSignedIn ? (isJoining ? 'Joining' : 'Join this group') : 'Sign in with Google to join' }}
+        {{ auth.isSignedIn
+          ? isJoining ? t('Joining') : t('Join this group')
+          : t('Sign in with Google to join') }}
       </button>
 
-      <p v-else class="text-sm text-owing">
-        This invite is no longer valid. Ask for a new link.
+      <p v-else class="text-sm text-owing">{{ t('This invite is no longer valid. Ask for a new link.') }}
       </p>
 
       <!-- Rendered here too: a join can fail after the preview loaded, and the
@@ -124,6 +126,6 @@ async function redeem(): Promise<void> {
 
     <p v-else-if="error" class="py-8 text-center text-sm text-owing" role="alert">{{ error }}</p>
 
-    <p v-else class="py-8 text-center text-sm text-[var(--text-muted)]">Checking that invite</p>
+    <p v-else class="py-8 text-center text-sm text-[var(--text-muted)]">{{ t('Checking that invite') }}</p>
   </AppShell>
 </template>

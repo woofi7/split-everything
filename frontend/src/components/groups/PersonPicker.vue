@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, ref, watch } from 'vue'
 import { fuzzySearch } from '@/domain/fuzzySearch'
 import type { AddableUser } from '@/api/types'
@@ -115,7 +116,7 @@ function emailSegments(result: { item: AddableUser; indices: number[]; fieldInde
       :aria-label="props.label ?? 'Find someone to add'"
       aria-controls="person-picker-results"
       :aria-expanded="isOpen ? 'true' : 'false'"
-      placeholder="Search by name or email"
+      :placeholder="t('Search by name or email')"
       class="tap-target w-full rounded-lg border bg-[var(--surface)] px-3 text-sm"
       style="border-color: var(--border)"
       @keydown.down.prevent="move(1)"
