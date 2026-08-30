@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
-import { router } from './router'
+import { router, warmRoutes } from './router'
 import { ApiClient } from './api/client'
 import { setApiClient } from './api/provider'
 import { apiBaseUrl, appVersion } from './api/config'
@@ -149,6 +149,10 @@ async function bootstrap(): Promise<void> {
   // reaches here either way. Asked once the app is up, because a screen that
   // spins forever needs a reason on it and there is no other way to notice.
   void watchReplica()
+
+  // And the code for every other screen, so going offline does not leave the app
+  // unable to open any of them.
+  void warmRoutes()
 }
 
 async function watchReplica(): Promise<void> {

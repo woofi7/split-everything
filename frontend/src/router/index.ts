@@ -1,7 +1,8 @@
 import { ref } from 'vue'
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { settleWithin } from '@/startup'
+import { SCREEN_MESSAGE, settleWithin, showStartupProblem } from '@/startup'
+import { reportClientError } from '@/diagnostics'
 
 /**
  * How long a navigation waits for a session to come back.
@@ -85,6 +86,35 @@ export const router = createRouter({
 })
 
 /**
+ * Loads every screen's code, once, in the background.
+ *
+ * Each route is imported lazily, which keeps the first paint small and means the
+ * code for a screen arrives when it is first opened. Offline, that arrival never
+ * happens: the request fails and the router quietly stays where it was, so tapping
+ * a tab did nothing at all and there was no way to reach the conflicts screen
+ * exactly when it mattered most.
+ *
+ * A service worker precaches the chunks in a built app, but the development server
+ * has none, and relying on the cache leaves the first visit to any screen dependent
+ * on a connection. So the app fetches the lot after it is up: a handful of small
+ * files, while nobody is waiting.
+ */
+export async function warmRoutes(): Promise<void> {
+  const screens = routes
+    .map((route) => route.component)
+    .filter((component): component is () => Promise<unknown> => typeof component === 'function')
+
+  for (const load of screens) {
+    try {
+      await load()
+    } catch {
+      // Offline before this finished, or a chunk that no longer exists after a
+      // deploy. Either way the navigation itself will say so.
+    }
+  }
+}
+
+/**
  * Whether a navigation is open.
  *
  * Kept here because the router is the only thing that knows: a screen is fetched
@@ -102,10 +132,28 @@ router.afterEach(() => {
   isNavigating.value = false
 })
 
-// A cancelled or failed navigation ends too, and leaving the bar up forever would
-// be worse than never showing it.
-router.onError(() => {
+/*
+ * A navigation that could not happen.
+ *
+ * Leaving the bar up forever would be worse than never showing it, and a failure
+ * with nothing said about it is what made tapping a tab offline look like a dead
+ * app. A screen's code that cannot be fetched is the common case by far, so it is
+ * named rather than described as an error.
+ */
+router.onError((error) => {
   isNavigating.value = false
+
+  const message = error instanceof Error ? error.message : String(error)
+  const missingCode = /dynamically imported module|Importing a module script failed|Failed to fetch/i.test(message)
+
+  console.error('Navigation failed.', error)
+  reportClientError({
+    kind: 'navigation',
+    message,
+    stack: error instanceof Error ? error.stack : undefined,
+  })
+
+  if (missingCode) showStartupProblem(SCREEN_MESSAGE)
 })
 
 router.beforeEach(async (to) => {

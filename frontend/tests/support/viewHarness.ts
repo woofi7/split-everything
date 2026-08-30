@@ -6,6 +6,7 @@ import {
   db,
   resetDatabase,
   type LocalComment,
+  type LocalActivity,
   type LocalConflict,
   type LocalExpense,
   type LocalGroup,
@@ -257,6 +258,8 @@ export interface MountViewOptions {
   settlements?: LocalSettlement[]
   comments?: LocalComment[]
   conflicts?: LocalConflict[]
+  /** The feed as this device last stored it, which is what it shows offline. */
+  activity?: LocalActivity[]
   outbox?: OutboxOperation[]
   signedIn?: boolean
   /** Whose device this is, as restore() would have set it before any view mounts. */
@@ -292,6 +295,7 @@ export async function mountView(
   for (const settlement of options.settlements ?? []) await db.settlements.put(settlement)
   for (const comment of options.comments ?? []) await db.comments.put(comment)
   for (const conflict of options.conflicts ?? []) await db.conflicts.put(conflict)
+  for (const entry of options.activity ?? []) await db.activity.put(entry)
   for (const operation of options.outbox ?? []) await db.outbox.put(operation)
 
   const api = options.api ?? fakeApi()

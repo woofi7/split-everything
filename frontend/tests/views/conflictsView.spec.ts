@@ -258,4 +258,61 @@ describe('ConflictsView', () => {
       expect(wrapper.find('[data-testid="reset-replica-confirm"]').exists()).toBe(false)
     })
   })
+
+  /**
+   * Sending what is waiting, on purpose.
+   *
+   * The queue drains by itself when a connection returns, but "by itself" is not
+   * something somebody staring at a count of three can watch happen.
+   */
+  describe('sending the queue', () => {
+    const waiting = () => ({
+      outbox: [testRejectedOperation({ operationId: 'op-waiting', status: 'pending' })],
+    })
+
+    it('offers to send when something is waiting', async () => {
+      const { wrapper } = await mountView(ConflictsView, waiting())
+
+      expect(wrapper.find('[data-testid="sync-now"]').text()).toContain('Send now')
+    })
+
+    it('offers nothing to send when the queue is empty', async () => {
+      const { wrapper } = await mountView(ConflictsView)
+
+      expect(wrapper.find('[data-testid="sync-now"]').exists()).toBe(false)
+    })
+
+    it('drains the queue when asked', async () => {
+      const { wrapper, expensesStore } = await mountView(ConflictsView, waiting())
+      const sync = vi.spyOn(expensesStore, 'sync').mockResolvedValue(undefined)
+
+      await wrapper.find('[data-testid="sync-now"]').trigger('click')
+      await settle()
+
+      expect(sync).toHaveBeenCalled()
+    })
+
+    it('says so when it could not send, rather than throwing', async () => {
+      const { wrapper, expensesStore } = await mountView(ConflictsView, waiting())
+      vi.spyOn(expensesStore, 'sync').mockRejectedValue(new Error('offline'))
+
+      await wrapper.find('[data-testid="sync-now"]').trigger('click')
+      await settle()
+
+      // Offline is why the queue exists in the first place.
+      expect(textOf(wrapper)).toContain('offline')
+    })
+
+    it('reads the list back afterwards, so what went through disappears', async () => {
+      const { wrapper, expensesStore } = await mountView(ConflictsView, waiting())
+      vi.spyOn(expensesStore, 'sync').mockImplementation(async () => {
+        await db.outbox.clear()
+      })
+
+      await wrapper.find('[data-testid="sync-now"]').trigger('click')
+      await settle()
+
+      expect(wrapper.find('[data-testid="waiting-operation"]').exists()).toBe(false)
+    })
+  })
 })

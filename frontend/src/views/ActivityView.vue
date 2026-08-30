@@ -9,6 +9,7 @@ import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
+import { db } from '@/offline/db'
 import { memberColor } from '@/domain/memberColors'
 
 interface ActivityEntry {
@@ -33,6 +34,8 @@ const entries = ref<ActivityEntry[]>([])
 const isLoading = ref(true)
 const isOffline = ref(false)
 
+/** How much of the feed is worth keeping on the device. */
+const KEPT_ENTRIES = 300
 
 onMounted(async () => {
   await groups.loadAll()
@@ -42,8 +45,21 @@ onMounted(async () => {
 // Follows the group the rest of the app is on, and reloads when that changes.
 watch(() => groups.mainGroupId, () => void load())
 
+/**
+ * The stored feed first, then the server's.
+ *
+ * These sentences are composed on the server, so unlike the stats they cannot be
+ * worked out from local rows: they are kept as they arrive instead. The screen used
+ * to say "the activity feed needs a connection" and show nothing, on a device that
+ * had the last hundred entries sitting in its own database.
+ */
 async function load(): Promise<void> {
   isLoading.value = true
+
+  entries.value = await stored()
+  // Something to read while the request is in flight, rather than a spinner over
+  // a feed we already have.
+  if (entries.value.length > 0) isLoading.value = false
 
   try {
     const page = await useApi().get<{ items: ActivityEntry[] }>('/activity', {
@@ -52,12 +68,43 @@ async function load(): Promise<void> {
     })
     entries.value = page.items
     isOffline.value = false
+    await keep(page.items)
   } catch {
-    // The feed is a server-rendered read; offline it simply has nothing to show.
+    // Offline, or refused. The stored feed stands.
     isOffline.value = true
   } finally {
     isLoading.value = false
   }
+}
+
+/** What this device has of the feed, for the group it is showing. */
+async function stored(): Promise<ActivityEntry[]> {
+  const groupId = groups.mainGroupId
+  const rows = groupId
+    ? await db.activity.where('groupId').equals(groupId).toArray()
+    : await db.activity.toArray()
+
+  return rows
+    .slice()
+    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
+}
+
+/**
+ * Keeps what arrived, and trims the oldest.
+ *
+ * Written by id, so the same entry arriving twice does not double up, and capped
+ * because a feed nobody scrolls to the end of should not grow without limit.
+ */
+async function keep(items: ActivityEntry[]): Promise<void> {
+  if (items.length === 0) return
+
+  await db.activity.bulkPut(items)
+
+  const total = await db.activity.count()
+  if (total <= KEPT_ENTRIES) return
+
+  const oldest = await db.activity.orderBy('occurredAt').limit(total - KEPT_ENTRIES).toArray()
+  await db.activity.bulkDelete(oldest.map((row) => row.id))
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString()
@@ -190,7 +237,12 @@ function targetOf(entry: ActivityEntry) {
     <p v-else-if="isLoading" class="py-12 text-center text-sm text-[var(--text-muted)]">{{ t('Loading activity') }}
     </p>
 
-    <p v-else-if="isOffline" class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">{{ t('The activity feed needs a connection. Your groups and expenses still work offline.') }}
+    <!--
+      Offline with nothing stored: this device has never pulled the feed for this
+      group, which is the only case left where a connection is genuinely needed.
+    -->
+    <p v-else-if="isOffline" class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
+      {{ t('No activity stored on this device yet. It fills in next time you are online.') }}
     </p>
 
     <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">{{ t('Nothing has happened yet.') }}

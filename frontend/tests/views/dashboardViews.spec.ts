@@ -2,7 +2,18 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import ActivityView from '@/views/ActivityView.vue'
 import StatsView from '@/views/StatsView.vue'
-import { GROUP_ID, fakeApi, mountView, settle, testGroup, textOf } from '../support/viewHarness'
+import { db } from '@/offline/db'
+import {
+  ALICE,
+  BOB,
+  GROUP_ID,
+  fakeApi,
+  mountView,
+  settle,
+  testExpense,
+  testGroup,
+  textOf,
+} from '../support/viewHarness'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: {}, query: {} }),
@@ -103,17 +114,72 @@ describe('ActivityView', () => {
     expect(textOf(wrapper)).toContain('Roommates')
   })
 
-  it('says the feed needs a connection when it could not load', async () => {
+  it('shows the feed it has stored when the server cannot be reached', async () => {
+    const api = fakeApi()
+    api.get.mockRejectedValue(new Error('offline'))
+
+    const { wrapper } = await mountView(ActivityView, {
+      api,
+      // What a device that has been online before holds: the feed as it arrived.
+      activity: [
+        {
+          id: 7,
+          groupId: GROUP_ID,
+          groupName: 'Roommates',
+          kind: 'ExpenseCreated',
+          actorMemberId: ALICE,
+          actorName: 'Alice',
+          subjectType: 'Expense',
+          subjectId: 'expense-1',
+          summary: 'Alice added Groceries',
+          occurredAt: '2026-01-02T12:00:00Z',
+        },
+      ],
+    })
+    await settle()
+
+    const text = textOf(wrapper)
+    expect(text).toContain('Alice added Groceries')
+    expect(text).toContain('Offline')
+  })
+
+  it('keeps the feed it is given, so the next time offline has something to show', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({
+        '/activity': () => ({
+          items: [
+            {
+              id: 11,
+              groupId: GROUP_ID,
+              groupName: 'Roommates',
+              kind: 'ExpenseCreated',
+              actorMemberId: ALICE,
+              actorName: 'Alice',
+              subjectType: 'Expense',
+              subjectId: 'expense-1',
+              summary: 'Alice added Dinner',
+              occurredAt: '2026-01-03T12:00:00Z',
+            },
+          ],
+        }),
+        '/groups': () => [testGroup()],
+      }),
+    })
+    await settle()
+
+    expect(textOf(wrapper)).toContain('Alice added Dinner')
+    expect(await db.activity.get(11)).toMatchObject({ summary: 'Alice added Dinner' })
+  })
+
+  it('says nothing is stored yet when offline on a device that never pulled it', async () => {
     const api = fakeApi()
     api.get.mockRejectedValue(new Error('offline'))
 
     const { wrapper } = await mountView(ActivityView, { api })
+    await settle()
 
-    // Being explicit that groups and expenses still work matters: otherwise this
-    // reads as the whole app being broken.
-    const text = textOf(wrapper)
-    expect(text).toContain('needs a connection')
-    expect(text).toContain('still work offline')
+    // The only case left where a connection is genuinely needed for this screen.
+    expect(textOf(wrapper)).toContain('No activity stored on this device yet')
   })
 
 })
@@ -639,13 +705,38 @@ describe('StatsView', () => {
     )
   })
 
-  it('says stats need a connection when they could not load', async () => {
+  it('works out the stats on this device when the server cannot be reached', async () => {
     const client = fakeApi()
     client.get.mockRejectedValue(new Error('offline'))
 
-    const { wrapper } = await mountView(StatsView, { api: client })
+    const { wrapper } = await mountView(StatsView, {
+      api: client,
+      groups: [testGroup()],
+      expenses: [
+        testExpense({ id: 'e1', paidByMemberId: ALICE, amount: 60, amountInBaseCurrency: 60 }),
+        testExpense({ id: 'e2', paidByMemberId: BOB, amount: 40, amountInBaseCurrency: 40 }),
+      ],
+    })
+    await settle()
 
-    expect(textOf(wrapper)).toContain('Stats need a connection')
+    // Every number here is arithmetic over rows this device already holds, so
+    // saying "stats need a connection" was refusing to add up what it had.
+    const text = textOf(wrapper)
+    expect(text).toContain('100.00')
+    expect(text).toContain('Total')
+    expect(wrapper.find('[data-testid="spend-chart"]').exists()).toBe(true)
+    // And it says it is offline, because that is worth knowing.
+    expect(text).toContain('Offline')
+  })
+
+  it('says there is nothing to add up when there are no groups at all', async () => {
+    const client = fakeApi({ '/groups': () => [] })
+    client.get.mockRejectedValue(new Error('offline'))
+
+    const { wrapper } = await mountView(StatsView, { api: client, groups: [] })
+    await settle()
+
+    expect(textOf(wrapper)).toContain('Nothing to add up yet')
   })
 
   it('leaves the chart out when there is nothing to plot', async () => {

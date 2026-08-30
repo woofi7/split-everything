@@ -338,4 +338,11 @@ export const fr: Record<string, string> = {
   'Edit expense': 'Modifier la dépense',
   'Add expense': 'Ajouter une dépense',
   'Amount ({currency})': 'Montant ({currency})',
+  'Nothing to add up yet. Add an expense and this fills in.':
+    "Rien à additionner pour le moment. Ajoutez une dépense et ceci se remplira.",
+  'No activity stored on this device yet. It fills in next time you are online.':
+    "Aucune activité stockée sur cet appareil pour le moment. Elle se remplira à votre prochain passage en ligne.",
+  'Send now': 'Envoyer maintenant',
+  Sending: 'Envoi',
+  'Could not send those changes.': "Impossible d'envoyer ces modifications.",
 }
