@@ -51,10 +51,80 @@ describe('ProfileView', () => {
     expect(textOf(wrapper)).toContain('three-letter currency code')
   })
 
+  /**
+   * The colour this person would like in the groups they join.
+   *
+   * A wish rather than a setting: a group where somebody already has it gives them
+   * the next free one, because two the same in one group defeats the point.
+   */
+  describe('a preferred colour', () => {
+    it('offers the palette the groups actually store', async () => {
+      const { wrapper } = await mountView(ProfileView)
+
+      // Twelve, matching the server's list: a colour a group cannot store is not
+      // worth offering.
+      expect(wrapper.findAll('[data-testid^="colour-"]')).toHaveLength(12)
+    })
+
+    it('saves the one that is tapped', async () => {
+      const api = fakeApi({ '/auth/me': () => ({ ...testUser, preferredColorHex: '#f97316' }) })
+      const { wrapper } = await mountView(ProfileView, { api })
+
+      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
+      await settle()
+
+      expect(api.patch).toHaveBeenCalledWith(
+        '/auth/me',
+        expect.objectContaining({ preferredColorHex: '#f97316' }),
+      )
+    })
+
+    it('shows which one is chosen', async () => {
+      const { wrapper, auth } = await mountView(ProfileView)
+      // Set on the store the way a sign-in would have.
+      auth.user = { ...testUser, preferredColorHex: '#14b8a6' } as never
+      await settle(1)
+
+      const pressed = wrapper
+        .findAll('[data-testid^="colour-"]')
+        .filter((swatch) => swatch.attributes('aria-pressed') === 'true')
+        .map((swatch) => swatch.attributes('data-testid'))
+
+      expect(pressed).toEqual(['colour-14b8a6'])
+    })
+
+    it('clears it when the chosen one is tapped again', async () => {
+      const api = fakeApi({ '/auth/me': () => testUser })
+      const { wrapper, auth } = await mountView(ProfileView, { api })
+      auth.user = { ...testUser, preferredColorHex: '#f97316' } as never
+      await settle(1)
+
+      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
+      await settle()
+
+      // The only way back to having no preference.
+      expect(api.patch).toHaveBeenCalledWith(
+        '/auth/me',
+        expect.objectContaining({ preferredColorHex: '' }),
+      )
+    })
+
+    it('reports a colour the server will not take', async () => {
+      const api = fakeApi()
+      api.patch.mockRejectedValue(new Error('That is not one of the colours to choose from.'))
+      const { wrapper } = await mountView(ProfileView, { api })
+
+      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
+      await settle()
+
+      expect(textOf(wrapper)).toContain('not one of the colours')
+    })
+  })
+
   it('starts in dark mode, as the spec asks', async () => {
     const { wrapper } = await mountView(ProfileView)
 
-    const toggle = wrapper.find('button[aria-pressed]')
+    const toggle = wrapper.find('[data-testid="theme-toggle"]')
     expect(toggle.attributes('aria-pressed')).toBe('false')
     expect(toggle.text()).toBe('Off')
   })
@@ -62,11 +132,11 @@ describe('ProfileView', () => {
   it('switches to light mode', async () => {
     const { wrapper, auth } = await mountView(ProfileView)
 
-    await wrapper.find('button[aria-pressed]').trigger('click')
+    await wrapper.find('[data-testid="theme-toggle"]').trigger('click')
     await settle()
 
     expect(auth.theme).toBe('light')
-    expect(wrapper.find('button[aria-pressed]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-testid="theme-toggle"]').attributes('aria-pressed')).toBe('true')
   })
 
   it('downloads the data export', async () => {

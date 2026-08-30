@@ -48,6 +48,13 @@ export interface LocalMember {
   status: string
   isPlaceholder: boolean
   netBalance: number
+  /**
+   * Their colour in this group, as the group stores it.
+   *
+   * Optional because rows written before the column existed do not have one, and
+   * a client falls back to deriving one until the group says otherwise.
+   */
+  colorHex?: string | null
 }
 
 export interface LocalSplit {

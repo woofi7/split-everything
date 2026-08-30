@@ -6,6 +6,7 @@ import { faCodeMerge } from '@fortawesome/free-solid-svg-icons'
 import AppShell from '@/components/layout/AppShell.vue'
 import IconPicker from '@/components/ui/IconPicker.vue'
 import PersonPicker from '@/components/groups/PersonPicker.vue'
+import ColorChoice from '@/components/ui/ColorChoice.vue'
 import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
 import { useAuthStore } from '@/stores/auth'
@@ -218,6 +219,36 @@ const labelFor = (member: { displayName: string; status: string; isPlaceholder: 
   if (member.status !== 'Active') return `${member.displayName} (removed)`
   if (member.isPlaceholder) return `${member.displayName} (not signed in yet)`
   return member.displayName
+}
+
+/** Which member's colour row is open, since twelve swatches each is a wall. */
+const colouring = ref<string | null>(null)
+const colourError = ref<string | null>(null)
+
+/** Whose colour this person may change: their own, or anyone's if they run the group. */
+function canRecolour(memberId: string): boolean {
+  return canAdminister.value || memberId === myMemberId.value
+}
+
+/** The colours in use, so the row can show which are spoken for. */
+const takenColours = computed(() =>
+  (group.value?.members ?? [])
+    .map((member) => member.colorHex)
+    .filter((colour): colour is string => !!colour),
+)
+
+const colourOf = (memberId: string) =>
+  (group.value?.members ?? []).find((member) => member.id === memberId)?.colorHex ?? null
+
+async function pickColour(memberId: string, colorHex: string): Promise<void> {
+  colourError.value = null
+
+  try {
+    await groups.setMemberColor(groupId.value, memberId, colorHex)
+    colouring.value = null
+  } catch (caught) {
+    colourError.value = caught instanceof Error ? caught.message : 'Could not set that colour.'
+  }
 }
 
 function openMerge(): void {
@@ -582,14 +613,48 @@ async function unarchive(): Promise<void> {
               (removed)
             </span>
           </span>
-          <button
-            v-if="member.status === 'Active' && member.role !== 'Owner'"
-            type="button"
-            class="shrink-0 text-xs text-[var(--text-muted)] underline"
-            @click="removeMember(member.id)"
-          >
-            Remove
-          </button>
+          <span class="flex shrink-0 items-center gap-3">
+            <!--
+              The person's colour, and the way to change it. A swatch rather than a
+              word because the colour is the thing being chosen, and it is what the
+              expense cards and the charts use.
+            -->
+            <button
+              type="button"
+              :data-testid="`recolour-${member.id}`"
+              class="h-5 w-5 rounded-full transition-transform active:scale-95 disabled:opacity-60"
+              :style="{ backgroundColor: colourOf(member.id) ?? 'var(--surface-sunken)' }"
+              :disabled="!canRecolour(member.id)"
+              :aria-label="`Colour for ${member.displayName}`"
+              :title="canRecolour(member.id) ? `Change the colour for ${member.displayName}` : `Colour for ${member.displayName}`"
+              @click="colouring = colouring === member.id ? null : member.id"
+            />
+
+            <button
+              v-if="member.status === 'Active' && member.role !== 'Owner'"
+              type="button"
+              class="text-xs text-[var(--text-muted)] underline"
+              @click="removeMember(member.id)"
+            >
+              Remove
+            </button>
+          </span>
+        </li>
+
+        <li v-if="colouring" :key="`${colouring}-colours`" class="pt-1">
+          <ColorChoice
+            :value="colourOf(colouring)"
+            :taken="takenColours"
+            :label="'Colour'"
+            @pick="(colour) => pickColour(colouring!, colour)"
+          />
+          <p class="mt-1 text-xs text-[var(--text-muted)]">
+            Taking a colour someone else has swaps the two, so nobody ends up
+            without one.
+          </p>
+          <p v-if="colourError" class="mt-1 text-xs text-owing" role="alert">
+            {{ colourError }}
+          </p>
         </li>
       </ul>
 

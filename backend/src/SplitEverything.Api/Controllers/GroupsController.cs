@@ -43,6 +43,15 @@ public sealed class GroupsController(
     public async Task<ActionResult<GroupDto>> Unarchive(Guid groupId, CancellationToken ct)
         => Ok(await groups.UnarchiveAsync(UserId, groupId, ct));
 
+    /// <summary>
+    /// Changes one member's colour. Your own is yours; anyone else's is an admin
+    /// decision, because it changes what everybody in the group sees.
+    /// </summary>
+    [HttpPatch("{groupId:guid}/members/{memberId:guid}/color")]
+    public async Task<ActionResult<GroupMemberDto>> SetMemberColor(
+        Guid groupId, Guid memberId, SetMemberColorRequest request, CancellationToken ct)
+        => Ok(await groups.SetMemberColorAsync(UserId, groupId, memberId, request, ct));
+
     /// <summary>Folds one member into another. Cannot be undone.</summary>
     [HttpPost("{groupId:guid}/members/merge")]
     public async Task<ActionResult<GroupDto>> MergeMembers(

@@ -314,6 +314,21 @@ export const useGroupsStore = defineStore('groups', () => {
   }
 
   /**
+   * Sets one member's colour in one group.
+   *
+   * The server may swap two people rather than refuse a colour that is taken, so
+   * the whole group is read back rather than the one member patched in place.
+   */
+  async function setMemberColor(
+    groupId: string,
+    memberId: string,
+    colorHex: string,
+  ): Promise<void> {
+    await requireApi().patch(`/groups/${groupId}/members/${memberId}/color`, { colorHex })
+    await refresh(groupId)
+  }
+
+  /**
    * The colour of every member of a group.
    *
    * Defined once, from the roster, because the palette resolves a clash by walking
@@ -323,7 +338,18 @@ export const useGroupsStore = defineStore('groups', () => {
    * feed and the charts disagreed with the expense cards about who was orange.
    */
   function colorsOf(groupId: string): Record<string, string> {
-    return memberColors(membersOf(groupId).map((member) => member.id))
+    const roster = membersOf(groupId)
+
+    // Derived first, for anyone the group has not given a colour to: rows written
+    // before the group stored them, which is every group until it is next read
+    // from the server.
+    const colours = memberColors(roster.map((member) => member.id))
+
+    for (const member of roster) {
+      if (member.colorHex) colours[member.id] = member.colorHex
+    }
+
+    return colours
   }
 
   function myMemberId(groupId: string, userId: string): string | null {
@@ -356,6 +382,7 @@ export const useGroupsStore = defineStore('groups', () => {
     archive,
     unarchive,
     setDefaultSplit,
+    setMemberColor,
     addUserMember,
     mergeMembers,
     addableUsers,

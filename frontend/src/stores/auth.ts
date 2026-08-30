@@ -10,6 +10,8 @@ export interface AuthenticatedUser {
   avatarUrl: string | null
   defaultCurrency: string
   prefersLightTheme: boolean
+  /** The colour they would like in the groups they join, if they have said. */
+  preferredColorHex?: string | null
 }
 
 export interface AuthTokens {
@@ -363,6 +365,8 @@ export const useAuthStore = defineStore('auth', () => {
     displayName?: string
     defaultCurrency?: string
     prefersLightTheme?: boolean
+    // An empty string clears it, as the API reads null as "not supplied".
+    preferredColorHex?: string | null
     locale?: string
   }): Promise<void> {
     const updated = await requireApi().patch<AuthenticatedUser>('/auth/me', changes)
