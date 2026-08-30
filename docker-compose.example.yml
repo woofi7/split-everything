@@ -1,13 +1,3 @@
-# Split Everything, as it runs on the homelab box.
-#
-# Copy this next to an .env file (see .env.example), pull, and bring it up. It is
-# laid out the same way as the other stack on that server: named containers, images
-# from Docker Hub pinned by tag, appdata under /mnt/user/appdata, and Traefik
-# reaching them over its own network rather than through published ports.
-#
-# The API and the app are two images behind one hostname: /api and /hubs go to the
-# API, everything else to the app. Nothing is published to the host, so add a ports
-# line temporarily if you ever want to reach a container directly.
 services:
   postgres:
     image: postgres:17-alpine
@@ -17,7 +7,6 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      # Postgres refuses to initialise a non-empty data directory otherwise.
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - /mnt/user/appdata/split-everything/postgres:/var/lib/postgresql/data
@@ -31,7 +20,6 @@ services:
       - internal
 
   api:
-    # APP_TAG has no "v" in it: a git tag of v0.1.1 publishes 0.1.1, 0.1, 0, latest.
     image: ${DOCKERHUB_USERNAME}/split-everything-api:${APP_TAG}
     container_name: split-everything-api
     restart: unless-stopped
@@ -41,73 +29,35 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
-      # At least 32 bytes: the app refuses to start with anything shorter rather
-      # than padding it out. Generate one with: openssl rand -base64 48
       - Auth__JwtSigningKey=${JWT_SIGNING_KEY}
       - Auth__JwtIssuer=${PUBLIC_URL}
       - Auth__JwtAudience=${PUBLIC_URL}
       - Auth__GoogleClientId=${GOOGLE_CLIENT_ID}
       - Auth__AppBaseUrl=${PUBLIC_URL}
-      # Empty unless a browser somewhere else has to reach this API: served under
-      # one hostname there are no cross-origin requests to allow.
       - Cors__AllowedOrigins__0=${PUBLIC_URL}
-      # Browser notifications. Generate the pair with:
-      #   npx web-push generate-vapid-keys
-      # Blank means the server skips sending them; nothing else changes. The
-      # subject is a contact address, e.g. mailto:you@example.com
-      - Push__VapidPublicKey=${VAPID_PUBLIC_KEY}
-      - Push__VapidPrivateKey=${VAPID_PRIVATE_KEY}
-      - Push__VapidSubject=${VAPID_SUBJECT}
-      # Native push, for a Capacitor build of the app. Nothing here needs them
-      # until there is an APK or a TestFlight build to send to.
-      #
-      # - Push__FcmProjectId=${FCM_PROJECT_ID}
-      # - Push__FcmServiceAccountJson=${FCM_SERVICE_ACCOUNT_JSON}
-      # - Push__ApnsKeyId=${APNS_KEY_ID}
-      # - Push__ApnsTeamId=${APNS_TEAM_ID}
-      # - Push__ApnsBundleId=${APNS_BUNDLE_ID}
-      # - Push__ApnsPrivateKey=${APNS_PRIVATE_KEY}
       - ReceiptStorage__RootPath=/data/receipts
     volumes:
       - /mnt/user/appdata/split-everything/receipts:/data/receipts
-      # Where the framework keeps its data protection keys. Nothing in this app
-      # uses them today - the refresh cookie holds an opaque token, not encrypted
-      # state - but the default is a directory inside the container, which means two
-      # warnings on every start and a surprise the day something does use them. A
-      # named volume rather than a path under appdata: the container runs as its own
-      # user, and Docker gets the ownership right on a named volume by itself.
-      - dataprotection:/home/app/.aspnet/DataProtection-Keys
+    ports:
+      - '8091:8080'
     labels:
-      # The API and the app share one hostname, so the browser makes no
-      # cross-origin requests and the refresh cookie stays first-party. This router
-      # takes the two prefixes that are the API and leaves the rest to the app: both
-      # rules match the host, and Traefik prefers the specific one only because the
-      # priority says so.
-      #
-      # /hubs is the SignalR WebSocket. Traefik upgrades it without being asked.
       - "traefik.enable=true"
-      # Which network to reach this container on. It is on two - internal for
-      # Postgres, proxy for Traefik - and with more than one, Traefik picks an
-      # address without being told which, so it can end up dialling the internal
-      # one it has no route to. A stack with a single network never needs this line.
+      # On two networks, so Traefik has to be told which one to dial.
       - "traefik.docker.network=proxy"
       - "traefik.http.routers.split-api.rule=Host(`${PUBLIC_HOST}`) && (PathPrefix(`/api`) || PathPrefix(`/hubs`))"
+      # Higher than the web router: both match the host, so this decides.
       - "traefik.http.routers.split-api.priority=20"
       - "traefik.http.routers.split-api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.split-api.middlewares=secure-headers@file"
       - "traefik.http.services.split-api.loadbalancer.server.port=8080"
-    # Liveness rather than readiness: readiness asks the database, and a brief
-    # Postgres restart would mark the API unhealthy and take it out of rotation.
     healthcheck:
-      # curl, not wget: this image has no wget, and the check failed every time
-      # with "wget: not found" until it was installed.
+      # curl, not wget: this image has no wget.
       test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8080/api/health']
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 60s
     networks:
-      # internal to reach Postgres, proxy to be reached by Traefik.
       - internal
       - proxy
 
@@ -115,31 +65,26 @@ services:
     image: ${DOCKERHUB_USERNAME}/split-everything-web:${APP_TAG}
     container_name: split-everything-web
     restart: unless-stopped
-    # Start order only, not a health gate: this app is offline-first, so the shell
-    # coming up while the API is still starting shows a working screen reading from
-    # the device rather than one of Traefik's 404s.
     depends_on:
       - api
+    ports:
+      - '8090:8080'
     labels:
       - "traefik.enable=true"
-      # Only on one network, but said anyway: the day this grows a second one, a
-      # silently wrong address is a bad way to find out.
       - "traefik.docker.network=proxy"
       - "traefik.http.routers.split-web.rule=Host(`${PUBLIC_HOST}`)"
-      # Lower than the API's, so /api and /hubs win.
       - "traefik.http.routers.split-web.priority=10"
       - "traefik.http.routers.split-web.tls.certresolver=letsencrypt"
       - "traefik.http.routers.split-web.middlewares=secure-headers@file"
       - "traefik.http.services.split-web.loadbalancer.server.port=8080"
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8080/healthz']
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8080/healthz || exit 1']
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
     networks:
-      # Static files and nothing else: it never talks to Postgres or the API, since
-      # the browser reaches the API through Traefik on the same hostname.
+      - internal
       - proxy
 
   backup:
@@ -162,12 +107,7 @@ services:
     networks:
       - internal
 
-volumes:
-  dataprotection:
-
 networks:
-  # Postgres, the API and the backup talk here, and nothing else can reach it.
   internal:
-  # Traefik's own network, created by that stack rather than this one.
   proxy:
     external: true
