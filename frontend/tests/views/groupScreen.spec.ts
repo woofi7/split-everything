@@ -40,6 +40,7 @@ describe('the group screen', () => {
     expect(mark.exists()).toBe(true)
     // jsdom normalises the hex to rgb, so the colour is checked as it lands.
     expect(mark.attributes('style')).toContain('rgb(18, 52, 86)')
+    expect(mark.find('svg').attributes('data-icon')).toBe('house')
     expect(wrapper.find('[data-testid="app-icon"]').exists()).toBe(false)
   })
 
@@ -177,19 +178,16 @@ describe('the group screen', () => {
     expect(prefilled!.query!.amount).toBe('30.00')
   })
 
-  it('links to the group settings, from the menu in the corner', async () => {
+  it('links to the group settings from the gear', async () => {
     const { wrapper } = await mountView(DashboardView, { api: api() })
 
-    // Behind the gear now: both items there are about the group rather than about
-    // anything in it, and neither is done often enough to sit on the title row.
-    await wrapper.find('[data-testid="group-menu"]').trigger('click')
-    await settle(1)
-
+    // One press, one destination. It used to be a menu of two things.
     const link = wrapper
       .findAllComponents(RouterLinkStub)
       .find((candidate) => JSON.stringify(candidate.props().to).includes('group-settings'))
 
     expect(link).toBeDefined()
+    expect(wrapper.find('[data-testid="group-settings-link"]').exists()).toBe(true)
   })
 })
 

@@ -6,7 +6,7 @@ import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
-import { memberColor, memberColors } from '@/domain/memberColors'
+import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
 
 const route = useRoute()
@@ -43,7 +43,7 @@ const myMemberId = computed(() =>
 )
 
 const colours = computed(() =>
-  memberColors(groups.membersOf(groupId.value).map((member) => member.id)),
+  groups.colorsOf(groupId.value),
 )
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)

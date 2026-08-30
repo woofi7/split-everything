@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import GroupSettingsView from '@/views/GroupSettingsView.vue'
 import {
+  ALICE,
   BOB,
   GROUP_ID,
   USER_ID,
@@ -697,6 +698,149 @@ describe('GroupSettingsView', () => {
       })
 
       expect(wrapper.find('[data-testid="merge-open"]').exists()).toBe(false)
+    })
+  })
+
+  /**
+   * How the group splits an expense by default.
+   *
+   * A fact about the household rather than about one expense, so it belongs on the
+   * group's own screen. It was only settable as a side effect of adding an
+   * expense, which meant you could not see what it was.
+   */
+  describe('how a new expense is split', () => {
+    it('shows the setting the group already has', async () => {
+      const shared = testGroup({ defaultSplitType: 'Shares' })
+      shared.defaultSplitValues = { [ALICE]: 2, [BOB]: 1 }
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => shared }),
+        groups: [shared],
+      })
+      await settle()
+
+      expect(wrapper.find('[data-testid="split-Shares"]').attributes('checked')).toBeDefined()
+      const values = wrapper.findAll('input[type="number"]').map((input) => (input.element as HTMLInputElement).value)
+      expect(values).toContain('2')
+      expect(values).toContain('1')
+    })
+
+    it('asks for no numbers when it is equal', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+      await settle()
+
+      expect(wrapper.find('[data-testid="split-Equal"]').attributes('checked')).toBeDefined()
+      expect(wrapper.findAll('input[type="number"]')).toHaveLength(0)
+    })
+
+    it('seeds a number for everyone when a type needs them', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+      await settle()
+
+      await wrapper.find('[data-testid="split-Percentage"]').setValue(true)
+      await settle(1)
+
+      // Blank boxes make the person do arithmetic the app already knows.
+      const values = wrapper.findAll('input[type="number"]').map((input) => (input.element as HTMLInputElement).value)
+      expect(values).toHaveLength(2)
+      expect(values.every((value) => value === '50')).toBe(true)
+    })
+
+    it('refuses percentages that do not add up', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+      await settle()
+
+      await wrapper.find('[data-testid="split-Percentage"]').setValue(true)
+      await settle(1)
+      await wrapper.findAll('input[type="number"]')[0].setValue(10)
+      await settle(1)
+
+      expect(textOf(wrapper)).toContain('not 100')
+      expect(wrapper.find('[data-testid="save-split"]').attributes('disabled')).toBeDefined()
+    })
+
+    it('saves the split the group should use', async () => {
+      const client = api()
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      await settle()
+
+      await wrapper.find('[data-testid="split-Shares"]').setValue(true)
+      await settle(1)
+      await wrapper.findAll('input[type="number"]')[0].setValue(2)
+      await settle(1)
+      await wrapper.find('[data-testid="save-split"]').trigger('click')
+      await settle()
+
+      expect(client.patch).toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}`,
+        expect.objectContaining({
+          defaultSplitType: 'Shares',
+          defaultSplitValues: expect.objectContaining({ [ALICE]: 2 }),
+        }),
+      )
+    })
+
+    it('clears the values when going back to equal', async () => {
+      const client = api()
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      await settle()
+
+      await wrapper.find('[data-testid="split-Shares"]').setValue(true)
+      await settle(1)
+      await wrapper.find('[data-testid="split-Equal"]').setValue(true)
+      await settle(1)
+      await wrapper.find('[data-testid="save-split"]').trigger('click')
+      await settle()
+
+      expect(client.patch).toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}`,
+        expect.objectContaining({ defaultSplitType: 'Equal', defaultSplitValues: {} }),
+      )
+    })
+
+    it('offers nothing to change to someone who is only a member', async () => {
+      const group = testGroup()
+      group.members = group.members.map((member) =>
+        member.role === 'Owner' ? { ...member, role: 'Member' } : member,
+      )
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => group }),
+        groups: [group],
+      })
+      await settle()
+
+      // The server allows only an owner or an admin, so the control would end in a
+      // refusal. The setting is still shown, because knowing it is not a privilege.
+      expect(wrapper.find('[data-testid="save-split"]').exists()).toBe(false)
+      expect(textOf(wrapper)).toContain('Only an owner or an admin')
+      expect(wrapper.find('[data-testid="split-Equal"]').attributes('disabled')).toBeDefined()
+    })
+
+    it('says so when the group is set to something it does not offer', async () => {
+      const exact = testGroup({ defaultSplitType: 'ExactAmount' })
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => exact }),
+        groups: [exact],
+      })
+      await settle()
+
+      // An exact amount is a fact about one expense, so it is not offered as a
+      // standing rule, but a group already on it is not quietly rewritten.
+      expect(textOf(wrapper)).toContain('Currently set to ExactAmount')
+    })
+
+    it('reports a refusal from the server', async () => {
+      const client = api()
+      client.patch.mockRejectedValue(new Error('Only an admin can change the default split.'))
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      await settle()
+
+      await wrapper.find('[data-testid="save-split"]').trigger('click')
+      await settle()
+
+      expect(textOf(wrapper)).toContain('Only an admin can change')
     })
   })
 })

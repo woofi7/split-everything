@@ -2,12 +2,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
-import GroupMenu from '@/components/groups/GroupMenu.vue'
+import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
-import { memberColor, memberColors } from '@/domain/memberColors'
+import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
 
 interface SpendPointMember {
@@ -112,7 +112,12 @@ const chartPeople = computed(() => {
   return [...seen.values()].sort((left, right) => left.memberName.localeCompare(right.memberName))
 })
 
-const colours = computed(() => memberColors(chartPeople.value.map((person) => person.memberId)))
+// From the group's roster rather than from whoever appears in the chart: the
+// palette walks to the next free colour in the order it is given, so a different
+// list makes the same person a different colour from the expense cards.
+const colours = computed(() =>
+  groupId.value ? groups.colorsOf(groupId.value) : {},
+)
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
@@ -176,7 +181,7 @@ const bucketLabel = (bucket: string) =>
     </template>
 
     <template #header-action>
-      <GroupMenu />
+      <GroupSettingsButton />
     </template>
 
     <div class="mb-4 flex gap-2">
