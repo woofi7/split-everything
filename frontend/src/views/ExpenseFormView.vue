@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
-import { useCategoriesStore } from '@/stores/categories'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { calculateSplit, type SplitType } from '@/domain/splitting'
@@ -12,7 +11,6 @@ import { parseAmountInput } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
 
 const groups = useGroupsStore()
-const categories = useCategoriesStore()
 const expenses = useExpensesStore()
 const auth = useAuthStore()
 const route = useRoute()
@@ -25,10 +23,9 @@ const router = useRouter()
  * than a second copy of the split logic drifting from this one the first time
  * either changed. The route decides: an expense id in the path means edit.
  *
- * Neither mode asks which group. The app is on one group at a time, so an expense
- * belongs to the one being looked at, and the group name sits in the subtitle so
- * that is never in doubt. Changing group is a tap in the picker; moving an existing
- * expense is the transfer feature, which carries its history with it.
+ * Six questions, deliberately: amount, date, what it was, which group, who paid,
+ * and who it is between. The form has to fit one screen on a phone, and every
+ * field costs a row, so a seventh has to earn its place.
  */
 const editingId = computed(() => {
   const id = route.params.expenseId
@@ -42,7 +39,6 @@ const description = ref('')
 const amountInput = ref('')
 const spentAt = ref(new Date().toISOString().slice(0, 10))
 const splitType = ref<SplitType>('Equal')
-const categoryId = ref<string | null>(null)
 const paidByMemberId = ref('')
 const participantIds = ref<string[]>([])
 const splitValues = ref<Record<string, number>>({})
@@ -58,7 +54,6 @@ const splitTypes: Array<{ value: SplitType; label: string }> = [
 ]
 
 onMounted(async () => {
-  void categories.load()
   await groups.loadAll()
   await expenses.hydrate()
 
@@ -88,7 +83,6 @@ function prefillFromExpense(): void {
   amountInput.value = existing.amount.toFixed(2)
   spentAt.value = existing.spentAt.slice(0, 10)
   splitType.value = existing.splitType
-  categoryId.value = existing.categoryId ?? null
   paidByMemberId.value = existing.paidByMemberId
   participantIds.value = existing.splits.map((split) => split.memberId)
 
@@ -233,7 +227,6 @@ async function save(): Promise<void> {
     splitType: splitType.value,
     participantIds: participantIds.value,
     splitValues: splitValues.value,
-    categoryId: categoryId.value,
   }
 
   try {
@@ -262,7 +255,6 @@ async function save(): Promise<void> {
 <template>
   <AppShell
     :title="isEditing ? 'Edit expense' : 'Add expense'"
-    :subtitle="group?.name"
     :back-to="backTarget"
     :back-label="isEditing ? 'Expense' : 'Dashboard'"
   >
@@ -315,18 +307,23 @@ async function save(): Promise<void> {
         />
       </label>
 
-      <div class="grid grid-cols-2 gap-3">
-        <label class="flex min-w-0 flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Category</span>
+      <div class="grid gap-3" :class="isEditing ? 'grid-cols-1' : 'grid-cols-2'">
+        <!--
+          Only when adding. Moving an existing expense between groups has to carry
+          its history, comments and audit trail with it, which is the transfer
+          feature; a dropdown here would look like it did that and would not.
+        -->
+        <label v-if="!isEditing" class="flex min-w-0 flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Group</span>
           <select
-            v-model="categoryId"
-            data-testid="category"
+            :value="groupId"
+            data-testid="group"
             class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
             style="border-color: var(--border)"
+            @change="selectGroup(($event.target as HTMLSelectElement).value)"
           >
-            <option :value="null">No category</option>
-            <option v-for="category in categories.all" :key="category.id" :value="category.id">
-              {{ category.name }}
+            <option v-for="option in groups.visibleGroups" :key="option.id" :value="option.id">
+              {{ option.name }}
             </option>
           </select>
         </label>
@@ -335,6 +332,7 @@ async function save(): Promise<void> {
           <span class="text-xs text-[var(--text-muted)]">Who paid</span>
           <select
             v-model="paidByMemberId"
+            data-testid="paid-by"
             class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
             style="border-color: var(--border)"
           >

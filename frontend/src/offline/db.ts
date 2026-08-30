@@ -116,6 +116,14 @@ export interface LocalComment {
   pending: boolean
 }
 
+/**
+ * Kept though nothing writes it yet.
+ *
+ * The add form no longer asks for a category, so no screen caches these, but the
+ * table stays: removing a Dexie store needs a schema version bump, and every
+ * install would pay for a migration that buys nothing. The server still has
+ * categories, and imports still set them.
+ */
 export interface LocalCategory {
   id: string
   key: string
