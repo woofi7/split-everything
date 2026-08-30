@@ -241,7 +241,13 @@ export class ApiClient {
   }
 
   private async toError(response: Response): Promise<ApiError> {
-    const fallback = `The server returned ${response.status}.`
+    // A status with no body says nothing a person can act on. These two mean the
+    // request reached a server that has no such endpoint, which in practice is a
+    // server older than the app talking to it.
+    const fallback =
+      response.status === 404 || response.status === 405
+        ? 'The server does not know this request. It may be running an older version than this app.'
+        : `The server returned ${response.status}.`
 
     try {
       const text = await response.text()

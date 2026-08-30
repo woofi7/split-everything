@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faCodeMerge } from '@fortawesome/free-solid-svg-icons'
 import AppShell from '@/components/layout/AppShell.vue'
 import IconPicker from '@/components/ui/IconPicker.vue'
 import PersonPicker from '@/components/groups/PersonPicker.vue'
@@ -47,61 +48,103 @@ const addable = ref<AddableUser[]>([])
 const error = ref<string | null>(null)
 const message = ref<string | null>(null)
 
-/** Who is being merged away, while the confirmation is open. */
-const merging = ref<{ id: string; displayName: string } | null>(null)
-const mergeInto = ref('')
+/** Open while two people are being chosen, and closed the moment it is done. */
+const isMergeOpen = ref(false)
+const mergeSource = ref('')
+const mergeTarget = ref('')
 const isMerging = ref(false)
+/** Kept apart from the page error, so a refusal is not reported twice. */
+const mergeError = ref<string | null>(null)
 
 /**
- * Who this person could be merged into: everyone else still in the group.
+ * Who can be merged away.
  *
- * Active only. Merging into someone who has been removed would hide the history
- * behind a member nobody can see. The owner is a valid target and never a source,
- * so the group always keeps one.
+ * Removed members included, and that is the point: removing a member deactivates
+ * it rather than deleting it precisely because it still holds expenses, so a
+ * removed placeholder is the most likely thing anyone wants to merge. Never the
+ * owner, so the group always keeps one.
  */
-const mergeTargets = computed(() =>
+const mergeSources = computed(() =>
   (group.value?.members ?? []).filter(
-    (member) => member.id !== merging.value?.id && member.status === 'Active',
+    (member) => member.role !== 'Owner' && member.id !== mergeTarget.value,
   ),
 )
 
 /**
- * Whether this row can be folded into someone else.
+ * Who can be merged into.
  *
- * Removed members included, and that is the point: removing a member deactivates
- * it rather than deleting it precisely because it still holds expenses, so a
- * removed placeholder is the most likely thing anyone wants to merge. Only the
- * owner is never a source, and only when somebody is left to merge into.
+ * Active only: everything ends up here, and a removed member is one nobody can
+ * see, so the history would be there and invisible.
  */
-function canMerge(member: { id: string; role: string }): boolean {
-  if (member.role === 'Owner') return false
+const mergeTargets = computed(() =>
+  (group.value?.members ?? []).filter(
+    (member) => member.status === 'Active' && member.id !== mergeSource.value,
+  ),
+)
 
-  return (group.value?.members ?? []).some(
-    (other) => other.id !== member.id && other.status === 'Active',
-  )
+/**
+ * Whether the person reading this can merge at all.
+ *
+ * It rewrites everyone's balances, so the server allows it only to an owner or an
+ * admin. Asked here too, or a plain member would be offered a button that answers
+ * with a refusal.
+ */
+const canAdminister = computed(() => {
+  const mine = (group.value?.members ?? []).find((member) => member.id === myMemberId.value)
+  return mine?.role === 'Owner' || mine?.role === 'Admin'
+})
+
+const canMerge = computed(
+  () => canAdminister.value && mergeSources.value.length > 0 && mergeTargets.value.length > 0,
+)
+
+/** Both chosen, and not the same person twice. */
+const isMergeReady = computed(
+  () =>
+    mergeSource.value !== '' &&
+    mergeTarget.value !== '' &&
+    mergeSource.value !== mergeTarget.value,
+)
+
+const nameOf = (memberId: string) =>
+  (group.value?.members ?? []).find((member) => member.id === memberId)?.displayName ?? ''
+
+/**
+ * How a person reads in the two lists.
+ *
+ * Said out loud, because the whole reason for merging is two rows with the same
+ * name: without this the list is the same word twice.
+ */
+const labelFor = (member: { displayName: string; status: string; isPlaceholder: boolean }) => {
+  if (member.status !== 'Active') return `${member.displayName} (removed)`
+  if (member.isPlaceholder) return `${member.displayName} (not signed in yet)`
+  return member.displayName
 }
 
-function startMerge(member: { id: string; displayName: string }): void {
+function openMerge(): void {
   error.value = null
   message.value = null
-  merging.value = { id: member.id, displayName: member.displayName }
-  mergeInto.value = ''
+  mergeError.value = null
+  mergeSource.value = ''
+  mergeTarget.value = ''
+  isMergeOpen.value = true
 }
 
 async function confirmMerge(): Promise<void> {
-  const source = merging.value
-  if (!source || !mergeInto.value) return
+  if (!isMergeReady.value) return
 
-  error.value = null
+  const goingName = nameOf(mergeSource.value)
+  const stayingName = nameOf(mergeTarget.value)
+  mergeError.value = null
   isMerging.value = true
 
   try {
-    await groups.mergeMembers(groupId.value, source.id, mergeInto.value)
-    message.value = `${source.displayName} was merged.`
-    merging.value = null
+    await groups.mergeMembers(groupId.value, mergeSource.value, mergeTarget.value)
+    message.value = `${goingName} was merged into ${stayingName}.`
+    isMergeOpen.value = false
     await loadAddable()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not merge those two.'
+    mergeError.value = caught instanceof Error ? caught.message : 'Could not merge those two.'
   } finally {
     isMerging.value = false
   }
@@ -269,7 +312,26 @@ async function unarchive(): Promise<void> {
     </form>
 
     <section class="surface-card mb-4 p-4">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">People</h2>
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <h2 class="text-sm font-medium text-[var(--text-muted)]">People</h2>
+
+        <!--
+          One action for the section, in the corner, where an action about the
+          list as a whole belongs rather than beside any one name in it.
+        -->
+        <button
+          v-if="canMerge && !isMergeOpen"
+          type="button"
+          data-testid="merge-open"
+          class="btn btn-press btn-secondary h-11 w-11 shrink-0 rounded-full px-0"
+          style="border-color: var(--border)"
+          aria-label="Merge two people"
+          title="Merge two people"
+          @click="openMerge"
+        >
+          <FontAwesomeIcon :icon="faCodeMerge" class="h-4 w-4" />
+        </button>
+      </div>
 
       <ul class="mb-3 flex flex-col gap-2 text-sm">
         <li
@@ -287,37 +349,42 @@ async function unarchive(): Promise<void> {
             >
               You
             </span>
-            <span v-if="member.isPlaceholder" class="text-xs text-[var(--text-muted)]">
+            <!--
+              Who can change the group, and the one person no merge or removal can
+              take out of it. Worth saying on the row rather than leaving people to
+              work it out from which controls they were offered.
+            -->
+            <span
+              v-if="member.role === 'Owner'"
+              data-testid="owner-tag"
+              class="ml-1 rounded-full px-1.5 py-0.5 align-middle text-[0.65rem] font-semibold uppercase tracking-wide"
+              style="background: color-mix(in oklab, var(--color-brand-600) 22%, transparent); color: var(--color-brand-400)"
+            >
+              Owner
+            </span>
+            <!--
+              Only while they are still in the group. Saying someone has not signed
+              in yet and has been removed is two facts where one will do, and the
+              second is the one that matters.
+            -->
+            <span
+              v-if="member.isPlaceholder && member.status === 'Active'"
+              class="text-xs text-[var(--text-muted)]"
+            >
               (not signed in yet)
             </span>
             <span v-if="member.status !== 'Active'" class="text-xs text-[var(--text-muted)]">
               (removed)
             </span>
           </span>
-          <span class="flex shrink-0 items-center gap-3">
-            <!--
-              Offered on everyone but the owner, and only where there is someone to
-              merge into. It is how the two halves of one person become one: a name
-              a CSV import invented, and the account they later signed up with.
-            -->
-            <button
-              v-if="canMerge(member)"
-              type="button"
-              :data-testid="`merge-${member.id}`"
-              class="text-xs text-[var(--text-muted)] underline"
-              @click="startMerge(member)"
-            >
-              Merge
-            </button>
-            <button
-              v-if="member.status === 'Active' && member.role !== 'Owner'"
-              type="button"
-              class="text-xs text-[var(--text-muted)] underline"
-              @click="removeMember(member.id)"
-            >
-              Remove
-            </button>
-          </span>
+          <button
+            v-if="member.status === 'Active' && member.role !== 'Owner'"
+            type="button"
+            class="shrink-0 text-xs text-[var(--text-muted)] underline"
+            @click="removeMember(member.id)"
+          >
+            Remove
+          </button>
         </li>
       </ul>
 
@@ -327,45 +394,65 @@ async function unarchive(): Promise<void> {
         from then on, and nothing records what they used to be.
       -->
       <div
-        v-if="merging"
+        v-if="isMergeOpen"
         data-testid="merge-confirm"
         class="mb-3 flex flex-col gap-3 rounded-lg border p-3"
         style="border-color: var(--color-owing)"
         role="alertdialog"
         aria-label="Merge two people"
       >
-        <p class="text-sm">
-          Move everything {{ merging.displayName }} paid, owes and is owed onto
-          someone else, and remove them from the group.
+        <p class="text-sm text-[var(--text-muted)]">
+          For one person who ended up in this group twice. Everything the first
+          paid, owes and is owed moves to the second, and the first is removed.
         </p>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Merge into</span>
+          <span class="text-xs text-[var(--text-muted)]">Merge this person</span>
           <select
-            v-model="mergeInto"
-            data-testid="merge-target"
+            v-model="mergeSource"
+            data-testid="merge-source"
             class="tap-target rounded-lg border bg-[var(--surface)] px-3"
             style="border-color: var(--border)"
           >
-            <option value="" disabled>Choose a person</option>
-            <option v-for="target in mergeTargets" :key="target.id" :value="target.id">
-              {{ target.displayName }}
+            <option value="" disabled>Choose who goes</option>
+            <option v-for="person in mergeSources" :key="person.id" :value="person.id">
+              {{ labelFor(person) }}
             </option>
           </select>
         </label>
 
-        <p class="text-xs text-owing">
-          This cannot be undone. Their expenses, settlements and comments become
-          {{ mergeTargets.find((t) => t.id === mergeInto)?.displayName ?? 'the other person' }}'s
-          permanently, and there is no record of which ones moved.
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Into this person</span>
+          <select
+            v-model="mergeTarget"
+            data-testid="merge-target"
+            class="tap-target rounded-lg border bg-[var(--surface)] px-3"
+            style="border-color: var(--border)"
+          >
+            <option value="" disabled>Choose who stays</option>
+            <option v-for="person in mergeTargets" :key="person.id" :value="person.id">
+              {{ labelFor(person) }}
+            </option>
+          </select>
+        </label>
+
+        <p v-if="isMergeReady" class="text-xs text-owing">
+          {{ nameOf(mergeSource) }} will be removed, and everything they paid, owe
+          and are owed becomes {{ nameOf(mergeTarget) }}'s. This cannot be undone:
+          there is no record of which expenses moved.
         </p>
+        <p v-else class="text-xs text-[var(--text-muted)]">
+          Choose both. This cannot be undone.
+        </p>
+
+        <p v-if="mergeError" class="text-sm text-owing" role="alert">{{ mergeError }}</p>
 
         <div class="flex gap-2">
           <button
             type="button"
             class="btn btn-press btn-secondary flex-1"
             style="border-color: var(--border)"
-            @click="merging = null"
+            @click="isMergeOpen = false"
           >
             Cancel
           </button>
@@ -373,7 +460,7 @@ async function unarchive(): Promise<void> {
             type="button"
             data-testid="merge-confirm-button"
             class="btn btn-press btn-danger flex-1"
-            :disabled="!mergeInto || isMerging"
+            :disabled="!isMergeReady || isMerging"
             @click="confirmMerge"
           >
             {{ isMerging ? 'Merging' : 'Merge for good' }}

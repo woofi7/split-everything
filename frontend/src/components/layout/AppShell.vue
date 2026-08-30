@@ -90,7 +90,7 @@ const hasSyncNews = computed(
             v-if="props.backTo"
             :to="props.backTo"
             data-testid="back"
-            class="btn btn-press btn-secondary h-10 w-10 shrink-0 rounded-full px-0"
+            class="btn btn-press btn-secondary h-11 w-11 shrink-0 rounded-full px-0"
             :aria-label="`Back to ${props.backLabel}`"
           >
             <svg
