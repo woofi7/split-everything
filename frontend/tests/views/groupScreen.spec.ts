@@ -146,8 +146,13 @@ describe('the group screen', () => {
     expect(prefilled!.query!.amount).toBe('30.00')
   })
 
-  it('links to the group settings', async () => {
+  it('links to the group settings, from the menu in the corner', async () => {
     const { wrapper } = await mountView(DashboardView, { api: api() })
+
+    // Behind the gear now: both items there are about the group rather than about
+    // anything in it, and neither is done often enough to sit on the title row.
+    await wrapper.find('[data-testid="group-menu"]').trigger('click')
+    await settle(1)
 
     const link = wrapper
       .findAllComponents(RouterLinkStub)

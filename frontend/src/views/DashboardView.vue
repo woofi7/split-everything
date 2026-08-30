@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faGear } from '@fortawesome/free-solid-svg-icons'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupPicker from '@/components/groups/GroupPicker.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
@@ -28,6 +29,48 @@ const expenses = useExpensesStore()
 
 const isPickingGroup = ref(false)
 
+/**
+ * The two things that are about this group rather than about what is in it.
+ *
+ * Behind one icon, because neither is something you do often: changing group and
+ * opening its settings were both competing for the corner with the page title.
+ */
+const isMenuOpen = ref(false)
+
+function closeMenu(): void {
+  isMenuOpen.value = false
+}
+
+function openGroupPicker(): void {
+  closeMenu()
+  isPickingGroup.value = true
+}
+
+// Anywhere else, and Escape. A menu that only closes by choosing something is a
+// trap on a phone, where there is no obvious way to dismiss it.
+onMounted(() => {
+  window.addEventListener('click', onDocumentClick, true)
+  window.addEventListener('keydown', onKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', onDocumentClick, true)
+  window.removeEventListener('keydown', onKeydown)
+})
+
+function onDocumentClick(event: MouseEvent): void {
+  if (!isMenuOpen.value) return
+
+  const target = event.target as HTMLElement | null
+  if (target?.closest('[data-menu-root]')) return
+
+  closeMenu()
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') closeMenu()
+}
+
 onMounted(async () => {
   await groups.loadAll()
   await expenses.hydrate()
@@ -53,6 +96,17 @@ watch(() => groups.mainGroupId, () => void loadMainGroup())
 
 const group = computed(() => groups.mainGroup)
 const currency = computed(() => group.value?.baseCurrency ?? 'CAD')
+
+/**
+ * How many expenses are on screen.
+ *
+ * The replica already holds them all, so this is not about fetching: it is about
+ * not building a thousand cards for a list nobody has scrolled to the bottom of.
+ * A group that has been running a year is the normal case, not the exceptional
+ * one, and every card carries its own colour, date and money formatting.
+ */
+const EXPENSE_PAGE = 20
+const visibleCount = ref(EXPENSE_PAGE)
 const icon = computed(() => resolveIcon(group.value?.iconName))
 
 const groupExpenses = computed(() =>
@@ -72,6 +126,49 @@ const memberName = (memberId: string) =>
  * Who paid, not who owes. That is what spending means to whoever handed over the
  * card, and the balances below already say who owes what.
  */
+/** The slice on screen, and whether there is more behind it. */
+const visibleExpenses = computed(() => groupExpenses.value.slice(0, visibleCount.value))
+const hasMoreExpenses = computed(() => groupExpenses.value.length > visibleCount.value)
+
+function showMoreExpenses(): void {
+  if (!hasMoreExpenses.value) return
+  visibleCount.value += EXPENSE_PAGE
+}
+
+/**
+ * Loads the next page when the foot of the list comes into view.
+ *
+ * Ahead of the edge on purpose: the margin means the next cards are already there
+ * by the time the last one is read, so scrolling never stops on a spinner.
+ */
+const sentinel = useTemplateRef<HTMLElement>('sentinel')
+let observer: IntersectionObserver | null = null
+
+watch(sentinel, (element) => {
+  observer?.disconnect()
+  observer = null
+
+  // Absent in older browsers and in a test environment with no layout. The list
+  // still works; it just shows the first page.
+  if (!element || typeof IntersectionObserver === 'undefined') return
+
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) showMoreExpenses()
+    },
+    { rootMargin: '400px' },
+  )
+  observer.observe(element)
+})
+
+// Back to the first page: the count belongs to the list being read, and the next
+// group's list is a different list.
+watch(() => group.value?.id, () => {
+  visibleCount.value = EXPENSE_PAGE
+})
+
+onUnmounted(() => observer?.disconnect())
+
 const paidByMember = computed(() => {
   if (!group.value) return []
 
@@ -156,49 +253,95 @@ const spentOn = (iso: string) =>
     :is-syncing="expenses.isSyncing"
   >
     <template #header-action>
-      <!-- Always here, even with one group: it is also the way to the next one. -->
-      <button
-        type="button"
-        data-testid="change-group"
-        class="btn btn-press btn-secondary min-h-0 gap-2 px-2 py-1 text-xs"
-        aria-haspopup="dialog"
-        @click="isPickingGroup = true"
-      >
-        <span
-          class="flex h-5 w-5 items-center justify-center rounded-md text-white"
-          :style="{ backgroundColor: group?.colorHex ?? '#4f46e5' }"
-          aria-hidden="true"
+      <!--
+        One corner, one icon. Both items are about the group rather than about
+        anything in it, and neither is done often enough to earn a place on the
+        title row of every visit.
+      -->
+      <div data-menu-root class="relative">
+        <button
+          type="button"
+          data-testid="group-menu"
+          class="btn btn-press btn-secondary h-11 w-11 shrink-0 rounded-full px-0"
+          style="border-color: var(--border)"
+          aria-haspopup="menu"
+          :aria-expanded="isMenuOpen"
+          aria-label="Group options"
+          title="Group options"
+          @click="isMenuOpen = !isMenuOpen"
         >
-          <FontAwesomeIcon :icon="icon.definition" class="h-3 w-3" />
-        </span>
-        Change
-      </button>
-    </template>
+          <FontAwesomeIcon :icon="faGear" class="h-4 w-4" />
+        </button>
 
-    <template v-if="group">
-      <section class="surface-card mb-4 p-4">
-        <p class="text-sm text-[var(--text-muted)]">Your balance in this group</p>
-        <MoneyAmount :amount="group.myNetBalance" :currency="currency" signed size="lg" />
-
-        <div class="mt-3 flex gap-2">
-          <RouterLink
-            :to="{ name: 'settle', params: { groupId: group.id } }"
-            class="btn btn-press btn-secondary flex-1"
+        <div
+          v-if="isMenuOpen"
+          data-testid="group-menu-items"
+          role="menu"
+          class="surface-card absolute right-0 z-40 mt-2 flex w-56 flex-col overflow-hidden p-1 shadow-lg"
+        >
+          <!-- Always here, even with one group: it is also the way to the next one. -->
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="change-group"
+            class="btn btn-press btn-quiet w-full justify-start gap-2 text-sm"
+            @click="openGroupPicker"
           >
-            Settle up
-          </RouterLink>
+            <span
+              class="flex h-5 w-5 items-center justify-center rounded-md text-white"
+              :style="{ backgroundColor: group?.colorHex ?? '#4f46e5' }"
+              aria-hidden="true"
+            >
+              <FontAwesomeIcon :icon="icon.definition" class="h-3 w-3" />
+            </span>
+            Change group
+          </button>
+
           <RouterLink
+            v-if="group"
+            role="menuitem"
+            data-testid="menu-group-settings"
             :to="{ name: 'group-settings', params: { groupId: group.id } }"
-            class="btn btn-press btn-secondary flex-1"
+            class="btn btn-press btn-quiet w-full justify-start gap-2 text-sm"
+            @click="closeMenu"
           >
+            <span class="flex h-5 w-5 items-center justify-center" aria-hidden="true">
+              <FontAwesomeIcon :icon="faGear" class="h-3 w-3" />
+            </span>
             Group settings
           </RouterLink>
         </div>
-      </section>
+      </div>
+    </template>
 
+    <template v-if="group">
+      <!-- The shape of the group's spending, first: it is what the screen is for. -->
       <section class="surface-card mb-4 p-4">
         <p class="mb-3 text-sm text-[var(--text-muted)]">Who paid</p>
         <SpendPie :slices="paidByMember" :currency="currency" />
+      </section>
+
+      <!--
+        One line: what you are owed or owe, and the way to act on it. The number
+        and the button that answers it belong next to each other.
+      -->
+      <section
+        data-testid="balance-line"
+        class="surface-card mb-4 flex items-center justify-between gap-3 p-4"
+      >
+        <span class="flex min-w-0 items-baseline gap-2">
+          <span class="shrink-0 text-sm text-[var(--text-muted)]">Your balance</span>
+          <MoneyAmount :amount="group.myNetBalance" :currency="currency" signed size="lg" />
+        </span>
+
+        <RouterLink
+          :to="{ name: 'settle', params: { groupId: group.id } }"
+          data-testid="settle-up"
+          class="btn btn-press btn-secondary shrink-0"
+          style="border-color: var(--border)"
+        >
+          Settle up
+        </RouterLink>
       </section>
 
       <section v-if="balances.length > 0" class="surface-card mb-4 p-4">
@@ -283,7 +426,7 @@ const spentOn = (iso: string) =>
         <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">Expenses</h2>
 
         <ul v-if="groupExpenses.length > 0" class="flex flex-col gap-2">
-          <li v-for="expense in groupExpenses" :key="expense.id">
+          <li v-for="expense in visibleExpenses" :key="expense.id">
             <RouterLink
               :to="{ name: 'expense', params: { groupId: group.id, expenseId: expense.id } }"
               data-testid="expense-card"
@@ -315,6 +458,26 @@ const spentOn = (iso: string) =>
         <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
           No expenses yet. Add the first one with the button below.
         </p>
+
+        <!--
+          The foot of the list. Watched rather than tapped, so scrolling carries on
+          by itself, and a button as well for anything that cannot watch.
+        -->
+        <div
+          v-if="hasMoreExpenses"
+          ref="sentinel"
+          data-testid="expenses-sentinel"
+          class="flex flex-col items-center gap-2 py-4"
+        >
+          <button
+            type="button"
+            data-testid="show-more-expenses"
+            class="btn btn-press btn-quiet text-xs"
+            @click="showMoreExpenses"
+          >
+            Show more ({{ groupExpenses.length - visibleExpenses.length }} left)
+          </button>
+        </div>
       </section>
     </template>
 
