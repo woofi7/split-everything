@@ -165,22 +165,43 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Trigger the redeploy webhook
+      # Dockhand manages the stack on that box. Its own webhook is for git-linked
+      # stacks and this one is a local compose file, so the redeploy goes through
+      # its API instead: POST a stack by name and it pulls and recreates.
+      #
+      # Both secrets absent means nobody has wired this up, which is a fine state to
+      # be in - the images are published either way and the box can pull them by
+      # hand. It says so and passes rather than failing a release over a deploy
+      # nobody asked for. What it will not do is what the old version of this job
+      # did: report success while doing nothing at all.
+      - name: Ask dockhand to redeploy the stack
+        env:
+          DOCKHAND_URL: ${{ secrets.DOCKHAND_URL }}
+          DOCKHAND_TOKEN: ${{ secrets.DOCKHAND_TOKEN }}
+          STACK: ${{ vars.DOCKHAND_STACK || 'split-everything' }}
+          ENVIRONMENT_ID: ${{ vars.DOCKHAND_ENVIRONMENT_ID || '1' }}
         run: |
-          if [ -z "${{ secrets.PORTAINER_WEBHOOK_URL }}" ]; then
-            echo "PORTAINER_WEBHOOK_URL is not set; pull the new tag on the server."
+          if [ -z "$DOCKHAND_URL" ] || [ -z "$DOCKHAND_TOKEN" ]; then
+            echo "DOCKHAND_URL or DOCKHAND_TOKEN is not set."
+            echo "The images are published; pull them on the server with:"
+            echo "  docker compose pull && docker compose up -d"
             exit 0
           fi
 
           status=$(curl --silent --show-error --output /dev/stderr \
             --write-out '%{http_code}' \
             --request POST \
-            --max-time 60 \
-            "${{ secrets.PORTAINER_WEBHOOK_URL }}")
+            --max-time 300 \
+            --header "Authorization: Bearer $DOCKHAND_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data '{"pull": true}' \
+            "$DOCKHAND_URL/api/stacks/$STACK/deploy?envId=$ENVIRONMENT_ID")
 
-          echo "The webhook responded with ${status}"
+          echo "Dockhand answered ${status}"
 
           case "$status" in
-            2*) echo "Deploy triggered." ;;
-            *) echo "The webhook was refused." >&2; exit 1 ;;
+            2*) echo "Redeployed ${STACK}." ;;
+            401|403) echo "The token was refused. Generate a new one in Dockhand under Profile." >&2; exit 1 ;;
+            404) echo "No stack called ${STACK} in environment ${ENVIRONMENT_ID}." >&2; exit 1 ;;
+            *) echo "Dockhand refused the redeploy." >&2; exit 1 ;;
           esac
