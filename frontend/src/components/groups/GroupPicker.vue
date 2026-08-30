@@ -48,6 +48,13 @@ watch(
 function choose(groupId: string): void {
   groups.setMainGroup(groupId)
   emit('close')
+
+  // At the top, like any other page arrived at. Left alone the screen opens
+  // wherever the last group was being read, which is nowhere in this one, and a
+  // browser holding a scroll position through a wholesale change of content lands
+  // further down still. After the new screen is laid out, or there is nothing to
+  // scroll to yet.
+  void nextTick(() => window.scrollTo(0, 0))
 }
 </script>
 

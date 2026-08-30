@@ -228,6 +228,15 @@ function commit(): void {
     movePage(0, 0)
 
     after(PAINT_MS, () => {
+      /*
+       * The new group's screen starts at the top, like any other page arrived at.
+       * Left alone it starts wherever the old one was being read, which is not a
+       * place in this group at all, and a phone answers a scroll position that
+       * jumps by a few hundred pixels by sliding its own toolbar about, taking
+       * the tab bar with it. Done under the stand-in, so nothing of it shows.
+       */
+      if (window.scrollY > 0) window.scrollTo(0, 0)
+
       faded.value = true
       after(SETTLE_MS, finish)
     })
@@ -284,6 +293,15 @@ function movePage(x: number, ms: number): void {
   page.style.transition = ms > 0 ? `transform ${ms}ms cubic-bezier(0.22, 0.61, 0.36, 1)` : 'none'
   page.style.transform = `translateX(${x}px)`
   page.style.willChange = 'transform'
+
+  /*
+   * And no anchoring while this is going on. A browser holding the scroll on
+   * whatever was in view is right when something loads in above it, and wrong
+   * when the whole screen is replaced by another group's: it hunts for the old
+   * anchor in new content and lands hundreds of pixels down. Only for the length
+   * of the swipe, so reading a list while an expense arrives still holds still.
+   */
+  page.style.overflowAnchor = 'none'
 }
 
 function releasePage(): void {
@@ -292,6 +310,7 @@ function releasePage(): void {
   page.style.transition = ''
   page.style.transform = ''
   page.style.willChange = ''
+  page.style.overflowAnchor = ''
   page = null
 }
 

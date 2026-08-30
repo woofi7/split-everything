@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount, RouterLinkStub } from '@vue/test-utils'
 import GroupPicker from '@/components/groups/GroupPicker.vue'
@@ -58,6 +59,23 @@ describe('GroupPicker', () => {
     const names = wrapper.findAll('[data-testid="group-option"]').map((row) => row.text())
     expect(names.join(' ')).toContain('Roommates')
     expect(names.join(' ')).toContain('Ski trip')
+  })
+
+  it('opens the group it switches to at the top', async () => {
+    withGroups(group('g1', 'Roommates'), group('g2', 'Ski trip'))
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const wrapper = mountPicker()
+
+    try {
+      await wrapper.findAll('[data-testid="group-option"]')[1].trigger('click')
+      await nextTick()
+
+      // Left alone the screen opens wherever the last group was being read, which
+      // is nowhere in this one.
+      expect(scrollTo).toHaveBeenCalledWith(0, 0)
+    } finally {
+      scrollTo.mockRestore()
+    }
   })
 
   it('marks the one the app is on', () => {

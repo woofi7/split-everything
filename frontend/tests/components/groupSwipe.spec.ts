@@ -182,6 +182,48 @@ describe('GroupSwipe', () => {
     expect(page.style.transform).toBe('')
   })
 
+  it('lands the new group at the top of its screen', async () => {
+    const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
+    pageElement()
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    Object.defineProperty(window, 'scrollY', { value: 400, configurable: true })
+    mountSwipe()
+
+    try {
+      drag({ x: 300, y: 400 }, { x: 100, y: 400 })
+      release({ x: 100, y: 400 })
+      await land()
+
+      // Otherwise it opens wherever the last group was being read, which is
+      // nowhere in this one, and a phone answers a scroll position that jumps by
+      // a few hundred pixels by sliding its own toolbar about, taking the tab bar
+      // with it.
+      expect(store.mainGroupId).toBe('g2')
+      expect(scrollTo).toHaveBeenCalledWith(0, 0)
+    } finally {
+      scrollTo.mockRestore()
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true })
+    }
+  })
+
+  it('stops the browser holding the old scroll through the change', async () => {
+    withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
+    const page = pageElement()
+    mountSwipe()
+
+    drag({ x: 300, y: 400 }, { x: 200, y: 400 })
+
+    // Anchoring is right when something loads in above what you are reading, and
+    // wrong when the whole screen becomes another group's.
+    expect(page.style.overflowAnchor).toBe('none')
+
+    release({ x: 200, y: 400 })
+    await land()
+
+    // Only for the length of the swipe.
+    expect(page.style.overflowAnchor).toBe('')
+  })
+
   it('lets go of the page once it has landed', async () => {
     withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
     const page = pageElement()
