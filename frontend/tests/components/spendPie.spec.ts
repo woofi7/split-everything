@@ -100,4 +100,54 @@ describe('SpendPie', () => {
     expect(svg.attributes('role')).toBe('img')
     expect(svg.attributes('aria-label')).toContain('Roommates')
   })
+
+  /**
+   * The layout of the card.
+   *
+   * Names under the heading on the left, chart on the right, beside both. The
+   * chart is the tallest thing in the card, so putting the words next to it is
+   * what stops the card growing to hold a heading above them.
+   */
+  describe('its arrangement', () => {
+    it('renders the heading it is given, above the names', () => {
+      const wrapper = mount(SpendPie, {
+        props: { slices, currency: 'CAD' },
+        slots: { heading: 'Who paid' },
+      })
+
+      const column = wrapper.find('div > div')
+      expect(column.text()).toContain('Who paid')
+      expect(column.find('ul').exists()).toBe(true)
+      expect(column.text().indexOf('Who paid')).toBeLessThan(column.text().indexOf('Roommates'))
+    })
+
+    it('puts the chart after the names, so it sits on the right', () => {
+      const wrapper = mount(SpendPie, {
+        props: { slices, currency: 'CAD' },
+        slots: { heading: 'Who paid' },
+      })
+
+      const html = wrapper.html()
+      expect(html.indexOf('<ul')).toBeLessThan(html.indexOf('<svg'))
+    })
+
+    it('keeps the heading when there is nothing to chart', () => {
+      const wrapper = mount(SpendPie, {
+        props: { slices: [], currency: 'CAD' },
+        slots: { heading: 'Who paid' },
+      })
+
+      // The card would otherwise lose its title exactly when it needs explaining.
+      expect(wrapper.text()).toContain('Who paid')
+      expect(wrapper.text()).toContain('Nothing spent yet')
+      expect(wrapper.find('svg').exists()).toBe(false)
+    })
+
+    it('needs no heading', () => {
+      const wrapper = mount(SpendPie, { props: { slices, currency: 'CAD' } })
+
+      expect(wrapper.find('p').exists()).toBe(false)
+      expect(wrapper.find('ul').exists()).toBe(true)
+    })
+  })
 })
