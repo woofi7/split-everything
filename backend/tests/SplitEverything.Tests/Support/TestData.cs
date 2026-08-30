@@ -2,7 +2,6 @@ using SplitEverything.Domain.Common;
 using SplitEverything.Domain.Entities;
 using SplitEverything.Domain.Sync;
 using SplitEverything.Infrastructure.Persistence;
-using SplitEverything.Infrastructure.Persistence.Seed;
 
 namespace SplitEverything.Tests.Support;
 
@@ -47,7 +46,7 @@ public static class TestData
     public static Expense Expense(
         Guid groupId, Guid payerMemberId, decimal amount,
         string description = "Dinner", string currency = "CAD",
-        DateTimeOffset? spentAt = null, Guid? categoryId = null) => new()
+        DateTimeOffset? spentAt = null) => new()
     {
         GroupId = groupId,
         PaidByMemberId = payerMemberId,
@@ -57,7 +56,6 @@ public static class TestData
         AmountInBaseCurrency = amount,
         ExchangeRate = 1m,
         SpentAt = spentAt ?? Jan1,
-        CategoryId = categoryId,
         SplitType = SplitType.Equal,
         Clock = VectorClock.Empty.Tick(DeviceA)
     };
@@ -84,7 +82,6 @@ public static class TestData
         Clock = VectorClock.Empty.Tick(DeviceA)
     };
 
-    public static Guid CategoryId(string key) => CategorySeed.DeterministicId(key);
 
     /// <summary>
     /// A group with the given member names, the first of which belongs to

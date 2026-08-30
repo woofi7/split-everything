@@ -61,7 +61,6 @@ public sealed class ExpenseService(
             ExchangeRate = conversion.Rate,
             ExchangeRateAsOf = conversion.RateAsOf,
             SpentAt = request.SpentAt,
-            CategoryId = request.CategoryId,
             SplitType = request.SplitType,
             ReceiptId = request.ReceiptId,
             Notes = request.Notes?.Trim(),
@@ -133,8 +132,6 @@ public sealed class ExpenseService(
             expenses = expenses.Where(e => myGroupIds.Contains(e.GroupId));
         }
 
-        if (query.CategoryId is { } categoryId)
-            expenses = expenses.Where(e => e.CategoryId == categoryId);
         if (query.MemberId is { } memberId)
             expenses = expenses.Where(e =>
                 e.PaidByMemberId == memberId || e.Splits.Any(s => s.MemberId == memberId && !s.IsDeleted));
@@ -217,7 +214,6 @@ public sealed class ExpenseService(
             expense.SpentAt = spentAt;
         }
 
-        if (request.CategoryId is not null) expense.CategoryId = request.CategoryId;
         if (request.ReceiptId is not null) expense.ReceiptId = request.ReceiptId;
         if (request.Notes is not null) expense.Notes = request.Notes.Trim();
         if (request.PaidByMemberId is { } payer)
@@ -676,11 +672,6 @@ public sealed class ExpenseService(
             .Where(m => m.GroupId == expense.GroupId)
             .ToDictionaryAsync(m => m.Id, m => m.DisplayName, ct);
 
-        var categoryKey = expense.CategoryId is null
-            ? null
-            : await db.Categories.Where(c => c.Id == expense.CategoryId)
-                .Select(c => c.Key).FirstOrDefaultAsync(ct);
-
         var commentCount = await db.ExpenseComments
             .CountAsync(c => c.ExpenseId == expense.Id && !c.IsDeleted, ct);
 
@@ -689,7 +680,7 @@ public sealed class ExpenseService(
             memberNames.GetValueOrDefault(expense.PaidByMemberId, "Unknown"),
             expense.Description, expense.Amount, expense.Currency,
             expense.AmountInBaseCurrency, expense.ExchangeRate, expense.SpentAt,
-            expense.CategoryId, categoryKey, expense.SplitType, expense.ReceiptId, expense.Notes,
+            expense.SplitType, expense.ReceiptId, expense.Notes,
             expense.Revision, expense.RecurringExpenseId, expense.OriginGroupId,
             expense.Splits.Where(s => !s.IsDeleted)
                 .Select(s => new ExpenseSplitDto(
@@ -724,7 +715,7 @@ public sealed class ExpenseService(
     {
         expense.Id, expense.GroupId, expense.PaidByMemberId, expense.Description,
         expense.Amount, expense.Currency, expense.AmountInBaseCurrency, expense.ExchangeRate,
-        expense.SpentAt, expense.CategoryId, SplitType = (int)expense.SplitType,
+        expense.SpentAt, SplitType = (int)expense.SplitType,
         expense.ReceiptId, expense.Notes, expense.Revision, expense.IsDeleted,
         expense.OriginGroupId, expense.OriginLineageId,
         Splits = expense.Splits.Where(s => !s.IsDeleted)

@@ -40,21 +40,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         Guid? categoryId = null, DateTimeOffset? spentAt = null, params Guid[] others)
         => Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, description, amount, "CAD", spentAt ?? TestData.Jan1, SplitType.Equal,
-            others.Prepend(payer).Distinct().Select(id => new SplitInputDto(id, null)).ToList(),
-            categoryId, null, null, null, null, null, null));
-
-    [Fact]
-    public async Task Expenses_can_be_filtered_by_category()
-    {
-        var (userId, group, alice, bob) = await SetupAsync();
-        await AddAsync(userId, group.Id, alice, 10m, "Food", TestData.CategoryId("groceries"), null, bob);
-        await AddAsync(userId, group.Id, alice, 20m, "Bus", TestData.CategoryId("transport"), null, bob);
-
-        var page = await Expenses.ListAsync(userId, new ExpenseQuery(
-            GroupId: group.Id, CategoryId: TestData.CategoryId("groceries")));
-
-        page.Items.ShouldHaveSingleItem().Description.ShouldBe("Food");
-    }
+            others.Prepend(payer).Distinct().Select(id => new SplitInputDto(id, null)).ToList(), null, null, null, null, null, null));
 
     [Fact]
     public async Task Expenses_can_be_filtered_by_member()
@@ -93,7 +79,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "With receipt", 10m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, receipt.Id, "Paid in cash",
+            [new SplitInputDto(alice, null)], null, receipt.Id, "Paid in cash",
             null, null, null));
 
         expense.ReceiptId.ShouldBe(receipt.Id);
@@ -107,14 +93,14 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var (userId, group, alice, bob) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Restaurant", 30m, "CAD", TestData.Jan1, SplitType.Itemized,
-            [new SplitInputDto(alice, null), new SplitInputDto(bob, null)], null,
+            [new SplitInputDto(alice, null), new SplitInputDto(bob, null)],
             [new ExpenseItemDto(null, "Starter", 10m, 1, 0, [bob]),
              new ExpenseItemDto(null, "Main", 20m, 1, 1, [alice])],
             null, null, null, null, null));
 
         var updated = await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
             null, null, null, null, null, SplitType.Itemized,
-            [new SplitInputDto(alice, null), new SplitInputDto(bob, null)], null,
+            [new SplitInputDto(alice, null), new SplitInputDto(bob, null)],
             [new ExpenseItemDto(null, "Shared platter", 30m, 1, 0, [alice, bob])],
             null, null, null));
 
@@ -129,12 +115,10 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var expense = await AddAsync(userId, group.Id, alice, 40m, "Dinner", null, null, bob);
 
         var updated = await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
-            bob, null, null, null, TestData.Jan1.AddDays(2), null, null,
-            TestData.CategoryId("dining"), null, null, "Bob actually paid", null));
+            bob, null, null, null, TestData.Jan1.AddDays(2), null, null, null, null, "Bob actually paid", null));
 
         updated.PaidByMemberId.ShouldBe(bob);
         updated.Notes.ShouldBe("Bob actually paid");
-        updated.CategoryKey.ShouldBe("dining");
     }
 
     [Fact]
@@ -147,7 +131,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
                 148m, 1.48m, Clock.UtcNow)));
 
         var updated = await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
-            null, null, null, "EUR", null, null, null, null, null, null, null, null));
+            null, null, null, "EUR", null, null, null, null, null, null, null));
 
         updated.AmountInBaseCurrency.ShouldBe(148m);
     }
@@ -160,7 +144,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 
         await Should.ThrowAsync<ValidationException>(() => Expenses.UpdateAsync(
             userId, expense.Id, new UpdateExpenseRequest(
-                null, null, -5m, null, null, null, null, null, null, null, null, null)));
+                null, null, -5m, null, null, null, null, null, null, null, null)));
     }
 
     [Fact]

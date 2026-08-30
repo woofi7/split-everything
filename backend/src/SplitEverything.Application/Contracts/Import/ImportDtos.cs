@@ -22,7 +22,6 @@ public sealed record CsvColumnMapping(
     int DescriptionColumn,
     int AmountColumn,
     int? CurrencyColumn,
-    int? CategoryColumn,
     int? PaidByColumn,
     // Column index -> member name, for exports with one column per participant.
     IReadOnlyDictionary<int, string>? ParticipantColumns,
@@ -54,7 +53,6 @@ public sealed record ParsedExpenseRow(
     string Description,
     decimal? Amount,
     string? Currency,
-    string? CategoryName,
     string? PaidByName,
     Guid? PaidByMemberId,
     IReadOnlyList<string> ParticipantNames,
@@ -120,7 +118,6 @@ public sealed record ConfirmedStatementRow(
     decimal Amount,
     string Currency,
     DateTimeOffset SpentAt,
-    Guid? CategoryId,
     SplitType SplitType,
     IReadOnlyList<Expenses.SplitInputDto> Splits,
     string Fingerprint,
@@ -138,10 +135,6 @@ public sealed record DuplicateMatchDto(string Fingerprint, Guid ExpenseId, Guid 
 
 public sealed record DuplicateCheckResult(IReadOnlyList<DuplicateMatchDto> Matches);
 
-public sealed record CategoryRuleDto(Guid Id, string Keyword, Guid CategoryId, string CategoryKey, Guid? SuggestedGroupId, int Weight, int HitCount, bool IsEnabled, bool IsBuiltIn);
-
-public sealed record UpsertCategoryRuleRequest(Guid? Id, string Keyword, Guid CategoryId, Guid? SuggestedGroupId, bool IsEnabled);
-
 /// <summary>
 /// Prior splits for a merchant, so the client can suggest the same split it used
 /// last time. Returns only aggregate history, never statement content.
@@ -153,7 +146,6 @@ public sealed record SplitSuggestionDto(
     SplitType SplitType,
     IReadOnlyList<Expenses.SplitInputDto> Splits,
     Guid PaidByMemberId,
-    Guid? CategoryId,
     int TimesUsed,
     DateTimeOffset LastUsedAt);
 

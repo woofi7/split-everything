@@ -30,10 +30,9 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
         string currency = "CAD",
         string description = "Dinner",
         IReadOnlyList<ExpenseItemDto>? items = null,
-        Guid? clientId = null,
-        Guid? categoryId = null)
+        Guid? clientId = null)
         => new(groupId, payer, description, amount, currency, TestData.Jan1, splitType,
-            splits, categoryId, items, null, null, clientId, null, null);
+            splits, items, null, null, clientId, null, null);
 
     [Fact]
     public async Task An_equal_split_charges_each_participant_their_share()
@@ -322,7 +321,7 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
             [new SplitInputDto(alice, null)]));
 
         var updated = await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
-            null, "Renamed dinner", null, null, null, null, null, null, null, null, null, null));
+            null, "Renamed dinner", null, null, null, null, null, null, null, null, null));
 
         updated.Revision.ShouldBe(2);
         updated.Description.ShouldBe("Renamed dinner");
@@ -337,7 +336,7 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
             [new SplitInputDto(alice, null), new SplitInputDto(bob, null)]));
 
         var updated = await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
-            null, null, 60m, null, null, null, null, null, null, null, null, null));
+            null, null, 60m, null, null, null, null, null, null, null, null));
 
         updated.Splits.ShouldAllBe(s => s.Amount == 30m);
     }
@@ -350,8 +349,7 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
             [new SplitInputDto(alice, null), new SplitInputDto(bob, null)]));
 
         var updated = await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
-            null, null, null, null, null, SplitType.Equal, [new SplitInputDto(alice, null)],
-            null, null, null, null, null));
+            null, null, null, null, null, SplitType.Equal, [new SplitInputDto(alice, null)], null, null, null, null));
 
         updated.Splits.ShouldHaveSingleItem().Amount.ShouldBe(100m);
     }
@@ -365,12 +363,12 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
         var staleClock = expense.VectorClock;
 
         await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
-            null, "First edit", null, null, null, null, null, null, null, null, null, null));
+            null, "First edit", null, null, null, null, null, null, null, null, null));
 
         // Second device edits from the clock it last saw: concurrent, so it must not win.
         await Should.ThrowAsync<SyncConflictException>(() => Expenses.UpdateAsync(
             userId, expense.Id, new UpdateExpenseRequest(
-                null, "Second edit", null, null, null, null, null, null, null, null, null, staleClock)));
+                null, "Second edit", null, null, null, null, null, null, null, null, staleClock)));
     }
 
     [Fact]
@@ -381,7 +379,7 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
             [new SplitInputDto(alice, null)]));
 
         var updated = await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
-            null, "Edited", null, null, null, null, null, null, null, null, null, expense.VectorClock));
+            null, "Edited", null, null, null, null, null, null, null, null, expense.VectorClock));
 
         updated.Description.ShouldBe("Edited");
     }
@@ -573,14 +571,4 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
         await Should.ThrowAsync<ForbiddenException>(() => Expenses.GetAsync(stranger.Id, expense.Id));
     }
 
-    [Fact]
-    public async Task An_expense_carries_its_category_key()
-    {
-        var (userId, group, alice, _) = await SetupAsync();
-
-        var expense = await Expenses.CreateAsync(userId, Create(group.Id, alice, 50m,
-            [new SplitInputDto(alice, null)], categoryId: TestData.CategoryId("groceries")));
-
-        expense.CategoryKey.ShouldBe("groceries");
-    }
 }

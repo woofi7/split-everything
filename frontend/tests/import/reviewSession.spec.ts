@@ -21,8 +21,6 @@ const rules = [
   {
     id: 'rule-1',
     keyword: 'UBER EATS',
-    categoryId: 'dining',
-    categoryKey: 'dining',
     suggestedGroupId: null,
     weight: 1,
     hitCount: 0,
@@ -43,36 +41,6 @@ describe('statement review session', () => {
     // silently charged to a group.
     expect(session.rows[0].groupId).toBeNull()
     expect(session.rows[0].action).toBe('personal')
-  })
-
-  it('suggests a category from the local ruleset', () => {
-    const session = new StatementReviewSession([row()], { rules, suggestions: [], duplicates: [] })
-
-    expect(session.rows[0].categoryKey).toBe('dining')
-  })
-
-  it('suggests the split this merchant got last time', () => {
-    const session = new StatementReviewSession([row()], {
-      rules,
-      suggestions: [
-        {
-          normalizedMerchant: 'UBER EATS',
-          groupId,
-          groupName: 'Roommates',
-          splitType: 'Equal',
-          splits: [{ memberId, value: null }],
-          paidByMemberId: memberId,
-          categoryId: 'dining',
-          timesUsed: 3,
-          lastUsedAt: '2026-01-01T00:00:00Z',
-        },
-      ],
-      duplicates: [],
-    })
-
-    expect(session.rows[0].groupId).toBe(groupId)
-    expect(session.rows[0].action).toBe('split')
-    expect(session.rows[0].splits).toHaveLength(1)
   })
 
   it('flags a row the server already has', () => {
@@ -145,15 +113,6 @@ describe('statement review session', () => {
     expect(session.rows.map((r) => r.action)).toEqual(['ignore', 'personal', 'ignore'])
   })
 
-  it('applies a bulk category to a selection', () => {
-    const rows = [row({ rowNumber: 1 }), row({ rowNumber: 2 })]
-    const session = new StatementReviewSession(rows, { rules, suggestions: [], duplicates: [] })
-
-    session.setCategoryForMany([1, 2], 'groceries')
-
-    expect(session.rows.every((r) => r.categoryKey === 'groceries')).toBe(true)
-  })
-
   it('commits only the rows assigned to a group', async () => {
     const rows = [row({ rowNumber: 1 }), row({ rowNumber: 2 }), row({ rowNumber: 3 })]
     const session = new StatementReviewSession(rows, { rules, suggestions: [], duplicates: [] })
@@ -214,16 +173,6 @@ describe('statement review session', () => {
     expect(summary.toCommit).toBe(1)
     expect(summary.ignored).toBe(1)
     expect(summary.personal).toBe(1)
-  })
-
-  it('learns from a category correction', () => {
-    const session = new StatementReviewSession([row()], { rules, suggestions: [], duplicates: [] })
-
-    session.correctCategory(1, 'groceries')
-
-    expect(session.rows[0].categoryKey).toBe('groceries')
-    expect(session.learnedRules).toHaveLength(1)
-    expect(session.learnedRules[0].keyword).toBe('UBER EATS')
   })
 
   it('clears the staged statement data when it is done', async () => {

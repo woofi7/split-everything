@@ -8,16 +8,6 @@ import { useExpensesStore } from '@/stores/expenses'
 import { memberColor, memberColors } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
 
-interface CategorySpend {
-  categoryId: string | null
-  categoryKey: string
-  categoryName: string
-  colorHex: string
-  amount: number
-  expenseCount: number
-  share: number
-}
-
 interface SpendPointMember {
   memberId: string
   memberName: string
@@ -47,7 +37,6 @@ interface Dashboard {
   myPaid: number
   expenseCount: number
   spendOverTime: SpendPoint[]
-  byCategory: CategorySpend[]
   byMember: MemberSpend[]
 }
 
@@ -251,27 +240,6 @@ const bucketLabel = (bucket: string) =>
             {{ bucketLabel(dashboard.spendOverTime[dashboard.spendOverTime.length - 1].bucket) }}
           </span>
         </div>
-      </section>
-
-      <section v-if="dashboard.byCategory.length > 0" class="surface-card mb-4 p-4">
-        <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">By category</h2>
-        <ul class="flex flex-col gap-2">
-          <li v-for="category in dashboard.byCategory" :key="category.categoryKey">
-            <div class="flex justify-between text-sm">
-              <span>{{ category.categoryName }}</span>
-              <MoneyAmount :amount="category.amount" :currency="dashboard.currency" size="sm" />
-            </div>
-            <div class="mt-1 h-1.5 rounded-full bg-[var(--surface-sunken)]">
-              <span
-                class="block h-full rounded-full"
-                :style="{
-                  width: `${Math.round(category.share * 100)}%`,
-                  backgroundColor: category.colorHex,
-                }"
-              />
-            </div>
-          </li>
-        </ul>
       </section>
 
       <section v-if="dashboard.byMember.length > 0" class="surface-card p-4">

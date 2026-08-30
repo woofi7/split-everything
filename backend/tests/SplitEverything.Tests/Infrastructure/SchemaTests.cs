@@ -307,15 +307,6 @@ public class SchemaTests(PostgresFixture fixture) : DatabaseTestBase(fixture)
         reloaded.SpentAt.ToUniversalTime().ShouldBe(spentAt.ToUniversalTime());
     }
 
-    [Fact]
-    public async Task System_categories_are_seeded_with_stable_ids()
-    {
-        var groceries = await NewContext().Categories.FirstOrDefaultAsync(c => c.Key == "groceries");
-
-        groceries.ShouldNotBeNull();
-        groceries.Id.ShouldBe(TestData.CategoryId("groceries"));
-        groceries.OwnerUserId.ShouldBeNull();
-    }
 
     private async Task<string?> ScalarAsync(string sql)
     {

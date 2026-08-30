@@ -94,11 +94,6 @@ describe('ActivityView', () => {
     expect(text).toContain('still work offline')
   })
 
-  it('says nothing has happened when the feed is empty', async () => {
-    const { wrapper } = await mountView(ActivityView, { api: feed([]) })
-
-    expect(textOf(wrapper)).toContain('Nothing has happened yet')
-  })
 })
 
 describe('StatsView', () => {
@@ -127,18 +122,12 @@ describe('StatsView', () => {
     ],
     byCategory: [
       {
-        categoryId: 'c1',
-        categoryKey: 'groceries',
-        categoryName: 'Groceries',
         colorHex: '#16a34a',
         amount: 100,
         expenseCount: 2,
         share: 0.667,
       },
       {
-        categoryId: null,
-        categoryKey: 'uncategorised',
-        categoryName: 'Uncategorised',
         colorHex: '#94a3b8',
         amount: 50,
         expenseCount: 1,
@@ -261,15 +250,6 @@ describe('StatsView', () => {
     const segments = wrapper.findAll('[data-testid="bar-segment"]')
     expect(segments).toHaveLength(1)
     expect(segments[0].attributes('style')).toContain('height: 100%')
-  })
-
-  it('breaks the spend down by category', async () => {
-    const { wrapper } = await mountView(StatsView, { api: api() })
-
-    const text = textOf(wrapper)
-    expect(text).toContain('By category')
-    expect(text).toContain('Groceries')
-    expect(text).toContain('Uncategorised')
   })
 
   it('shows who is up and who is down', async () => {

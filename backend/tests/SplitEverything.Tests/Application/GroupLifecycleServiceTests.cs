@@ -32,8 +32,7 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         Guid userId, Guid groupId, Guid payer, decimal amount, string description, params Guid[] participants)
         => Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, description, amount, "CAD", TestData.Jan1, SplitType.Equal,
-            participants.Select(p => new SplitInputDto(p, null)).ToList(),
-            null, null, null, null, null, null, null));
+            participants.Select(p => new SplitInputDto(p, null)).ToList(), null, null, null, null, null, null));
 
     // ---- merge -----------------------------------------------------------
 
@@ -570,7 +569,7 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         var expense = await AddExpenseAsync(user.Id, from.Id, fromMe, 40m, "Misfiled", fromMe, fromBob);
         await Expenses.AddCommentAsync(user.Id, new CreateCommentRequest(expense.Id, "Wrong group", null, null));
         await Expenses.UpdateAsync(user.Id, expense.Id, new UpdateExpenseRequest(
-            null, "Misfiled dinner", null, null, null, null, null, null, null, null, null, null));
+            null, "Misfiled dinner", null, null, null, null, null, null, null, null, null));
 
         var result = await Lifecycle.TransferExpenseAsync(user.Id, new TransferExpenseRequest(
             expense.Id, to.Id, new Dictionary<Guid, Guid> { [fromMe] = toMe, [fromBob] = toBob }));

@@ -32,7 +32,7 @@ public class ActivityActorTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
         await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, me, "Dinner", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(me, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(me, null)], null, null, null, null, null, null));
 
         var feed = await Activity.ListAsync(userId, group.Id, new PageRequest(1, 20));
 
@@ -48,7 +48,7 @@ public class ActivityActorTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, me, "Dinner", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(me, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(me, null)], null, null, null, null, null, null));
 
         var feed = await Activity.ListAsync(userId, group.Id, new PageRequest(1, 20));
         var entry = feed.Items.First(e => e.SubjectId == expense.Id);

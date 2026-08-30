@@ -174,7 +174,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 
 /**
- * The icons a group or a category can be given.
+ * The icons a group can be given.
  *
  * A curated set rather than all two thousand Font Awesome solid icons, for two
  * reasons: importing them all costs about a megabyte of JavaScript in an app that
@@ -388,7 +388,7 @@ export const ICONS: readonly IconChoice[] = [
   { name: faEllipsis.iconName, label: 'Other', keywords: ['more', 'misc', 'miscellaneous'], group: 'Other', definition: faEllipsis },
 ]
 
-/** The icon used when a group or category has none, so the UI never renders a hole. */
+/** The icon used when a group has none, so the UI never renders a hole. */
 export const FALLBACK_ICON = ICONS.find((icon) => icon.label === 'Group') ?? ICONS[0]
 
 const byName = new Map(ICONS.map((icon) => [icon.name, icon]))

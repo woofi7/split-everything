@@ -33,7 +33,7 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
 
     private static CsvColumnMapping BasicMapping() => new(
         DateColumn: 0, DescriptionColumn: 1, AmountColumn: 4,
-        CurrencyColumn: 3, CategoryColumn: 2, PaidByColumn: 5,
+        CurrencyColumn: 3, PaidByColumn: 5,
         ParticipantColumns: null, DateFormat: null, DecimalSeparator: null);
 
     private static CsvCommitRequest CommitInto(

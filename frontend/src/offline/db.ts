@@ -76,7 +76,6 @@ export interface LocalExpense {
   amountInBaseCurrency: number
   exchangeRate: number
   spentAt: string
-  categoryId?: string | null
   splitType: SplitType
   receiptId?: string | null
   notes?: string | null
@@ -120,24 +119,6 @@ export interface LocalComment {
   pending: boolean
 }
 
-/**
- * Kept though nothing writes it yet.
- *
- * The add form no longer asks for a category, so no screen caches these, but the
- * table stays: removing a Dexie store needs a schema version bump, and every
- * install would pay for a migration that buys nothing. The server still has
- * categories, and imports still set them.
- */
-export interface LocalCategory {
-  id: string
-  key: string
-  name: string
-  /** Font Awesome solid icon name, as the API sends it. */
-  iconName: string
-  colorHex: string
-  sortOrder: number
-}
-
 export type OutboxStatus = 'pending' | 'inflight' | 'rejected'
 
 export interface OutboxOperation {
@@ -177,7 +158,6 @@ export class SplitEverythingDb extends Dexie {
   expenses!: Table<LocalExpense, string>
   settlements!: Table<LocalSettlement, string>
   comments!: Table<LocalComment, string>
-  categories!: Table<LocalCategory, string>
   outbox!: Table<OutboxOperation, string>
   conflicts!: Table<LocalConflict, string>
   meta!: Table<MetaRow, string>
@@ -185,6 +165,9 @@ export class SplitEverythingDb extends Dexie {
   constructor() {
     super('split-everything')
 
+    // Version 1 is left exactly as it shipped. Editing it in place would make
+    // Dexie refuse to open a database created by an earlier build, which is every
+    // install already out there.
     this.version(1).stores({
       groups: 'id, name, isArchived',
       expenses: 'id, groupId, spentAt, [groupId+spentAt], categoryId, paidByMemberId, pending',
@@ -196,6 +179,13 @@ export class SplitEverythingDb extends Dexie {
       outbox: 'operationId, sequence, status, groupId, entityId',
       conflicts: 'conflictId, groupId, entityId',
       meta: 'key',
+    })
+
+    // Categories were removed from the app. Only what changed is listed: the
+    // category index goes from expenses, and null deletes the table outright.
+    this.version(2).stores({
+      expenses: 'id, groupId, spentAt, [groupId+spentAt], paidByMemberId, pending',
+      categories: null,
     })
   }
 }
@@ -280,7 +270,6 @@ export async function resetDatabase(): Promise<void> {
     db.expenses.clear(),
     db.settlements.clear(),
     db.comments.clear(),
-    db.categories.clear(),
     db.outbox.clear(),
     db.conflicts.clear(),
     db.meta.clear(),

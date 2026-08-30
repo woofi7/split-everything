@@ -27,8 +27,6 @@ public class Expense : SyncableEntity
 
     public DateTimeOffset SpentAt { get; set; } = DateTimeOffset.UtcNow;
 
-    public Guid? CategoryId { get; set; }
-    public Category? Category { get; set; }
 
     public SplitType SplitType { get; set; } = SplitType.Equal;
 

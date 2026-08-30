@@ -199,9 +199,9 @@ describe('api client', () => {
   it('leaves undefined parameters out of the query string', async () => {
     fetchMock.mockResolvedValue(jsonResponse([]))
 
-    await client.get('/expenses', { groupId: 'group-1', categoryId: undefined })
+    await client.get('/expenses', { groupId: 'group-1', memberId: undefined })
 
-    expect(String(fetchMock.mock.calls[0][0])).not.toContain('categoryId')
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('memberId')
   })
 
   it('uploads a file as multipart', async () => {

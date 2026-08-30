@@ -49,23 +49,9 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
-const rules = [
-  {
-    id: 'rule-1',
-    keyword: 'UBER EATS',
-    categoryId: 'dining',
-    categoryKey: 'dining',
-    suggestedGroupId: null,
-    weight: 1,
-    hitCount: 0,
-    isEnabled: true,
-    isBuiltIn: true,
-  },
-]
 
 const api = (overrides: Record<string, unknown> = {}) =>
   fakeApi({
-    '/import/category-rules': () => rules,
     '/import/duplicates': () => ({ matches: [] }),
     '/import/split-suggestions': () => ({ suggestions: [] }),
     '/import/statement/commit': () => ({ createdExpenses: 1, skippedRows: 0 }),
@@ -113,22 +99,6 @@ describe('ImportView', () => {
     expect(wrapper.findAll('input[type="file"]').length).toBe(2)
   })
 
-  it('loads the local ruleset so it can guess categories', async () => {
-    const client = api()
-    await mountView(ImportView, { api: client })
-
-    expect(client.get).toHaveBeenCalledWith('/import/category-rules')
-  })
-
-  it('still works when the ruleset cannot be loaded', async () => {
-    const client = api()
-    client.get.mockRejectedValue(new Error('offline'))
-
-    const { wrapper } = await mountView(ImportView, { api: client })
-
-    expect(textOf(wrapper)).toContain('A bank or credit card statement')
-  })
-
   it('parses a chosen CSV and shows the rows to review', async () => {
     parseCsv.mockResolvedValue({ rows: [row()], usedOcr: false })
 
@@ -157,15 +127,6 @@ describe('ImportView', () => {
     await chooseFile(wrapper, 'scan.pdf')
 
     expect(textOf(wrapper)).toContain('read from the images')
-  })
-
-  it('suggests a category from the local ruleset', async () => {
-    parseCsv.mockResolvedValue({ rows: [row()], usedOcr: false })
-
-    const { wrapper } = await mountView(ImportView, { api: api() })
-    await chooseFile(wrapper)
-
-    expect(textOf(wrapper)).toContain('dining')
   })
 
   it('starts every row as personal rather than charging a group', async () => {

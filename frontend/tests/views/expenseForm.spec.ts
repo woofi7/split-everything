@@ -298,7 +298,6 @@ describe('ExpenseFormView editing an expense', () => {
     amountInBaseCurrency: 84.32,
     exchangeRate: 1,
     spentAt: '2026-03-14T12:00:00.000Z',
-    categoryId: null,
     splitType: 'Shares' as const,
     receiptId: null,
     notes: null,

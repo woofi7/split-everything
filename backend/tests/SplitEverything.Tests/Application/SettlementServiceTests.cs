@@ -27,8 +27,7 @@ public class SettlementServiceTests(PostgresFixture fixture) : ServiceTestBase(f
     private async Task AddExpenseAsync(Guid userId, Guid groupId, Guid payer, decimal amount, params Guid[] participants)
         => await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, "Shared", amount, "CAD", TestData.Jan1, SplitType.Equal,
-            participants.Select(p => new SplitInputDto(p, null)).ToList(),
-            null, null, null, null, null, null, null));
+            participants.Select(p => new SplitInputDto(p, null)).ToList(), null, null, null, null, null, null));
 
     [Fact]
     public async Task Recording_a_settlement_clears_the_debt_it_pays()
@@ -329,6 +328,5 @@ public class SettlementServiceTests(PostgresFixture fixture) : ServiceTestBase(f
     private async Task AddEuroExpenseAsync(Guid userId, Guid groupId, Guid payer, decimal amount, params Guid[] participants)
         => await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, "Shared", amount, "EUR", TestData.Jan1, SplitType.Equal,
-            participants.Select(p => new SplitInputDto(p, null)).ToList(),
-            null, null, null, null, null, null, null));
+            participants.Select(p => new SplitInputDto(p, null)).ToList(), null, null, null, null, null, null));
 }

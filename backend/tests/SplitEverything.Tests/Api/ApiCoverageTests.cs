@@ -151,7 +151,7 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
     {
         await SignInAsync();
         var group = await CreateGroupAsync("Roommates", "Bob");
-        var mapping = new CsvColumnMapping(0, 1, 4, 3, 2, 5, null, null, null);
+        var mapping = new CsvColumnMapping(0, 1, 4, 3, 5, null, null, null);
         var names = group.Members.ToDictionary(m => m.DisplayName, m => (Guid?)m.Id);
 
         var preview = await PostCsvAsync("/api/import/csv/preview",
@@ -196,7 +196,7 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
         await Client.PostAsJsonAsync("/api/import/statement/commit",
             new StatementCommitRequest([
                 new ConfirmedStatementRow(group.Id, alice, "UBER EATS", 42.50m, "CAD",
-                    TestData.Jan1, null, SplitType.Equal, [new SplitInputDto(alice, null)], "fp-1", null)
+                    TestData.Jan1, SplitType.Equal, [new SplitInputDto(alice, null)], "fp-1", null)
             ], true, null), Json);
 
         var duplicates = await Client.PostAsJsonAsync("/api/import/duplicates",
@@ -213,23 +213,6 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
     }
 
     [Fact]
-    public async Task A_category_rule_can_be_upserted_and_deleted_over_http()
-    {
-        await SignInAsync();
-        var groceries = (await Client.GetFromJsonAsync<List<CategoryRuleDto>>(
-            "/api/import/category-rules", Json))!.First().CategoryId;
-
-        var upserted = await Client.PutAsJsonAsync("/api/import/category-rules",
-            new UpsertCategoryRuleRequest(null, "poissonnerie", groceries, null, true), Json);
-        upserted.EnsureSuccessStatusCode();
-        var rule = await upserted.Content.ReadFromJsonAsync<CategoryRuleDto>(Json);
-        rule!.Keyword.ShouldBe("POISSONNERIE");
-
-        var deleted = await Client.DeleteAsync($"/api/import/category-rules/{rule.Id}");
-        deleted.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-    }
-
-    [Fact]
     public async Task Open_conflicts_are_readable_and_resolvable_over_http()
     {
         await SignInAsync();
@@ -238,7 +221,7 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var created = await Client.PostAsJsonAsync("/api/expenses", new CreateExpenseRequest(
             group.Id, alice, "Original", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null), Json);
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null), Json);
         var expense = await created.Content.ReadFromJsonAsync<ExpenseDto>(Json);
 
         // Two divergent offline edits, both branching from the stored revision.
@@ -277,7 +260,7 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var created = await Client.PostAsJsonAsync("/api/expenses/recurring",
             new CreateRecurringExpenseRequest(
-                group.Id, alice, "Rent", 1200m, "CAD", null, SplitType.Equal,
+                group.Id, alice, "Rent", 1200m, "CAD", SplitType.Equal,
                 [new SplitInputDto(alice, null)], RecurrenceUnit.Month, 1, 1, null,
                 TestData.Jan1, null, null), Json);
         var rule = await created.Content.ReadFromJsonAsync<RecurringExpenseDto>(Json);
@@ -302,7 +285,7 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
         var alice = group.Members.Single().Id;
         var created = await Client.PostAsJsonAsync("/api/expenses", new CreateExpenseRequest(
             group.Id, alice, "Dinner", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null), Json);
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null), Json);
         var expense = await created.Content.ReadFromJsonAsync<ExpenseDto>(Json);
 
         var comment = await Client.PostAsJsonAsync($"/api/expenses/{expense!.Id}/comments",

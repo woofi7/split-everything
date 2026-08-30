@@ -285,10 +285,6 @@ public sealed class AuthService(
             comments = await db.ExpenseComments
                 .Where(c => memberIds.Contains(c.AuthorMemberId))
                 .Select(c => new { c.Id, c.ExpenseId, c.Body, c.CreatedAt })
-                .ToListAsync(ct),
-            categoryRules = await db.CategoryRules
-                .Where(r => r.UserId == userId)
-                .Select(r => new { r.Keyword, r.CategoryId, r.Weight, r.HitCount })
                 .ToListAsync(ct)
         };
 
@@ -317,7 +313,6 @@ public sealed class AuthService(
         await db.RefreshTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
         await db.PushSubscriptions.Where(p => p.UserId == userId).ExecuteDeleteAsync(ct);
         await db.Devices.Where(d => d.UserId == userId).ExecuteDeleteAsync(ct);
-        await db.CategoryRules.Where(r => r.UserId == userId).ExecuteDeleteAsync(ct);
 
         db.Users.Remove(user);
         await db.SaveChangesAsync(ct);

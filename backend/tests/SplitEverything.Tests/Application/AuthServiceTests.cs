@@ -318,7 +318,7 @@ public class AuthServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         await Expenses.CreateAsync(signIn.User.Id, new SplitEverything.Application.Contracts.Expenses.CreateExpenseRequest(
             group.Id, member, "Exportable dinner", 42m, "CAD", TestData.Jan1, SplitType.Equal,
             [new SplitEverything.Application.Contracts.Expenses.SplitInputDto(member, null)],
-            null, null, null, null, null, null, null));
+            null, null, null, null, null, null));
 
         var json = await Auth.ExportMyDataAsync(signIn.User.Id);
 
@@ -354,7 +354,7 @@ public class AuthServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
             group.Id, ownerMember, "Dinner", 100m, "CAD", TestData.Jan1, SplitType.Equal,
             [new SplitEverything.Application.Contracts.Expenses.SplitInputDto(ownerMember, null),
              new SplitEverything.Application.Contracts.Expenses.SplitInputDto(aliceMember.Id, null)],
-            null, null, null, null, null, null, null));
+            null, null, null, null, null, null));
 
         await Auth.DeleteMyAccountAsync(signIn.User.Id);
 

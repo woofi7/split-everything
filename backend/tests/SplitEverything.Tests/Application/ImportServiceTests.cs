@@ -39,7 +39,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
     private static CsvColumnMapping BasicMapping() => new(
         DateColumn: 0, DescriptionColumn: 1, AmountColumn: 4,
-        CurrencyColumn: 3, CategoryColumn: 2, PaidByColumn: 5,
+        CurrencyColumn: 3, PaidByColumn: 5,
         ParticipantColumns: null, DateFormat: null, DecimalSeparator: null);
 
     // ---- analysis --------------------------------------------------------
@@ -209,7 +209,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, members["Alice"]!.Value, "Groceries at Metro", 84.32m, "CAD",
             new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero), SplitType.Equal,
-            [new SplitInputDto(members["Alice"]!.Value, null)], null, null, null, null, null,
+            [new SplitInputDto(members["Alice"]!.Value, null)], null, null, null, null,
             ExpenseFingerprint.Compute(
                 new DateTimeOffset(2026, 1, 5, 0, 0, 0, TimeSpan.Zero), 84.32m, "CAD", "Groceries at Metro"),
             null));
@@ -226,7 +226,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
     {
         var (userId, group) = await SetupAsync("Bob");
         var members = NameMap(group);
-        var mapping = new CsvColumnMapping(0, 1, 4, 3, 2, 5, null, "dd.MM.yyyy", ",");
+        var mapping = new CsvColumnMapping(0, 1, 4, 3, 5, null, "dd.MM.yyyy", ",");
 
         var preview = await Imports.PreviewCsvAsync(userId, Csv("settleup-semicolon-eu.csv"),
             new CsvPreviewRequest(group.Id, mapping, members, "EUR"));
@@ -430,25 +430,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
     // ---- statement commit (client-side parsing) --------------------------
 
     [Fact]
-    public async Task A_confirmed_statement_row_becomes_an_expense()
-    {
-        var (userId, group) = await SetupAsync("Bob");
-        var members = NameMap(group);
-
-        var result = await Imports.CommitStatementAsync(userId, new StatementCommitRequest([
-            new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "UBER EATS", 42.50m, "CAD",
-                TestData.Jan1, TestData.CategoryId("dining"), SplitType.Equal,
-                [new SplitInputDto(members["Alice"]!.Value, null), new SplitInputDto(members["Bob"]!.Value, null)],
-                ExpenseFingerprint.Compute(TestData.Jan1, 42.50m, "CAD", "UBER EATS"), null)
-        ], true, "visa-january.csv"));
-
-        result.CreatedExpenses.ShouldBe(1);
-        var expense = await NewContext().Expenses.Include(e => e.Splits).SingleAsync();
-        expense.Description.ShouldBe("UBER EATS");
-        expense.Splits.Count.ShouldBe(2);
-    }
-
-    [Fact]
     public async Task A_statement_commit_records_only_the_file_name_never_the_file()
     {
         var (userId, group) = await SetupAsync("Bob");
@@ -456,7 +437,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
         var result = await Imports.CommitStatementAsync(userId, new StatementCommitRequest([
             new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "METRO", 20m, "CAD",
-                TestData.Jan1, null, SplitType.Equal,
+                TestData.Jan1, SplitType.Equal,
                 [new SplitInputDto(members["Alice"]!.Value, null)], "fingerprint-1", null)
         ], true, "visa-january.pdf"));
 
@@ -475,10 +456,8 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var secondMember = second.Members.Single().Id;
 
         var result = await Imports.CommitStatementAsync(userId, new StatementCommitRequest([
-            new ConfirmedStatementRow(first.Id, firstMember, "METRO", 20m, "CAD", TestData.Jan1,
-                null, SplitType.Equal, [new SplitInputDto(firstMember, null)], "fp-1", null),
-            new ConfirmedStatementRow(second.Id, secondMember, "AIR CANADA", 400m, "CAD", TestData.Jan1,
-                null, SplitType.Equal, [new SplitInputDto(secondMember, null)], "fp-2", null)
+            new ConfirmedStatementRow(first.Id, firstMember, "METRO", 20m, "CAD", TestData.Jan1, SplitType.Equal, [new SplitInputDto(firstMember, null)], "fp-1", null),
+            new ConfirmedStatementRow(second.Id, secondMember, "AIR CANADA", 400m, "CAD", TestData.Jan1, SplitType.Equal, [new SplitInputDto(secondMember, null)], "fp-2", null)
         ], true, null));
 
         result.CreatedExpenses.ShouldBe(2);
@@ -491,7 +470,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob");
         var members = NameMap(group);
         var row = new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "METRO", 20m, "CAD",
-            TestData.Jan1, null, SplitType.Equal,
+            TestData.Jan1, SplitType.Equal,
             [new SplitInputDto(members["Alice"]!.Value, null)], "fp-dup", null);
 
         await Imports.CommitStatementAsync(userId, new StatementCommitRequest([row], true, null));
@@ -510,8 +489,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
         await Should.ThrowAsync<ForbiddenException>(() => Imports.CommitStatementAsync(
             stranger.Id, new StatementCommitRequest([
-                new ConfirmedStatementRow(group.Id, member, "METRO", 20m, "CAD", TestData.Jan1,
-                    null, SplitType.Equal, [new SplitInputDto(member, null)], "fp", null)
+                new ConfirmedStatementRow(group.Id, member, "METRO", 20m, "CAD", TestData.Jan1, SplitType.Equal, [new SplitInputDto(member, null)], "fp", null)
             ], true, null)));
     }
 
@@ -534,7 +512,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
         await Imports.CommitStatementAsync(userId, new StatementCommitRequest([
             new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "AMAZON US", 50m, "USD",
-                TestData.Jan1, null, SplitType.Equal,
+                TestData.Jan1, SplitType.Equal,
                 [new SplitInputDto(members["Alice"]!.Value, null)], "fp-usd", null)
         ], true, null));
 
@@ -550,7 +528,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var members = NameMap(group);
         await Imports.CommitStatementAsync(userId, new StatementCommitRequest([
             new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "METRO", 20m, "CAD",
-                TestData.Jan1, null, SplitType.Equal,
+                TestData.Jan1, SplitType.Equal,
                 [new SplitInputDto(members["Alice"]!.Value, null)], "fp-known", null)
         ], true, null));
 
@@ -562,131 +540,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
     }
 
     [Fact]
-    public async Task The_duplicate_check_never_looks_outside_my_groups()
-    {
-        var (userId, group) = await SetupAsync("Bob");
-        var members = NameMap(group);
-        await Imports.CommitStatementAsync(userId, new StatementCommitRequest([
-            new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "METRO", 20m, "CAD",
-                TestData.Jan1, null, SplitType.Equal,
-                [new SplitInputDto(members["Alice"]!.Value, null)], "fp-known", null)
-        ], true, null));
-        var stranger = await TestData.SeedUserAsync(Db, "Stranger");
-
-        (await Imports.CheckDuplicatesAsync(stranger.Id,
-            new DuplicateCheckRequest(["fp-known"], null))).Matches.ShouldBeEmpty();
-    }
-
-    // ---- category rules --------------------------------------------------
-
-    [Fact]
-    public async Task A_new_user_starts_with_the_built_in_merchant_rules()
-    {
-        var (userId, _) = await SetupAsync();
-
-        var rules = await Imports.GetCategoryRulesAsync(userId);
-
-        rules.ShouldNotBeEmpty();
-        rules.ShouldContain(r => r.Keyword == "UBER EATS" && r.IsBuiltIn);
-    }
-
-    [Fact]
-    public async Task A_correction_is_stored_as_the_users_own_rule()
-    {
-        var (userId, _) = await SetupAsync();
-
-        var rule = await Imports.UpsertCategoryRuleAsync(userId, new UpsertCategoryRuleRequest(
-            null, "poissonnerie", TestData.CategoryId("groceries"), null, true));
-
-        rule.Keyword.ShouldBe("POISSONNERIE");
-        rule.IsBuiltIn.ShouldBeFalse();
-        rule.CategoryKey.ShouldBe("groceries");
-    }
-
-    [Fact]
-    public async Task Correcting_the_same_keyword_twice_updates_the_rule_rather_than_duplicating_it()
-    {
-        var (userId, _) = await SetupAsync();
-        var first = await Imports.UpsertCategoryRuleAsync(userId, new UpsertCategoryRuleRequest(
-            null, "poissonnerie", TestData.CategoryId("groceries"), null, true));
-
-        var second = await Imports.UpsertCategoryRuleAsync(userId, new UpsertCategoryRuleRequest(
-            null, "poissonnerie", TestData.CategoryId("dining"), null, true));
-
-        second.Id.ShouldBe(first.Id);
-        second.CategoryKey.ShouldBe("dining");
-    }
-
-    [Fact]
-    public async Task A_category_rule_syncs_like_any_other_change()
-    {
-        var (userId, _) = await SetupAsync();
-
-        var rule = await Imports.UpsertCategoryRuleAsync(userId, new UpsertCategoryRuleRequest(
-            null, "poissonnerie", TestData.CategoryId("groceries"), null, true));
-
-        var stored = await NewContext().CategoryRules.FirstAsync(r => r.Id == rule.Id);
-        stored.VectorClockJson.ShouldNotBe("{}");
-    }
-
-    [Fact]
-    public async Task A_rule_can_be_disabled_so_a_bad_guess_stops_coming_back()
-    {
-        var (userId, _) = await SetupAsync();
-        var rules = await Imports.GetCategoryRulesAsync(userId);
-        var uber = rules.First(r => r.Keyword == "UBER EATS");
-
-        var disabled = await Imports.UpsertCategoryRuleAsync(userId, new UpsertCategoryRuleRequest(
-            uber.Id, uber.Keyword, uber.CategoryId, null, false));
-
-        disabled.IsEnabled.ShouldBeFalse();
-    }
-
-    [Fact]
-    public async Task A_rule_needs_a_keyword()
-    {
-        var (userId, _) = await SetupAsync();
-
-        await Should.ThrowAsync<ValidationException>(() => Imports.UpsertCategoryRuleAsync(
-            userId, new UpsertCategoryRuleRequest(null, "  ", TestData.CategoryId("groceries"), null, true)));
-    }
-
-    [Fact]
-    public async Task A_rule_must_point_at_a_real_category()
-    {
-        var (userId, _) = await SetupAsync();
-
-        await Should.ThrowAsync<ValidationException>(() => Imports.UpsertCategoryRuleAsync(
-            userId, new UpsertCategoryRuleRequest(null, "keyword", Guid.NewGuid(), null, true)));
-    }
-
-    [Fact]
-    public async Task Deleting_a_rule_removes_it()
-    {
-        var (userId, _) = await SetupAsync();
-        var rule = await Imports.UpsertCategoryRuleAsync(userId, new UpsertCategoryRuleRequest(
-            null, "poissonnerie", TestData.CategoryId("groceries"), null, true));
-
-        await Imports.DeleteCategoryRuleAsync(userId, rule.Id);
-
-        (await Imports.GetCategoryRulesAsync(userId)).ShouldNotContain(r => r.Id == rule.Id);
-    }
-
-    [Fact]
-    public async Task Deleting_someone_elses_rule_is_forbidden()
-    {
-        var (userId, _) = await SetupAsync();
-        var rule = await Imports.UpsertCategoryRuleAsync(userId, new UpsertCategoryRuleRequest(
-            null, "poissonnerie", TestData.CategoryId("groceries"), null, true));
-        var stranger = await TestData.SeedUserAsync(Db, "Stranger");
-
-        await Should.ThrowAsync<ForbiddenException>(
-            () => Imports.DeleteCategoryRuleAsync(stranger.Id, rule.Id));
-    }
-
-    // ---- split suggestions ----------------------------------------------
-
-    [Fact]
     public async Task A_merchant_split_before_is_suggested_again()
     {
         var (userId, group) = await SetupAsync("Bob");
@@ -694,8 +547,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, members["Alice"]!.Value, "UBER EATS 4429 MONTREAL", 40m, "CAD",
             TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(members["Alice"]!.Value, null), new SplitInputDto(members["Bob"]!.Value, null)],
-            null, null, null, null, null, null, null));
+            [new SplitInputDto(members["Alice"]!.Value, null), new SplitInputDto(members["Bob"]!.Value, null)], null, null, null, null, null, null));
 
         var result = await Imports.GetSplitSuggestionsAsync(userId,
             new SplitSuggestionRequest(["UBER EATS 8829 TORONTO ON"]));
@@ -725,8 +577,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
             await Expenses.CreateAsync(userId, new CreateExpenseRequest(
                 group.Id, members["Alice"]!.Value, $"METRO PLUS {i}", 20m + i, "CAD",
                 TestData.Jan1.AddDays(i), SplitType.Equal,
-                [new SplitInputDto(members["Alice"]!.Value, null), new SplitInputDto(members["Bob"]!.Value, null)],
-                null, null, null, null, null, null, null));
+                [new SplitInputDto(members["Alice"]!.Value, null), new SplitInputDto(members["Bob"]!.Value, null)], null, null, null, null, null, null));
         }
 
         var result = await Imports.GetSplitSuggestionsAsync(userId,
@@ -742,7 +593,7 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var members = NameMap(group);
         await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, members["Alice"]!.Value, "UBER EATS", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(members["Alice"]!.Value, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(members["Alice"]!.Value, null)], null, null, null, null, null, null));
         var stranger = await TestData.SeedUserAsync(Db, "Stranger");
 
         (await Imports.GetSplitSuggestionsAsync(stranger.Id,

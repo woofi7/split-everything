@@ -37,7 +37,6 @@ public sealed class ImportService(
         ["description"] = ["purpose", "description", "what", "zweck", "note", "item", "libelle", "libelle"],
         ["amount"] = ["amount", "betrag", "total", "sum", "montant", "importe", "value"],
         ["currency"] = ["currency", "waehrung", "wahrung", "devise", "moneda", "ccy"],
-        ["category"] = ["category", "kategorie", "categorie", "categoria", "type"],
         ["paidBy"] = ["who paid", "paid by", "payer", "bezahlt von", "paye par", "pagado por"],
         ["participants"] = ["for whom", "participants", "split with", "fuer wen", "fur wen", "pour qui", "beneficiaries"],
         ["splitAmounts"] = ["split amounts", "split amount", "shares", "montants"],
@@ -300,7 +299,6 @@ public sealed class ImportService(
                 ExchangeRate = conversion.Rate,
                 ExchangeRateAsOf = conversion.RateAsOf,
                 SpentAt = row.SpentAt!.Value,
-                CategoryId = await ResolveCategoryAsync(row.CategoryName, ct),
                 SplitType = SplitType.Equal,
                 OriginLineageId = group.LineageId,
                 ImportFingerprint = row.Fingerprint,
@@ -458,7 +456,6 @@ public sealed class ImportService(
                 ExchangeRate = conversion.Rate,
                 ExchangeRateAsOf = conversion.RateAsOf,
                 SpentAt = row.SpentAt,
-                CategoryId = row.CategoryId,
                 SplitType = row.SplitType,
                 Notes = row.Notes,
                 OriginLineageId = group.LineageId,
@@ -515,180 +512,6 @@ public sealed class ImportService(
     {
         var matches = await FindDuplicatesAsync(userId, request.Fingerprints, request.GroupId, ct);
         return new DuplicateCheckResult(matches.Values.ToList());
-    }
-
-    // ---- category rules --------------------------------------------------
-
-    public async Task<IReadOnlyList<CategoryRuleDto>> GetCategoryRulesAsync(
-        Guid userId, CancellationToken ct = default)
-    {
-        await EnsureBuiltInRulesAsync(userId, ct);
-
-        return await db.CategoryRules
-            .Where(r => r.UserId == userId && !r.IsDeleted)
-            .OrderByDescending(r => r.Weight)
-            .ThenBy(r => r.Keyword)
-            .Select(r => new CategoryRuleDto(
-                r.Id, r.Keyword, r.CategoryId, r.Category!.Key, r.SuggestedGroupId,
-                r.Weight, r.HitCount, r.IsEnabled, r.IsBuiltIn))
-            .ToListAsync(ct);
-    }
-
-    public async Task<CategoryRuleDto> UpsertCategoryRuleAsync(
-        Guid userId, UpsertCategoryRuleRequest request, CancellationToken ct = default)
-    {
-        var keyword = GroupAccess.RequireText(request.Keyword, "Keyword", 120).ToUpperInvariant();
-
-        var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == request.CategoryId, ct)
-                       ?? throw new ValidationException("That category does not exist.");
-
-        if (request.SuggestedGroupId is { } groupId)
-            await GroupAccess.RequireMemberAsync(db, userId, groupId, ct);
-
-        var rule = request.Id is { } id
-            ? await db.CategoryRules.FirstOrDefaultAsync(r => r.Id == id, ct)
-            : await db.CategoryRules.FirstOrDefaultAsync(r => r.UserId == userId && r.Keyword == keyword, ct);
-
-        if (rule is not null && rule.UserId != userId)
-            throw new ForbiddenException("That rule belongs to another account.");
-
-        if (rule is null)
-        {
-            rule = new CategoryRule
-            {
-                UserId = userId,
-                Keyword = keyword,
-                CategoryId = request.CategoryId,
-                IsBuiltIn = false,
-                CreatedAt = clock.UtcNow
-            };
-            db.CategoryRules.Add(rule);
-        }
-        else
-        {
-            rule.Keyword = keyword;
-            rule.CategoryId = request.CategoryId;
-        }
-
-        rule.SuggestedGroupId = request.SuggestedGroupId;
-        rule.IsEnabled = request.IsEnabled;
-        rule.UpdatedAt = clock.UtcNow;
-
-        // A rule is user preference data and syncs like any other change, so a
-        // correction on the phone reaches the laptop.
-        rule.Clock = rule.Clock.Tick(GroupService.DeviceFor(userId));
-        rule.LastWriterDeviceId = GroupService.DeviceFor(userId);
-
-        await db.SaveChangesAsync(ct);
-        db.ChangeTracker.Clear();
-
-        return new CategoryRuleDto(rule.Id, rule.Keyword, rule.CategoryId, category.Key,
-            rule.SuggestedGroupId, rule.Weight, rule.HitCount, rule.IsEnabled, rule.IsBuiltIn);
-    }
-
-    public async Task DeleteCategoryRuleAsync(Guid userId, Guid ruleId, CancellationToken ct = default)
-    {
-        var rule = await db.CategoryRules.FirstOrDefaultAsync(r => r.Id == ruleId, ct)
-                   ?? throw new NotFoundException($"Rule {ruleId}");
-
-        if (rule.UserId != userId)
-            throw new ForbiddenException("That rule belongs to another account.");
-
-        db.CategoryRules.Remove(rule);
-        await db.SaveChangesAsync(ct);
-        db.ChangeTracker.Clear();
-    }
-
-    public async Task<SplitSuggestionResult> GetSplitSuggestionsAsync(
-        Guid userId, SplitSuggestionRequest request, CancellationToken ct = default)
-    {
-        var myGroupIds = await db.GroupMembers
-            .Where(m => m.UserId == userId && m.Status == MembershipStatus.Active && !m.IsDeleted)
-            .Select(m => m.GroupId)
-            .ToListAsync(ct);
-
-        if (myGroupIds.Count == 0) return new SplitSuggestionResult([]);
-
-        // Only the user's own history is consulted, and only in aggregate: this
-        // returns how they usually split a merchant, never anyone else's data.
-        var history = await db.Expenses
-            .Where(e => myGroupIds.Contains(e.GroupId) && !e.IsDeleted)
-            .Select(e => new
-            {
-                e.Id, e.GroupId, GroupName = e.Group!.Name, e.Description,
-                e.SplitType, e.PaidByMemberId, e.CategoryId, e.SpentAt,
-                Splits = e.Splits.Where(s => !s.IsDeleted)
-                    .Select(s => new { s.MemberId, s.InputValue }).ToList()
-            })
-            .ToListAsync(ct);
-
-        var byMerchant = history
-            .GroupBy(e => ExpenseFingerprint.NormalizeDescription(e.Description), StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
-
-        var suggestions = new List<SplitSuggestionDto>();
-
-        foreach (var merchant in request.Merchants.Distinct())
-        {
-            var key = ExpenseFingerprint.NormalizeDescription(merchant);
-            if (key.Length == 0 || !byMerchant.TryGetValue(key, out var matches)) continue;
-
-            // The split shape used most often wins; ties go to the most recent.
-            var best = matches
-                .GroupBy(e => new
-                {
-                    e.GroupId,
-                    e.SplitType,
-                    Members = string.Join(",", e.Splits.Select(s => s.MemberId).OrderBy(id => id))
-                })
-                .OrderByDescending(g => g.Count())
-                .ThenByDescending(g => g.Max(e => e.SpentAt))
-                .First();
-
-            var sample = best.OrderByDescending(e => e.SpentAt).First();
-
-            suggestions.Add(new SplitSuggestionDto(
-                key, sample.GroupId, sample.GroupName, sample.SplitType,
-                sample.Splits.Select(s => new SplitInputDto(s.MemberId, s.InputValue)).ToList(),
-                sample.PaidByMemberId, sample.CategoryId,
-                best.Count(), best.Max(e => e.SpentAt)));
-        }
-
-        return new SplitSuggestionResult(suggestions);
-    }
-
-    public async Task RollbackBatchAsync(Guid userId, Guid batchId, CancellationToken ct = default)
-    {
-        var batch = await db.ImportBatches.FirstOrDefaultAsync(b => b.Id == batchId, ct)
-                    ?? throw new NotFoundException($"Import batch {batchId}");
-
-        if (batch.ImportedByUserId != userId)
-            throw new ForbiddenException("That import was made by someone else.");
-        if (batch.RolledBackAt is not null)
-            throw new ValidationException("That import has already been undone.");
-
-        var expenses = await db.Expenses
-            .Include(e => e.Splits)
-            .Where(e => e.ImportBatchId == batchId && !e.IsDeleted)
-            .ToListAsync(ct);
-
-        var deviceId = GroupService.DeviceFor(userId);
-
-        foreach (var expense in expenses)
-        {
-            await writer.RecordAsync(expense, SyncEntityType.Expense, expense.GroupId,
-                SyncOperation.Delete, deviceId, userId, ExpenseService.ExpensePayload(expense), ct: ct);
-
-            foreach (var split in expense.Splits.Where(s => !s.IsDeleted))
-            {
-                split.IsDeleted = true;
-                split.DeletedAt = clock.UtcNow;
-            }
-        }
-
-        batch.RolledBackAt = clock.UtcNow;
-        await db.SaveChangesAsync(ct);
-        db.ChangeTracker.Clear();
     }
 
     // ---- internals -------------------------------------------------------
@@ -806,14 +629,8 @@ public sealed class ImportService(
                 rowCurrency ?? "XXX",
                 description);
 
-            var categoryName = mapping.CategoryColumn is { } categoryColumn
-                ? Cell(raw, categoryColumn)?.Trim()
-                : null;
-            // A cell holding only spaces is not a category.
-            if (string.IsNullOrWhiteSpace(categoryName)) categoryName = null;
-
             rows.Add(new ParsedExpenseRow(
-                i + 1, spentAt, description, amount, rowCurrency, categoryName,
+                i + 1, spentAt, description, amount, rowCurrency,
                 payerName, payerId, participantNames, participantIds,
                 fingerprint, false, null, problems, splitAmounts, isSettlement));
         }
@@ -889,60 +706,96 @@ public sealed class ImportService(
         return null;
     }
 
-    private async Task<Guid?> ResolveCategoryAsync(string? name, CancellationToken ct)
+    public async Task<SplitSuggestionResult> GetSplitSuggestionsAsync(
+        Guid userId, SplitSuggestionRequest request, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(name)) return null;
-        var trimmed = name.Trim();
+        var myGroupIds = await db.GroupMembers
+            .Where(m => m.UserId == userId && m.Status == MembershipStatus.Active && !m.IsDeleted)
+            .Select(m => m.GroupId)
+            .ToListAsync(ct);
 
-        var byKey = await db.Categories
-            .Where(c => c.OwnerUserId == null && c.Key == trimmed.ToLowerInvariant())
-            .Select(c => (Guid?)c.Id)
-            .FirstOrDefaultAsync(ct);
-        if (byKey is not null) return byKey;
+        if (myGroupIds.Count == 0) return new SplitSuggestionResult([]);
 
-        return await db.Categories
-            .Where(c => c.OwnerUserId == null && EF.Functions.ILike(c.Name, trimmed))
-            .Select(c => (Guid?)c.Id)
-            .FirstOrDefaultAsync(ct);
+        // Only the user's own history is consulted, and only in aggregate: this
+        // returns how they usually split a merchant, never anyone else's data.
+        var history = await db.Expenses
+            .Where(e => myGroupIds.Contains(e.GroupId) && !e.IsDeleted)
+            .Select(e => new
+            {
+                e.Id, e.GroupId, GroupName = e.Group!.Name, e.Description,
+                e.SplitType, e.PaidByMemberId, e.SpentAt,
+                Splits = e.Splits.Where(s => !s.IsDeleted)
+                    .Select(s => new { s.MemberId, s.InputValue }).ToList()
+            })
+            .ToListAsync(ct);
+
+        var byMerchant = history
+            .GroupBy(e => ExpenseFingerprint.NormalizeDescription(e.Description), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var suggestions = new List<SplitSuggestionDto>();
+
+        foreach (var merchant in request.Merchants.Distinct())
+        {
+            var key = ExpenseFingerprint.NormalizeDescription(merchant);
+            if (key.Length == 0 || !byMerchant.TryGetValue(key, out var matches)) continue;
+
+            // The split shape used most often wins; ties go to the most recent.
+            var best = matches
+                .GroupBy(e => new
+                {
+                    e.GroupId,
+                    e.SplitType,
+                    Members = string.Join(",", e.Splits.Select(s => s.MemberId).OrderBy(id => id))
+                })
+                .OrderByDescending(g => g.Count())
+                .ThenByDescending(g => g.Max(e => e.SpentAt))
+                .First();
+
+            var sample = best.OrderByDescending(e => e.SpentAt).First();
+
+            suggestions.Add(new SplitSuggestionDto(
+                key, sample.GroupId, sample.GroupName, sample.SplitType,
+                sample.Splits.Select(s => new SplitInputDto(s.MemberId, s.InputValue)).ToList(),
+                sample.PaidByMemberId,
+                best.Count(), best.Max(e => e.SpentAt)));
+        }
+
+        return new SplitSuggestionResult(suggestions);
     }
 
-    /// <summary>
-    /// Seeds the starter merchant ruleset the first time a user opens the importer.
-    /// Done lazily rather than at sign-up so the built-in list can grow without a
-    /// migration for existing accounts.
-    /// </summary>
-    private async Task EnsureBuiltInRulesAsync(Guid userId, CancellationToken ct)
+    public async Task RollbackBatchAsync(Guid userId, Guid batchId, CancellationToken ct = default)
     {
-        var existing = await db.CategoryRules
-            .Where(r => r.UserId == userId)
-            .Select(r => r.Keyword)
+        var batch = await db.ImportBatches.FirstOrDefaultAsync(b => b.Id == batchId, ct)
+                    ?? throw new NotFoundException($"Import batch {batchId}");
+
+        if (batch.ImportedByUserId != userId)
+            throw new ForbiddenException("That import was made by someone else.");
+        if (batch.RolledBackAt is not null)
+            throw new ValidationException("That import has already been undone.");
+
+        var expenses = await db.Expenses
+            .Include(e => e.Splits)
+            .Where(e => e.ImportBatchId == batchId && !e.IsDeleted)
             .ToListAsync(ct);
-        var have = existing.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var added = false;
-        foreach (var (keyword, categoryKey) in CategorySeed.DefaultMerchantRules)
+        var deviceId = GroupService.DeviceFor(userId);
+
+        foreach (var expense in expenses)
         {
-            if (have.Contains(keyword)) continue;
+            await writer.RecordAsync(expense, SyncEntityType.Expense, expense.GroupId,
+                SyncOperation.Delete, deviceId, userId, ExpenseService.ExpensePayload(expense), ct: ct);
 
-            db.CategoryRules.Add(new CategoryRule
+            foreach (var split in expense.Splits.Where(s => !s.IsDeleted))
             {
-                UserId = userId,
-                Keyword = keyword.ToUpperInvariant(),
-                CategoryId = CategorySeed.DeterministicId(categoryKey),
-                IsBuiltIn = true,
-                IsEnabled = true,
-                Weight = 1,
-                CreatedAt = clock.UtcNow,
-                UpdatedAt = clock.UtcNow
-            });
-            added = true;
+                split.IsDeleted = true;
+                split.DeletedAt = clock.UtcNow;
+            }
         }
 
-        if (added)
-        {
-            await db.SaveChangesAsync(ct);
-            db.ChangeTracker.Clear();
-        }
+        batch.RolledBackAt = clock.UtcNow;
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
     }
 
     private static string? Cell(string[] row, int? index)

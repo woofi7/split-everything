@@ -35,7 +35,7 @@ public class SpendOverTimeByMemberTests(PostgresFixture fixture) : ServiceTestBa
         string description = "Something")
         => await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, description, amount, "CAD", spentAt, SplitType.Equal,
-            [new SplitInputDto(payer, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(payer, null)], null, null, null, null, null, null));
 
     [Fact]
     public async Task Each_bucket_names_who_paid_within_it()

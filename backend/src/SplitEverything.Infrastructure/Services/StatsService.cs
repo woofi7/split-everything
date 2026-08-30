@@ -41,7 +41,7 @@ public sealed class StatsService(
         if (scope.GroupIds.Count == 0)
         {
             return new StatsDashboardDto(scope.Currency, 0m, 0m, 0m, 0,
-                query.From, query.To, [], [], [], []);
+                query.From, query.To, [], [], []);
         }
 
         var expenses = await db.Expenses
@@ -54,11 +54,6 @@ public sealed class StatsService(
                 e.GroupId,
                 e.SpentAt,
                 e.AmountInBaseCurrency,
-                e.CategoryId,
-                CategoryKey = e.Category == null ? null : e.Category.Key,
-                CategoryName = e.Category == null ? null : e.Category.Name,
-                CategoryIcon = e.Category == null ? null : e.Category.IconName,
-                CategoryColor = e.Category == null ? null : e.Category.ColorHex,
                 e.PaidByMemberId,
                 Splits = e.Splits.Where(s => !s.IsDeleted)
                     .Select(s => new { s.MemberId, s.AmountInBaseCurrency }).ToList()
@@ -129,25 +124,6 @@ public sealed class StatsService(
             })
             .ToList();
 
-        var byCategory = expenses
-            .GroupBy(e => new { e.CategoryId, e.CategoryKey, e.CategoryName, e.CategoryIcon, e.CategoryColor })
-            .Select(g =>
-            {
-                var amount = CurrencyPrecision.Round(
-                    g.Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency)), scope.Currency);
-                return new CategorySpendDto(
-                    g.Key.CategoryId,
-                    g.Key.CategoryKey ?? "uncategorised",
-                    g.Key.CategoryName ?? "Uncategorised",
-                    g.Key.CategoryIcon ?? "dot",
-                    g.Key.CategoryColor ?? "#94a3b8",
-                    amount,
-                    g.Count(),
-                    totalSpend == 0m ? 0m : Math.Round(amount / totalSpend, 4));
-            })
-            .OrderByDescending(c => c.Amount)
-            .ToList();
-
         var byMember = members
             .Select(member =>
             {
@@ -187,7 +163,7 @@ public sealed class StatsService(
             CurrencyPrecision.Round(myPaid, scope.Currency),
             expenses.Count,
             query.From, query.To,
-            spendOverTime, byCategory, byMember, debtTrends);
+            spendOverTime, byMember, debtTrends);
     }
 
     private sealed record Scope(List<Guid> GroupIds, Dictionary<Guid, string> GroupCurrencies, string Currency);

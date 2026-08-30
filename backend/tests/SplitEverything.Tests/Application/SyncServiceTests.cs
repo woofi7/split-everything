@@ -114,8 +114,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, bob) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Original", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null), new SplitInputDto(bob, null)],
-            null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null), new SplitInputDto(bob, null)], null, null, null, null, null, null));
 
         // The device saw the stored revision and edited on top of it.
         var newer = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceB] = 1 };
@@ -138,7 +137,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, bob) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Current", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         // A clock strictly behind what is stored: some other device already carried
         // the group past this revision.
@@ -162,7 +161,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, bob) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Original", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         // Both devices branched from the stored revision, neither saw the other.
         var fromA = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceA] = 9 };
@@ -189,7 +188,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Original", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         var fromA = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceA] = 9 };
         var fromB = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceB] = 9 };
@@ -211,7 +210,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Original", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         var fromA = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceA] = 9 };
         var fromB = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceB] = 9 };
@@ -376,7 +375,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Doomed", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
         var newer = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceB] = 1 };
 
         await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
@@ -414,7 +413,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Dinner", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
         var commentId = Guid.CreateVersion7();
         var payload = JsonSerializer.Serialize(new
         {
@@ -452,7 +451,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, _) = await SetupAsync();
         await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Dinner", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         var result = await Sync.PullAsync(userId, new SyncPullRequest(
             TestData.DeviceB, new Dictionary<Guid, long> { [group.Id] = 0 }));
@@ -471,7 +470,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
 
         await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "New expense", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         var second = await Sync.PullAsync(userId, new SyncPullRequest(
             TestData.DeviceB, new Dictionary<Guid, long> { [group.Id] = cursor }));
@@ -528,7 +527,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         {
             await Expenses.CreateAsync(userId, new CreateExpenseRequest(
                 group.Id, alice, $"Expense {i}", 10m, "CAD", TestData.Jan1, SplitType.Equal,
-                [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+                [new SplitInputDto(alice, null)], null, null, null, null, null, null));
         }
 
         var result = await Sync.PullAsync(userId, new SyncPullRequest(
@@ -544,7 +543,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (userId, group, alice, _) = await SetupAsync();
         await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Dinner", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         var result = await Sync.PullAsync(userId, new SyncPullRequest(
             TestData.DeviceB, new Dictionary<Guid, long> { [group.Id] = 0 }, MaxEntries: 2));
@@ -603,7 +602,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
     {
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, alice, "Original", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         var fromA = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceA] = 9 };
         var fromB = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceB] = 9 };
@@ -786,7 +785,7 @@ public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         var json = JsonSerializer.Serialize(new
         {
@@ -815,7 +814,7 @@ public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
         var json = JsonSerializer.Serialize(new
         {
@@ -907,7 +906,7 @@ public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
         var comment = await Expenses.AddCommentAsync(userId,
             new CreateCommentRequest(expense.Id, "First", null, null));
 
@@ -935,7 +934,7 @@ public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
         var comment = await Expenses.AddCommentAsync(userId,
             new CreateCommentRequest(expense.Id, "Doomed", null, null));
 
@@ -982,7 +981,7 @@ public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group, alice, _) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Dinner", 10m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
         var comment = await Expenses.AddCommentAsync(userId,
             new CreateCommentRequest(expense.Id, "First", null, null));
         var stored = await Db.ExpenseComments.FirstAsync(c => c.Id == comment.Id);

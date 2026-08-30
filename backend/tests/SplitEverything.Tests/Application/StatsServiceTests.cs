@@ -36,7 +36,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         => Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, "Expense", amount, "CAD", spentAt, SplitType.Equal,
             participants.Select(p => new SplitInputDto(p, null)).ToList(),
-            categoryKey is null ? null : TestData.CategoryId(categoryKey),
             null, null, null, null, null, null));
 
     [Fact]
@@ -99,44 +98,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
     }
 
     [Fact]
-    public async Task Spending_by_category_totals_each_category()
-    {
-        var (userId, group, alice, bob) = await SetupAsync();
-        await AddAsync(userId, group.Id, alice, 60m, TestData.Jan1, "groceries", alice, bob);
-        await AddAsync(userId, group.Id, alice, 40m, TestData.Jan1, "dining", alice, bob);
-
-        var dashboard = await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id));
-
-        var groceries = dashboard.ByCategory.First(c => c.CategoryKey == "groceries");
-        groceries.Amount.ShouldBe(60m);
-        groceries.Share.ShouldBe(0.6m);
-        dashboard.ByCategory.Sum(c => c.Amount).ShouldBe(100m);
-    }
-
-    [Fact]
-    public async Task Spending_by_category_is_ordered_biggest_first()
-    {
-        var (userId, group, alice, bob) = await SetupAsync();
-        await AddAsync(userId, group.Id, alice, 20m, TestData.Jan1, "dining", alice, bob);
-        await AddAsync(userId, group.Id, alice, 80m, TestData.Jan1, "housing", alice, bob);
-
-        var dashboard = await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id));
-
-        dashboard.ByCategory[0].CategoryKey.ShouldBe("housing");
-    }
-
-    [Fact]
-    public async Task Expenses_with_no_category_are_grouped_as_uncategorised()
-    {
-        var (userId, group, alice, bob) = await SetupAsync();
-        await AddAsync(userId, group.Id, alice, 30m, TestData.Jan1, null, alice, bob);
-
-        var dashboard = await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id));
-
-        dashboard.ByCategory.ShouldHaveSingleItem().CategoryId.ShouldBeNull();
-    }
-
-    [Fact]
     public async Task Spending_by_member_shows_what_each_person_paid_and_owes()
     {
         var (userId, group, alice, bob) = await SetupAsync();
@@ -188,7 +149,7 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         await AddAsync(userId, group.Id, alice, 100m, TestData.Jan1, null, alice, bob);
         var doomed = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
             group.Id, alice, "Doomed", 999m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(alice, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(alice, null)], null, null, null, null, null, null));
         await Expenses.DeleteAsync(userId, doomed.Id);
 
         (await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id)))
@@ -243,7 +204,7 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var me = group.Members.Single().Id;
         await Expenses.CreateAsync(user.Id, new CreateExpenseRequest(
             group.Id, me, "Hotel", 100m, "EUR", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(me, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(me, null)], null, null, null, null, null, null));
         Currency.GetRateAsync("EUR", "CAD", Arg.Any<DateTimeOffset?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(1.48m));
 

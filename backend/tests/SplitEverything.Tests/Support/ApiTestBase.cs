@@ -109,13 +109,12 @@ public abstract class ApiTestBase(PostgresFixture fixture) : IAsyncLifetime
             "expense_revisions", "expenses", "recurring_expenses", "settlements",
             "sync_log", "sync_snapshots", "sync_conflicts", "activity_log",
             "group_invites", "group_lineage_links", "group_members", "groups",
-            "category_rules", "categories", "import_batches", "receipts",
+            "import_batches", "receipts",
             "push_subscriptions", "devices", "refresh_tokens", "users", "exchange_rates"
         };
 
         await db.Database.ExecuteSqlRawAsync(
             $"TRUNCATE TABLE {string.Join(", ", tables)} RESTART IDENTITY CASCADE;");
 
-        await SplitEverything.Infrastructure.Persistence.Seed.SeedRunner.RunAsync(db);
     }
 }

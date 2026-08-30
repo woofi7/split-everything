@@ -16,7 +16,6 @@ public class RecurringExpense : SyncableEntity
 
     public decimal Amount { get; set; }
     public string Currency { get; set; } = "CAD";
-    public Guid? CategoryId { get; set; }
     public SplitType SplitType { get; set; } = SplitType.Equal;
 
     /// <summary>Split template: member id -> input value, applied to every occurrence.</summary>

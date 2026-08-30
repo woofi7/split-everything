@@ -11,7 +11,6 @@ import SettleUpWizard from '@/components/import/SettleUpWizard.vue'
 import { StatementWorkerClient } from '@/import/statementWorkerClient'
 import { StatementReviewSession, type RowAction } from '@/import/reviewSession'
 import { computeFingerprint, normalizeMerchant } from '@/domain/fingerprint'
-import type { CategoryRule } from '@/import/categorisation'
 
 const auth = useAuthStore()
 const groups = useGroupsStore()
@@ -25,18 +24,11 @@ const usedOcr = ref(false)
 const error = ref<string | null>(null)
 const message = ref<string | null>(null)
 const isCommitting = ref(false)
-const rules = ref<CategoryRule[]>([])
 
 
 onMounted(async () => {
   await groups.loadAll()
 
-  try {
-    rules.value = await useApi().get<CategoryRule[]>('/import/category-rules')
-  } catch {
-    // The ruleset only improves the guesses; the wizard works without it.
-    rules.value = []
-  }
 })
 
 // Terminating the worker drops the parsed statement from memory. Combined with
@@ -89,7 +81,7 @@ async function onFile(event: Event): Promise<void> {
 
     const created = new StatementReviewSession(
       parsed.rows,
-      { rules: rules.value, suggestions, duplicates, statementCurrency: 'CAD' },
+      { suggestions, duplicates, statementCurrency: 'CAD' },
       file.name,
     )
 
@@ -175,19 +167,6 @@ async function commit(): Promise<void> {
       '/import/statement/commit',
       payload,
     )
-
-    // Corrections are worth keeping: the next statement gets them right.
-    for (const rule of session.value.learnedRules) {
-      await useApi()
-        .put('/import/category-rules', {
-          id: null,
-          keyword: rule.keyword,
-          categoryId: rule.categoryId,
-          suggestedGroupId: rule.suggestedGroupId,
-          isEnabled: true,
-        })
-        .catch(() => undefined)
-    }
 
     await session.value.dispose()
     session.value = null
@@ -278,7 +257,6 @@ async function cancel(): Promise<void> {
               <p class="truncate text-sm font-medium">{{ row.description }}</p>
               <p class="text-xs text-[var(--text-muted)]">
                 {{ row.date ? row.date.toLocaleDateString() : 'No date' }}
-                <template v-if="row.categoryKey"> - {{ row.categoryKey }}</template>
                 <template v-if="row.isForeignCurrency"> - {{ row.currency }}</template>
               </p>
               <p v-if="row.problems.length > 0" class="text-xs text-owing">

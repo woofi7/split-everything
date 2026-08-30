@@ -99,7 +99,7 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
         {
             await scope.ServiceProvider.GetRequiredService<IRecurringExpenseService>()
                 .CreateAsync(user.Id, new CreateRecurringExpenseRequest(
-                    group.Id, member, "Rent", 1200m, "CAD", null, SplitType.Equal,
+                    group.Id, member, "Rent", 1200m, "CAD", SplitType.Equal,
                     [new SplitInputDto(member, null)], RecurrenceUnit.Month, 1, 1, null,
                     Clock.UtcNow, null, null));
         }
@@ -157,7 +157,7 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
         var member = group.Members.Single().Id;
         await Expenses.CreateAsync(user.Id, new CreateExpenseRequest(
             group.Id, member, "Old", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(member, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(member, null)], null, null, null, null, null, null));
 
         Clock.Advance(TimeSpan.FromDays(400));
 
@@ -183,7 +183,7 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
         var member = group.Members.Single().Id;
         await Expenses.CreateAsync(user.Id, new CreateExpenseRequest(
             group.Id, member, "Old", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(member, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(member, null)], null, null, null, null, null, null));
         Clock.Advance(TimeSpan.FromDays(400));
 
         var provider = BuildProvider();
@@ -208,7 +208,7 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
         var member = group.Members.Single().Id;
         await Expenses.CreateAsync(user.Id, new CreateExpenseRequest(
             group.Id, member, "Old", 40m, "CAD", TestData.Jan1, SplitType.Equal,
-            [new SplitInputDto(member, null)], null, null, null, null, null, null, null));
+            [new SplitInputDto(member, null)], null, null, null, null, null, null));
         Clock.Advance(TimeSpan.FromDays(400));
 
         var lifecycle = Substitute.For<IGroupLifecycleService>();
