@@ -444,6 +444,41 @@ describe('ActivityView opening an expense', () => {
     expect(link).toBeDefined()
   })
 
+  it('shows a view control on an entry that opens something', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({
+        '/activity': () => ({ items: [entry({})] }),
+        '/groups': () => [testGroup()],
+      }),
+    })
+    await settle()
+
+    const row = wrapper.find('[data-testid="activity-row"]')
+    const view = row.find('[data-testid="activity-view"]')
+    expect(view.exists()).toBe(true)
+    expect(view.text()).toBe('View')
+    // Not a button: the card is already the link, and a button inside a link is
+    // neither valid nor predictable. It is hidden from a screen reader, which is
+    // being handed the link itself.
+    expect(view.element.tagName).toBe('SPAN')
+    expect(view.attributes('aria-hidden')).toBe('true')
+  })
+
+  it('shows no view control where there is nothing to open', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({
+        '/activity': () => ({ items: [entry({ groupId: null, subjectId: null })] }),
+        '/groups': () => [testGroup()],
+      }),
+    })
+    await settle()
+
+    // A card that offers to show you something and then does nothing is worse
+    // than one that offers nothing.
+    expect(wrapper.find('[data-testid="activity-row"]').attributes('data-linked')).toBe('false')
+    expect(wrapper.find('[data-testid="activity-view"]').exists()).toBe(false)
+  })
+
   it('leaves an entry with no group as plain text', async () => {
     const { wrapper } = await mountView(ActivityView, {
       api: fakeApi({
