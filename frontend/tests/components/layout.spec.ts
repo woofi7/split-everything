@@ -50,11 +50,32 @@ describe('AppShell', () => {
     expect(html.indexOf('data-testid="back"')).toBeLessThan(html.indexOf('<h1'))
   })
 
-  it('leaves the top row out when there is no back and no action', () => {
+  it('has no back button on a screen a tab can reach', () => {
     const wrapper = mountShell({})
 
     expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
     expect(wrapper.find('h1').text()).toBe('Groups')
+  })
+
+  it('puts the page action on the title line', () => {
+    const wrapper = mountShell({}, { 'header-action': '<button>Change</button>' })
+
+    // It acts on this page, so the two are read together.
+    const row = wrapper.find('h1').element.parentElement?.parentElement
+    expect(row?.querySelector('button')?.textContent).toBe('Change')
+  })
+
+  it('keeps the action on the title line even with a back button', () => {
+    const wrapper = mountShell(
+      { backTo: { name: 'dashboard' } },
+      { 'header-action': '<button>Change</button>' },
+    )
+
+    const html = wrapper.html()
+    // Back above, action beside the title.
+    expect(html.indexOf('data-testid="back"')).toBeLessThan(html.indexOf('<h1'))
+    const row = wrapper.find('h1').element.parentElement?.parentElement
+    expect(row?.querySelector('button')?.textContent).toBe('Change')
   })
 
   it('has no fixed chrome at the top', () => {
