@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, useTemplateRef } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
+import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import { db, type LocalConflict, type OutboxOperation } from '@/offline/db'
 import { useApi } from '@/api/provider'
 import { useExpensesStore } from '@/stores/expenses'
@@ -26,6 +27,17 @@ async function load(): Promise<void> {
   // Anything not refused is still on its way, or trying to be. The count in the
   // header said three and this screen showed nothing, which is not an answer.
   waiting.value = await db.outbox.filter((row) => row.status !== 'rejected').toArray()
+}
+
+/**
+ * Pulling down here is the same as pressing Send now: this screen is about what has
+ * not gone yet, so the gesture and the button mean one thing.
+ */
+const pull = useTemplateRef<{ done: () => void }>('pull')
+
+async function refresh(): Promise<void> {
+  await syncNow()
+  pull.value?.done()
 }
 
 /**
@@ -117,6 +129,9 @@ async function discard(operationId: string): Promise<void> {
     :back-to="{ name: 'profile' }"
     :back-label="t('Profile')"
   >
+    <!-- Pull down to send what is waiting, the same as the button below. -->
+    <PullToRefresh ref="pull" @refresh="refresh" />
+
     <section v-if="conflicts.length > 0" class="mb-6">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Edited on two devices at once') }}
       </h2>

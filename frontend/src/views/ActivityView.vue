@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import GroupSwipe from '@/components/groups/GroupSwipe.vue'
+import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
@@ -156,6 +157,20 @@ function targetOf(entry: ActivityEntry) {
 
   return { name: 'group', params: { groupId: entry.groupId } }
 }
+
+/** Pulling down here means the feed, and the queue behind it. */
+const pull = useTemplateRef<{ done: () => void }>('pull')
+
+async function refresh(): Promise<void> {
+  try {
+    await expenses.sync()
+  } catch {
+    // Offline. The feed below still tries, and says so if it cannot.
+  }
+
+  await load()
+  pull.value?.done()
+}
 </script>
 
 <template>
@@ -180,6 +195,9 @@ function targetOf(entry: ActivityEntry) {
       to the next group, which is the navigation this app does most.
     -->
     <GroupSwipe />
+
+    <!-- Pull down at the top to send what is queued and read the rest again. -->
+    <PullToRefresh ref="pull" @refresh="refresh" />
 
     <ul v-if="entries.length > 0" class="flex flex-col gap-2">
       <li v-for="entry in entries" :key="entry.id">
