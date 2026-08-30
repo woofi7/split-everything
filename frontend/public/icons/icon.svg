@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Split Everything">
-  <rect width="64" height="64" rx="14" fill="#0f172a"/>
-  <path d="M14 50 50 14v36z" fill="#818cf8"/>
-  <path d="M14 50 50 14H14z" fill="#6366f1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Split Everything">
+  <rect width="64" height="64" rx="14" fill="#4f46e5"/>
+  <path d="M 33.04 15.03 A 17 17 0 0 1 40.16 46.91" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+  <path d="M 38.29 47.80 A 17 17 0 0 1 15.30 35.16" fill="none" stroke="#c7d2fe" stroke-width="9" stroke-linecap="round"/>
+  <path d="M 15.04 33.10 A 17 17 0 0 1 30.96 15.03" fill="none" stroke="#34d399" stroke-width="9" stroke-linecap="round"/>
 </svg>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 
 /**
  * The mobile-first bottom tab bar from the spec: Dashboard, Activity, a centre
@@ -10,12 +11,48 @@ import { RouterLink } from 'vue-router'
  * same shape as the centre button. Colour alone was easy to miss on a phone in
  * daylight, and the raised disc reads as position rather than decoration.
  */
+/**
+ * Which routes each tab stands for.
+ *
+ * Named rather than left to the router's path matching. A group opened by its own
+ * URL is the dashboard, rendered by the same component, so coming back to it from
+ * an expense or the settle screen left every tab unlit: the path was /groups/<id>
+ * and the tab points at /dashboard.
+ */
 const tabs = [
-  { name: 'dashboard', label: 'Dashboard', to: { name: 'dashboard' }, icon: 'M4 6h16M4 12h16M4 18h10' },
-  { name: 'activity', label: 'Activity', to: { name: 'activity' }, icon: 'M12 8v4l3 2M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0' },
-  { name: 'stats', label: 'Stats', to: { name: 'stats' }, icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
-  { name: 'profile', label: 'Profile', to: { name: 'profile' }, icon: 'M5 20a7 7 0 0 1 14 0M12 3a4 4 0 1 1 0 8a4 4 0 0 1 0-8' },
+  {
+    name: 'dashboard',
+    label: 'Dashboard',
+    to: { name: 'dashboard' },
+    owns: ['dashboard', 'group'],
+    icon: 'M4 6h16M4 12h16M4 18h10',
+  },
+  {
+    name: 'activity',
+    label: 'Activity',
+    to: { name: 'activity' },
+    owns: ['activity'],
+    icon: 'M12 8v4l3 2M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0',
+  },
+  {
+    name: 'stats',
+    label: 'Stats',
+    to: { name: 'stats' },
+    owns: ['stats'],
+    icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  },
+  {
+    name: 'profile',
+    label: 'Profile',
+    to: { name: 'profile' },
+    owns: ['profile'],
+    icon: 'M5 20a7 7 0 0 1 14 0M12 3a4 4 0 1 1 0 8a4 4 0 0 1 0-8',
+  },
 ]
+
+const route = useRoute()
+const currentName = computed(() => String(route?.name ?? ''))
+const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.value)
 </script>
 
 <template>
@@ -30,7 +67,7 @@ const tabs = [
           :to="tab.to"
           :data-tab="tab.name"
           class="nav-tab tap-target flex flex-col items-center gap-1 py-2 text-xs text-[var(--text-muted)]"
-          active-class="nav-tab-active text-brand-400"
+          :class="isActive(tab) ? 'nav-tab-active text-brand-400' : ''"
         >
           <span data-testid="tab-icon" class="nav-tab-icon">
             <svg
@@ -65,7 +102,7 @@ const tabs = [
           :to="tab.to"
           :data-tab="tab.name"
           class="nav-tab tap-target flex flex-col items-center gap-1 py-2 text-xs text-[var(--text-muted)]"
-          active-class="nav-tab-active text-brand-400"
+          :class="isActive(tab) ? 'nav-tab-active text-brand-400' : ''"
         >
           <span data-testid="tab-icon" class="nav-tab-icon">
             <svg
