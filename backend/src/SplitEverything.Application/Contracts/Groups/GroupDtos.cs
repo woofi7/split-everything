@@ -26,7 +26,12 @@ public sealed record GroupMemberDto(
     GroupRole Role,
     MembershipStatus Status,
     bool IsPlaceholder,
-    decimal NetBalance);
+    decimal NetBalance,
+    /// <summary>Their colour in this group. Null on rows that predate the column.</summary>
+    string? ColorHex = null);
+
+/// <summary>Changes one member's colour in one group.</summary>
+public sealed record SetMemberColorRequest(string ColorHex);
 
 public sealed record GroupDto(
     Guid Id,

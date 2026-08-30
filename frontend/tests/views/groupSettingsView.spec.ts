@@ -843,4 +843,100 @@ describe('GroupSettingsView', () => {
       expect(textOf(wrapper)).toContain('Only an admin can change')
     })
   })
+
+  /**
+   * A member's colour, which belongs to the group.
+   *
+   * It is what the expense cards, the balances and the charts all draw with, so
+   * seeing it and changing it belongs where the group is described.
+   */
+  describe('a member colour', () => {
+    /** A group whose colours the server has stored. */
+    function coloured() {
+      const group = testGroup()
+      group.members = [
+        { ...group.members[0], colorHex: '#6366f1' },
+        { ...group.members[1], colorHex: '#f97316' },
+      ]
+      return group
+    }
+
+    async function open(memberId: string) {
+      const group = coloured()
+      const client = fakeApi({ '/groups': () => group })
+      const mounted = await mountView(GroupSettingsView, { api: client, groups: [group] })
+      await settle()
+
+      await mounted.wrapper.find(`[data-testid="recolour-${memberId}"]`).trigger('click')
+      await settle(1)
+      return { ...mounted, client }
+    }
+
+    it('shows the colour the group stored, not one it worked out', async () => {
+      const group = coloured()
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => group }),
+        groups: [group],
+      })
+      await settle()
+
+      const swatch = wrapper.find(`[data-testid="recolour-${ALICE}"]`)
+      expect(swatch.attributes('style')).toContain('rgb(99, 102, 241)')
+    })
+
+    it('offers the palette when the swatch is pressed', async () => {
+      const { wrapper } = await open(ALICE)
+
+      expect(wrapper.findAll('[data-testid^="colour-"]')).toHaveLength(12)
+    })
+
+    it('saves the colour that is picked', async () => {
+      const { wrapper, client } = await open(ALICE)
+
+      await wrapper.find('[data-testid="colour-14b8a6"]').trigger('click')
+      await settle()
+
+      expect(client.patch).toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}/members/${ALICE}/color`,
+        { colorHex: '#14b8a6' },
+      )
+    })
+
+    it('says what happens to a colour someone else has', async () => {
+      const { wrapper } = await open(ALICE)
+
+      // Swapped rather than refused, and worth saying before the tap.
+      expect(textOf(wrapper)).toContain('swaps the two')
+    })
+
+    it('reports a refusal', async () => {
+      const { wrapper, client } = await open(ALICE)
+      client.patch.mockRejectedValue(new Error('Only an owner or an admin can change'))
+
+      await wrapper.find('[data-testid="colour-14b8a6"]').trigger('click')
+      await settle()
+
+      expect(textOf(wrapper)).toContain('Only an owner or an admin')
+    })
+
+    it('lets a plain member change their own and nobody else', async () => {
+      const group = coloured()
+      group.members = [
+        { ...group.members[0], role: 'Member' },
+        { ...group.members[1], role: 'Member' },
+      ]
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => group }),
+        groups: [group],
+      })
+      await settle()
+
+      // ALICE is the signed-in member in the harness; BOB is somebody else.
+      expect(wrapper.find(`[data-testid="recolour-${ALICE}"]`).attributes('disabled'))
+        .toBeUndefined()
+      expect(wrapper.find(`[data-testid="recolour-${BOB}"]`).attributes('disabled'))
+        .toBeDefined()
+    })
+  })
 })

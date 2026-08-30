@@ -39,14 +39,25 @@ public sealed class GroupService(
         };
         db.Groups.Add(group);
 
-        var owner = NewMember(group.Id, userId, user.DisplayName, GroupRole.Owner);
+        var owner = NewMember(group.Id, userId, user.DisplayName, GroupRole.Owner,
+            MemberPalette.Assign(user.PreferredColorHex, []));
         db.GroupMembers.Add(owner);
 
+        // Filled as they are made, so two of them never take the same colour.
+        var placeholderColors = new List<string?>();
         var placeholders = (request.PlaceholderMemberNames ?? [])
             .Select(n => n?.Trim())
             .Where(n => !string.IsNullOrEmpty(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(n => NewMember(group.Id, null, n!, GroupRole.Member))
+            .ToList()
+            .Select(n =>
+            {
+                var member = NewMember(group.Id, null, n!, GroupRole.Member);
+                member.ColorHex = MemberPalette.Assign(
+                    null, placeholderColors.Append(owner.ColorHex));
+                placeholderColors.Add(member.ColorHex);
+                return member;
+            })
             .ToList();
         db.GroupMembers.AddRange(placeholders);
 
@@ -107,7 +118,8 @@ public sealed class GroupService(
                 .Select(m => new GroupMemberDto(
                     m.Member.Id, m.Member.UserId, m.Member.DisplayName, m.AvatarUrl,
                     m.Member.Role, m.Member.Status, m.Member.IsPlaceholder,
-                    balances.GetValueOrDefault(m.Member.Id)))
+                    balances.GetValueOrDefault(m.Member.Id),
+                    m.Member.ColorHex))
                 .ToList(),
             myMemberId is null ? 0m : balances.GetValueOrDefault(myMemberId.Value),
             totals?.Total ?? 0m,
@@ -321,6 +333,8 @@ public sealed class GroupService(
             if (existing.Status == MembershipStatus.Active && !existing.IsDeleted)
                 return MemberDto(existing, invitee.AvatarUrl);
 
+            existing.ColorHex ??= MemberPalette.Assign(
+                invitee.PreferredColorHex, await TakenColorsAsync(groupId, ct: ct));
             existing.Status = MembershipStatus.Active;
             existing.LeftAt = null;
             existing.IsDeleted = false;
@@ -337,7 +351,8 @@ public sealed class GroupService(
             return MemberDto(existing, invitee.AvatarUrl);
         }
 
-        var member = NewMember(groupId, invitee.Id, invitee.DisplayName, GroupRole.Member);
+        var member = NewMember(groupId, invitee.Id, invitee.DisplayName, GroupRole.Member,
+            MemberPalette.Assign(invitee.PreferredColorHex, await TakenColorsAsync(groupId, ct: ct)));
         db.GroupMembers.Add(member);
 
         await writer.RecordAsync(member, SyncEntityType.GroupMember, groupId, SyncOperation.Create,
@@ -376,7 +391,7 @@ public sealed class GroupService(
 
     private static GroupMemberDto MemberDto(GroupMember member, string? avatarUrl)
         => new(member.Id, member.UserId, member.DisplayName, avatarUrl,
-            member.Role, member.Status, member.UserId is null, 0m);
+            member.Role, member.Status, member.UserId is null, 0m, member.ColorHex);
 
     /// <summary>
     /// Folds one member into another.
@@ -710,17 +725,95 @@ public sealed class GroupService(
             .ToDictionary(b => b.MemberId, b => b.Net);
     }
 
-    private GroupMember NewMember(Guid groupId, Guid? userId, string displayName, GroupRole role) => new()
+    private GroupMember NewMember(
+        Guid groupId,
+        Guid? userId,
+        string displayName,
+        GroupRole role,
+        string? colorHex = null) => new()
     {
         GroupId = groupId,
         UserId = userId,
         DisplayName = displayName,
         Role = role,
         Status = MembershipStatus.Active,
+        ColorHex = colorHex,
         JoinedAt = clock.UtcNow,
         CreatedAt = clock.UtcNow,
         UpdatedAt = clock.UtcNow
     };
+
+    /// <summary>
+    /// The colours already spoken for in a group, so the next member gets a free
+    /// one. Read from the database and from what is about to be added, because a
+    /// group being created has neither saved yet.
+    /// </summary>
+    private async Task<List<string?>> TakenColorsAsync(
+        Guid groupId, IEnumerable<GroupMember>? pending = null, CancellationToken ct = default)
+    {
+        var stored = await db.GroupMembers
+            .Where(m => m.GroupId == groupId && m.ColorHex != null)
+            .Select(m => m.ColorHex)
+            .ToListAsync(ct);
+
+        if (pending is not null)
+            stored.AddRange(pending.Select(m => m.ColorHex).Where(colour => colour is not null));
+
+        return stored;
+    }
+
+    /// <summary>Changes one member's colour in one group.</summary>
+    public async Task<GroupMemberDto> SetMemberColorAsync(
+        Guid userId, Guid groupId, Guid memberId, SetMemberColorRequest request,
+        CancellationToken ct = default)
+    {
+        var actor = await GroupAccess.RequireMemberAsync(db, userId, groupId, ct);
+        var group = await GroupAccess.RequireGroupAsync(db, groupId, ct);
+        GroupAccess.RequireWritable(group);
+
+        var member = await db.GroupMembers
+                         .FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == groupId, ct)
+                     ?? throw new NotFoundException($"Member {memberId}");
+
+        // Your own colour is yours to pick. Anyone else's is an admin decision,
+        // because it is a change to what everybody in the group sees.
+        var isOwn = actor.Id == member.Id;
+        if (!isOwn && actor.Role is not (GroupRole.Owner or GroupRole.Admin))
+            throw new ForbiddenException("Only an owner or an admin can change someone else's colour.");
+
+        var wanted = request.ColorHex?.Trim() ?? string.Empty;
+        if (!MemberPalette.IsKnown(wanted))
+            throw new ValidationException("That is not one of the colours to choose from.");
+
+        // Swapped rather than refused when it is taken: refusing would mean
+        // reading the whole group's colours before picking, and a swap leaves
+        // everybody with a colour of their own either way.
+        var holder = await db.GroupMembers.FirstOrDefaultAsync(
+            m => m.GroupId == groupId && m.Id != memberId && m.ColorHex != null
+                 && m.ColorHex.ToLower() == wanted.ToLower(), ct);
+
+        var deviceId = DeviceFor(userId);
+        var previous = member.ColorHex;
+
+        member.ColorHex = wanted;
+        await writer.RecordAsync(member, SyncEntityType.GroupMember, groupId, SyncOperation.Update,
+            deviceId, userId, MemberPayload(member), ct: ct);
+
+        if (holder is not null)
+        {
+            holder.ColorHex = previous
+                ?? MemberPalette.Assign(null, await TakenColorsAsync(groupId, ct: ct));
+            await writer.RecordAsync(holder, SyncEntityType.GroupMember, groupId, SyncOperation.Update,
+                deviceId, userId, MemberPayload(holder), ct: ct);
+        }
+
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
+
+        var updated = await db.GroupMembers.FirstAsync(m => m.Id == memberId, ct);
+        return new GroupMemberDto(updated.Id, updated.UserId, updated.DisplayName, null,
+            updated.Role, updated.Status, updated.IsPlaceholder, 0m, updated.ColorHex);
+    }
 
     /// <summary>
     /// Server-side writes still need a device id for the vector clock. A stable
@@ -743,6 +836,7 @@ public sealed class GroupService(
     internal static object MemberPayload(GroupMember member) => new
     {
         member.Id, member.GroupId, member.UserId, member.DisplayName,
-        Role = (int)member.Role, Status = (int)member.Status, member.IsDeleted
+        Role = (int)member.Role, Status = (int)member.Status, member.IsDeleted,
+        member.ColorHex
     };
 }

@@ -230,6 +230,18 @@ public sealed class AuthService(
             user.DefaultCurrency = GroupAccess.NormalizeCurrency(request.DefaultCurrency, "Default currency");
         if (request.PrefersLightTheme is { } light)
             user.PrefersLightTheme = light;
+        if (request.PreferredColorHex is not null)
+        {
+            var wanted = request.PreferredColorHex.Trim();
+
+            // Empty clears it, as with the other clearable fields. Anything else has
+            // to be a colour this app hands out, or a group could end up storing a
+            // value nothing knows how to render.
+            if (wanted.Length == 0) user.PreferredColorHex = null;
+            else if (MemberPalette.IsKnown(wanted)) user.PreferredColorHex = wanted;
+            else throw new ValidationException("That is not one of the colours to choose from.");
+        }
+
         if (request.Locale is not null)
             user.Locale = request.Locale.Trim();
 
@@ -415,5 +427,5 @@ public sealed class AuthService(
 
     private static AuthenticatedUser Map(User user)
         => new(user.Id, user.Email, user.DisplayName, user.AvatarUrl,
-            user.DefaultCurrency, user.PrefersLightTheme);
+            user.DefaultCurrency, user.PrefersLightTheme, user.PreferredColorHex);
 }

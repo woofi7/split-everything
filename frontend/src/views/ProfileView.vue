@@ -5,6 +5,7 @@ import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
+import ColorChoice from '@/components/ui/ColorChoice.vue'
 
 const auth = useAuthStore()
 const expenses = useExpensesStore()
@@ -20,6 +21,29 @@ const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
 
 
 const isLight = computed(() => auth.theme === 'light')
+
+/**
+ * The colour this person would like in the groups they join.
+ *
+ * A wish rather than a setting: a group where somebody already has it gives them
+ * the next free one, because two people the same colour in one group defeats the
+ * point. Saved on the tap, since there is nothing else to fill in.
+ */
+const preferredColour = computed(() => auth.user?.preferredColorHex ?? null)
+const colourError = ref<string | null>(null)
+
+async function pickColour(colorHex: string): Promise<void> {
+  colourError.value = null
+
+  try {
+    // Tapping the one already chosen clears it, which is the only way back to
+    // having no preference.
+    const next = preferredColour.value?.toLowerCase() === colorHex.toLowerCase() ? '' : colorHex
+    await auth.updateProfile({ preferredColorHex: next })
+  } catch (caught) {
+    colourError.value = caught instanceof Error ? caught.message : 'Could not save that colour.'
+  }
+}
 
 async function save(): Promise<void> {
   error.value = null
@@ -109,12 +133,29 @@ async function deleteAccount(): Promise<void> {
       <p v-if="message" class="text-sm text-owed" role="status">{{ message }}</p>
     </form>
 
+    <section class="surface-card mb-4 p-4">
+      <p class="text-sm">Your colour</p>
+      <p class="mb-3 text-xs text-[var(--text-muted)]">
+        Used in the groups you join, when nobody there has it already. Tap the one
+        you have to go back to no preference.
+      </p>
+
+      <ColorChoice
+        :value="preferredColour"
+        label="Your preferred colour"
+        @pick="pickColour"
+      />
+
+      <p v-if="colourError" class="mt-2 text-xs text-owing" role="alert">{{ colourError }}</p>
+    </section>
+
     <section class="surface-card mb-4 flex items-center justify-between p-4">
       <span class="text-sm">Light mode</span>
       <button
         type="button"
         class="btn btn-press btn-secondary min-h-0 rounded-full px-3 py-1 text-sm"
         style="border-color: var(--border)"
+        data-testid="theme-toggle"
         :aria-pressed="isLight"
         @click="auth.setTheme(isLight ? 'dark' : 'light')"
       >

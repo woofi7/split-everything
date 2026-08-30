@@ -39,6 +39,7 @@ public interface IGroupService
     /// Removes a member. Someone with history is deactivated rather than deleted, so
     /// past expenses keep pointing at a real row.
     /// </summary>
+    Task<GroupMemberDto> SetMemberColorAsync(Guid userId, Guid groupId, Guid memberId, SetMemberColorRequest request, CancellationToken ct = default);
     Task<GroupDto> MergeMembersAsync(Guid userId, Guid groupId, MergeMembersRequest request, CancellationToken ct = default);
     Task RemoveMemberAsync(Guid userId, Guid groupId, Guid memberId, CancellationToken ct = default);
 

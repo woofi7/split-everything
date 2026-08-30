@@ -25,4 +25,14 @@ public class GroupMember : SyncableEntity
     public DateTimeOffset? LeftAt { get; set; }
 
     public bool IsPlaceholder => UserId is null;
+
+    /// <summary>
+    /// This member's colour in this group, which is a fact about the group.
+    ///
+    /// Stored rather than derived from the id: a group can change it, and a value
+    /// every device reads beats one every device computes from a different list.
+    /// Null on rows that predate the column; a client falls back to deriving one
+    /// until somebody sets it.
+    /// </summary>
+    public string? ColorHex { get; set; }
 }

@@ -11,6 +11,14 @@
  * land on neighbours.
  */
 
+/**
+ * The same twelve the server keeps in MemberPalette, in the same order.
+ *
+ * Duplicated rather than fetched: a colour picker that cannot draw itself until a
+ * request comes back is worse than a list in two places, and the server refuses
+ * anything outside its own copy, so a drift shows up as a refusal rather than as
+ * a wrong colour.
+ */
 export const MEMBER_COLORS = [
   '#6366f1', // indigo
   '#f97316', // orange
