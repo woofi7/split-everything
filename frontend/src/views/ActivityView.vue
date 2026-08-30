@@ -132,14 +132,31 @@ function targetOf(entry: ActivityEntry) {
           :to="targetOf(entry)!"
           data-testid="activity-row"
           data-linked="true"
-          class="tap-target block rounded-xl border border-l-4 p-3"
+          class="tap-target flex items-center justify-between gap-3 rounded-xl border border-l-4 p-3"
           :class="entry.actorMemberId ? '' : 'surface-card'"
           :style="cardStyle(entry)"
         >
-          <span class="block text-sm">{{ entry.summary }}</span>
-          <span class="mt-1 block text-xs text-[var(--text-muted)]">
-            <template v-if="entry.groupName">{{ entry.groupName }} - </template>
-            {{ when(entry.occurredAt) }}
+          <span class="min-w-0">
+            <span class="block text-sm">{{ entry.summary }}</span>
+            <span class="mt-1 block text-xs text-[var(--text-muted)]">
+              <template v-if="entry.groupName">{{ entry.groupName }} - </template>
+              {{ when(entry.occurredAt) }}
+            </span>
+          </span>
+
+          <!--
+            Styled as a button but not one: the whole card is already the link, and
+            a button inside a link is neither valid nor predictable. Tapping it
+            follows the card, which is what it looks like it does. Hidden from a
+            screen reader, which is being handed the link itself.
+          -->
+          <span
+            data-testid="activity-view"
+            aria-hidden="true"
+            class="shrink-0 rounded-lg border px-2.5 py-1 text-xs text-[var(--text-muted)]"
+            style="border-color: var(--border); background: var(--surface-raised)"
+          >
+            View
           </span>
         </RouterLink>
 
