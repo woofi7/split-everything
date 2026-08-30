@@ -42,9 +42,14 @@ USER app
 
 COPY --from=build --chown=app:app /app ./
 
+# The tag this image was cut from, so the running server can say which build it is.
+# "dev" for a local build, which is the truthful answer there.
+ARG APP_VERSION=dev
+
 ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production \
-    DOTNET_gcServer=1
+    DOTNET_gcServer=1 \
+    APP_VERSION=$APP_VERSION
 
 EXPOSE 8080
 

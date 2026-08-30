@@ -119,6 +119,8 @@ describe('the app languages', () => {
       'Total',
       'Profile',
       'Exact',
+      // "Version 0.2.3" reads the same in both, placeholder and all.
+      'Version {version}',
     ])
 
     const suspicious = Object.entries(fr)

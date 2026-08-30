@@ -26,6 +26,41 @@ describe('ProfileView', () => {
    * and then kept. The theme is not among them, since it applies as it is switched
    * and there is nothing to preview.
    */
+  describe('which build is running', () => {
+    it('shows the version at the foot of the page', async () => {
+      const { wrapper } = await mountView(ProfileView, {
+        api: fakeApi({ '/health': () => ({ status: 'ok', version: 'dev' }) }),
+      })
+      await settle()
+
+      // One number when both halves agree, which is the ordinary case.
+      expect(wrapper.find('[data-testid="app-version"]').text()).toBe('Version dev')
+    })
+
+    it('says both when the app and the server disagree', async () => {
+      const { wrapper } = await mountView(ProfileView, {
+        api: fakeApi({ '/health': () => ({ status: 'ok', version: '0.1.9' }) }),
+      })
+      await settle()
+
+      // A release that half landed - new app, old api - looks like nothing at all
+      // otherwise, and it is a specific kind of confusing.
+      expect(wrapper.find('[data-testid="app-version"]').text()).toContain('server 0.1.9')
+    })
+
+    it('shows the app version alone when the server cannot be reached', async () => {
+      const api = fakeApi()
+      api.get.mockRejectedValue(new Error('offline'))
+
+      const { wrapper } = await mountView(ProfileView, { api })
+      await settle()
+
+      // Offline is not a version mismatch, and a dash where a number belongs
+      // would read like one.
+      expect(wrapper.find('[data-testid="app-version"]').text()).toBe('Version dev')
+    })
+  })
+
   describe('saving the profile', () => {
     it('offers nothing while nothing has changed', async () => {
       const { wrapper } = await mountView(ProfileView)
