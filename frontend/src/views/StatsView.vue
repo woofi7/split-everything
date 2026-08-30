@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, useTemplateRef, watch } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import GroupSwipe from '@/components/groups/GroupSwipe.vue'
+import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
 import { useAuthStore } from '@/stores/auth'
@@ -309,6 +310,20 @@ const bucketLabel = (bucket: string) => formatBucket(bucket, granularity.value)
 
 /** What the bar covers, for whoever asks: a week is a stretch, not a date. */
 const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.value)
+
+/** Pulling down here means the numbers, and the queue behind them. */
+const pull = useTemplateRef<{ done: () => void }>('pull')
+
+async function refresh(): Promise<void> {
+  try {
+    await expenses.sync()
+  } catch {
+    // Offline. The stats below are computed from this device anyway.
+  }
+
+  await load()
+  pull.value?.done()
+}
 </script>
 
 <template>
@@ -333,6 +348,9 @@ const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.va
       to the next group, which is the navigation this app does most.
     -->
     <GroupSwipe />
+
+    <!-- Pull down at the top to send what is queued and read the rest again. -->
+    <PullToRefresh ref="pull" @refresh="refresh" />
 
     <div class="mb-4 flex gap-2">
       <select

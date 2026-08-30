@@ -6,6 +6,7 @@ import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import GroupSwipe from '@/components/groups/GroupSwipe.vue'
+import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SpendPie from '@/components/ui/SpendPie.vue'
 import { memberColor } from '@/domain/memberColors'
@@ -225,6 +226,24 @@ function cardStyle(memberId: string) {
 
 const spentOn = (iso: string) =>
   new Date(iso).toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
+
+/**
+ * What pulling down means here: send what is queued, pull what is new, and read the
+ * group again. The same work the app does on its own when it comes back online.
+ */
+const pull = useTemplateRef<{ done: () => void }>('pull')
+
+async function refresh(): Promise<void> {
+  try {
+    await expenses.sync()
+    await groups.loadAll()
+    await loadMainGroup()
+  } catch {
+    // Offline, most likely. The indicator going away is the answer either way.
+  } finally {
+    pull.value?.done()
+  }
+}
 </script>
 
 <template>
@@ -249,6 +268,9 @@ const spentOn = (iso: string) =>
       to the next group, which is the navigation this app does most.
     -->
     <GroupSwipe />
+
+    <!-- Pull down at the top to send what is queued and read the rest again. -->
+    <PullToRefresh ref="pull" @refresh="refresh" />
 
     <template v-if="group">
       <!-- The shape of the group's spending, first: it is what the screen is for. -->
