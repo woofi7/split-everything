@@ -7,11 +7,12 @@ import { setApiClient } from './api/provider'
 import { apiBaseUrl } from './api/config'
 import { SyncEngine } from './offline/syncEngine'
 import { HttpSyncApi } from './api/syncApi'
-import { deviceIdNow, getDeviceId } from './offline/db'
+import { deviceIdNow, getDeviceId, onDatabaseBlocked } from './offline/db'
 import { useAuthStore } from './stores/auth'
 import { useGroupsStore } from './stores/groups'
 import { useExpensesStore } from './stores/expenses'
 import { createRealtimeConnection } from './offline/realtime'
+import { BLOCKED_MESSAGE, settleWithin, showStartupProblem } from './startup'
 import './styles/main.css'
 
 async function bootstrap(): Promise<void> {
@@ -21,13 +22,11 @@ async function bootstrap(): Promise<void> {
   const auth = useAuthStore()
   auth.restore()
 
-  // Resolved at start because it keys every vector clock. Read live rather than
-  // captured, since signing in as a different account mints a new one.
-  await getDeviceId()
-
   const api = new ApiClient({
     baseUrl: apiBaseUrl(),
     getAccessToken: () => auth.accessToken,
+    // Read live rather than captured: it is resolved from the replica below, and
+    // signing in as a different account mints a new one.
     getDeviceId: () => deviceIdNow(),
     refreshAccessToken: () => auth.refresh(),
     // Not a sign-out: nobody asked for this. Clearing the session and keeping
@@ -48,23 +47,34 @@ async function bootstrap(): Promise<void> {
   // on rather than flicking to a different one.
   groupsStore.restoreMainGroup()
 
-  // Before the router runs, so the guard sees the session rather than bouncing
-  // someone to sign-in while a good session sits in the cookie the app cannot
-  // read. Costs one request, and only when nothing was stored locally.
-  await auth.resumeSession()
-
-  const engine = new SyncEngine(new HttpSyncApi(api))
   const expenses = useExpensesStore()
-  expenses.attachSync(engine)
-  await expenses.hydrate()
+  expenses.attachSync(new SyncEngine(new HttpSyncApi(api)))
 
-  // Repairs anything a previous session stranded: a change the server refused and
-  // nothing retried, or a row left marked unsent with nothing queued for it. Both
-  // read as "waiting to sync" forever otherwise.
-  await expenses.reconcile()
+  // A replica another tab is holding at an older schema version is a wait with no
+  // end, so it is raced rather than waited out, and the app stops there: every
+  // screen reads from that replica, so none of them would work.
+  const blocked = new Promise<'blocked'>((resolve) => {
+    onDatabaseBlocked(() => resolve('blocked'))
+  })
 
-  // Live sync when connected; the delta pull covers everything a dropped
-  // connection missed, so this is an optimisation rather than a requirement.
+  const started = prepare(auth, expenses).catch((error: unknown) => {
+    // The app is still worth showing: each screen loads its own data.
+    console.error('Startup work failed; showing the app anyway.', error)
+  })
+
+  const outcome = await Promise.race([settleWithin(started), blocked])
+
+  if (outcome === 'blocked') {
+    showStartupProblem(BLOCKED_MESSAGE)
+    return
+  }
+
+  if (outcome === 'timed-out') {
+    // Slow, not broken. The app comes up and each screen loads its own data, so
+    // this costs a moment of emptier first render rather than correctness.
+    console.warn('Startup work is still running; showing the app anyway.')
+  }
+
   createRealtimeConnection({
     getAccessToken: () => auth.accessToken,
     onChanged: () => void expenses.sync(),
@@ -74,4 +84,37 @@ async function bootstrap(): Promise<void> {
   app.mount('#app')
 }
 
-void bootstrap()
+/**
+ * Everything worth having before the first render, and nothing that is required
+ * for it. Bounded by the caller, and its failures are the caller's to shrug off:
+ * a screen that loads its own data is better than no screen.
+ */
+async function prepare(
+  auth: ReturnType<typeof useAuthStore>,
+  expenses: ReturnType<typeof useExpensesStore>,
+): Promise<void> {
+  // Keys every vector clock, so it is resolved before anything can write.
+  await getDeviceId()
+
+  // Before the router runs, so the guard sees the session rather than bouncing
+  // someone to sign-in while a good session sits in the cookie the app cannot
+  // read.
+  await auth.resumeSession()
+
+  await expenses.hydrate()
+
+  // Repairs anything a previous session stranded: a change the server refused and
+  // nothing retried, or a row left marked unsent with nothing queued for it. Both
+  // read as "waiting to sync" forever otherwise.
+  await expenses.reconcile()
+}
+
+void bootstrap().catch((error: unknown) => {
+  // Whatever this was, the alternative to saying so is a white screen.
+  console.error('Startup failed.', error)
+  showStartupProblem(
+    error instanceof Error && error.message
+      ? error.message
+      : 'Something went wrong while starting up.',
+  )
+})
