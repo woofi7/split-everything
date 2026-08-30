@@ -19,3 +19,26 @@ if (!globalThis.crypto?.randomUUID) {
 globalThis.fetch = vi.fn(() =>
   Promise.reject(new Error('Unexpected network call in a test')),
 ) as unknown as typeof fetch
+
+/*
+ * An external script in jsdom never settles.
+ *
+ * jsdom does not fetch one and fires neither load nor error, so anything waiting on
+ * a third-party library - Google's sign-in, for instance - waits for its whole
+ * timeout in every test that does not stub the global first. Failing them at once is
+ * both faster and the truthful default: a test environment cannot reach
+ * accounts.google.com, exactly like a browser behind a content policy that blocks
+ * it. A test that wants the library puts it on the window before mounting.
+ */
+const watchForScripts = new MutationObserver((changes) => {
+  for (const change of changes) {
+    for (const node of change.addedNodes) {
+      const script = node as HTMLScriptElement
+      if (script.tagName === 'SCRIPT' && script.src) {
+        queueMicrotask(() => script.dispatchEvent(new Event('error')))
+      }
+    }
+  }
+})
+
+watchForScripts.observe(document.documentElement, { childList: true, subtree: true })
