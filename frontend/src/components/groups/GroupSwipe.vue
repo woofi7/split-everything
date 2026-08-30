@@ -33,8 +33,29 @@ import { useGroupsStore } from '@/stores/groups'
 
 const groups = useGroupsStore()
 
-/** How far the finger goes before this takes the gesture off the scroller. */
-const MIN_DRAG_PX = 12
+/**
+ * How far a finger travels before this decides what the gesture is.
+ *
+ * Small, and read on the first report that crosses it whichever way it went,
+ * rather than waiting for enough movement to pile up sideways.
+ *
+ * A browser will not scroll while a listener that can cancel the move has yet to
+ * answer. But the moment one move is allowed through it starts scrolling, and it
+ * keeps scrolling for the rest of that gesture: cancelling a later move does not
+ * take it back. So the choice between swiping and scrolling has to be made before
+ * the browser makes it.
+ *
+ * Six pixels because a phone waits for about eight of its own before it starts
+ * scrolling, so a swipe that says so first always beats it to the gesture.
+ *
+ * That is what was wrong with a thumb sweeping from the left: a thumb pivots at
+ * the base of the hand, so the sweep arcs, and the arc was being scrolled. The
+ * page ran under the finger, and a phone answers that by sliding its toolbar
+ * away, which drops everything fixed to the bottom of the window - the tab bar
+ * included. A sweep steep enough that even six pixels in it still looks like a
+ * scroll is left alone here and picked up on release instead.
+ */
+const DECIDE_PX = 6
 
 /** Sliding the rest of the way once the finger has let go. */
 const COMMIT_MS = 220
@@ -62,17 +83,21 @@ const faded = ref(false)
 
 const panel = ref<HTMLElement | null>(null)
 
-type Phase = 'idle' | 'tracking' | 'dragging' | 'settling'
+type Phase = 'idle' | 'tracking' | 'left-alone' | 'dragging' | 'settling'
 let phase: Phase = 'idle'
 
 let origin: { x: number; y: number; at: number } | null = null
 let step: 1 | -1 = 1
+
+/** Whether this gesture is being handled without any sliding about. */
+let quiet = false
 let page: HTMLElement | null = null
 const timers: number[] = []
 
 function onStart(event: TouchEvent): void {
-  // Mid-flight, the gesture that is landing owns the screen.
-  if (phase !== 'idle') return
+  // A gesture that is landing owns the screen until it has. One that was being
+  // watched or left alone is simply over, whether or not its end was reported.
+  if (phase === 'dragging' || phase === 'settling') return
 
   const touch = event.touches[0]
 
@@ -81,6 +106,7 @@ function onStart(event: TouchEvent): void {
   if (event.touches.length !== 1 || !touch || overlaid(event.target)) return
 
   origin = { x: touch.clientX, y: touch.clientY, at: Date.now() }
+  quiet = motionless()
   phase = 'tracking'
 }
 
@@ -99,21 +125,20 @@ function onMove(event: TouchEvent): void {
   const dy = touch.clientY - origin.y
 
   if (phase === 'tracking') {
-    // Given up on rather than merely ignored once it is clearly a scroll, so a
-    // finger that wanders back across mid-scroll cannot still turn a page.
-    if (Math.abs(dy) > MIN_DRAG_PX && Math.abs(dy) >= Math.abs(dx)) {
-      abandon()
+    // Too little to read. Nothing is claimed and nothing is cancelled, so a
+    // scroll starting here is the browser's to run.
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < DECIDE_PX) return
+
+    // Down at least as much as across is a scroll, and it is given up on rather
+    // than merely ignored: a finger that wanders back across mid-scroll should
+    // not still be able to turn a page.
+    if (Math.abs(dy) >= Math.abs(dx)) {
+      giveUp()
       return
     }
 
-    if (Math.abs(dx) < MIN_DRAG_PX || Math.abs(dx) <= Math.abs(dy)) return
-
-    // Nothing slides for someone who has asked for less motion, so there is
-    // nothing to drag either: the group changes on release instead.
-    if (motionless()) return
-
-    if (!take(dx < 0 ? 1 : -1)) {
-      abandon()
+    if (!begin(dx < 0 ? 1 : -1)) {
+      giveUp()
       return
     }
 
@@ -122,17 +147,21 @@ function onMove(event: TouchEvent): void {
 
   // Dragged back past where it started: it is the other group coming in now.
   const wanted = dx < 0 ? 1 : -1
-  if (wanted !== step && !take(wanted)) {
+  if (wanted !== step && !begin(wanted)) {
     abandon()
     return
   }
 
   /*
-   * The one thing here that is not passive. Without it the browser is free to
-   * scroll the page down while the finger is dragging it sideways, and the two
-   * together read as the screen coming apart.
+   * The one thing here that is not passive, and the reason the decision above has
+   * to be quick: this is what stops the page scrolling while a finger is dragging
+   * it sideways.
    */
   if (event.cancelable) event.preventDefault()
+
+  // Someone who asked for less motion has the gesture taken all the same, so the
+  // page cannot run about under them either. There is just nothing to watch.
+  if (quiet) return
 
   glide.value = 0
   offset.value = step * width() + dx
@@ -158,19 +187,18 @@ function onEnd(event: TouchEvent): void {
     elapsedMs: Date.now() - began.at,
   })
 
-  // A gesture nobody dragged is still a swipe, on a screen too still to have
-  // reported one: a fast flick can end before a single move arrives.
+  /*
+   * A gesture nobody dragged can still have been a swipe: a fast flick can end
+   * before a single move arrives, and a sweep that started too steeply to claim
+   * was left to the browser rather than fought over. Read whole, from where the
+   * finger landed to where it left, it is either a swipe or it is not - and by
+   * now there is nothing to fight about, so the group changes and the incoming
+   * page slides in from the edge instead of from under the finger.
+   */
   if (!dragging) {
     phase = 'idle'
     if (!direction) return
-
-    const wanted = direction === 'left' ? 1 : -1
-    if (motionless()) {
-      groups.cycleMainGroup(wanted)
-      return
-    }
-
-    if (take(wanted)) commit()
+    if (begin(direction === 'left' ? 1 : -1)) commit()
     return
   }
 
@@ -182,12 +210,14 @@ function onEnd(event: TouchEvent): void {
 }
 
 /** Takes up the group that is coming in, and answers whether there is one. */
-function take(direction: 1 | -1): boolean {
+function begin(direction: 1 | -1): boolean {
   const group = groups.groupInCycle(direction)
   if (!group) return false
 
-  const order = groups.visibleGroups
   step = direction
+  if (quiet) return true
+
+  const order = groups.visibleGroups
   // Off screen to begin with, so there is somewhere for it to come in from.
   glide.value = 0
   offset.value = direction * width()
@@ -210,6 +240,15 @@ function take(direction: 1 | -1): boolean {
  */
 function commit(): void {
   phase = 'settling'
+
+  // Nothing to slide, so nothing to wait for: the group changes and that is the
+  // whole of it.
+  if (quiet) {
+    groups.cycleMainGroup(step)
+    if (window.scrollY > 0) window.scrollTo(0, 0)
+    finish()
+    return
+  }
 
   // A frame at the position it is coming from, forced by reading the layout: a
   // page that is put where it is going in the same breath as being created has
@@ -246,6 +285,12 @@ function commit(): void {
 /** Puts a gesture that changed its mind back where it started. */
 function back(): void {
   phase = 'settling'
+
+  if (quiet) {
+    finish()
+    return
+  }
+
   glide.value = RETURN_MS
   offset.value = step * width()
   movePage(0, RETURN_MS)
@@ -262,6 +307,19 @@ function finish(): void {
   releasePage()
   phase = 'idle'
   origin = null
+}
+
+/**
+ * Leaves the gesture to the browser, while still watching where it ends up.
+ *
+ * Not the same as dropping it. Once a move has been allowed through, the browser
+ * scrolls for the rest of the gesture whatever anyone says afterwards, so there
+ * is no taking it back - but there is no harm in reading the whole thing when the
+ * finger leaves, and a sweep too steep to claim at six pixels is usually obvious
+ * by the end.
+ */
+function giveUp(): void {
+  phase = 'left-alone'
 }
 
 /** Drops a gesture that turned out to be something else, with nothing to undo. */
