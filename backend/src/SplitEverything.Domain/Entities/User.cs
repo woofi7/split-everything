@@ -24,6 +24,18 @@ public class User
     /// </summary>
     public string? PreferredColorHex { get; set; }
 
+    /// <summary>
+    /// The accent colour this person wants the whole application to wear.
+    ///
+    /// A name from <see cref="Common.AppThemes"/> rather than a colour, because a
+    /// theme is three shades and the client is what knows them. Null means they
+    /// have not said, which is the default theme.
+    ///
+    /// On the account rather than on the device: someone who picks a colour means
+    /// it wherever they sign in.
+    /// </summary>
+    public string? ThemeName { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastSeenAt { get; set; }
 

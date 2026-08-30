@@ -16,7 +16,9 @@ public sealed record AuthenticatedUser(
     string DefaultCurrency,
     bool PrefersLightTheme,
     /// <summary>The colour they would like in the groups they join, if any.</summary>
-    string? PreferredColorHex);
+    string? PreferredColorHex,
+    /// <summary>The accent the whole application wears for them, if they said.</summary>
+    string? ThemeName = null);
 
 public sealed record SignInResult(AuthenticatedUser User, AuthTokens Tokens, bool IsNewUser, IReadOnlyList<Guid> AutoJoinedGroupIds);
 
@@ -29,7 +31,8 @@ public sealed record UpdateProfileRequest(
     string? Locale,
     // Null leaves it alone; an empty string clears it, matching the other
     // clearable fields on this API.
-    string? PreferredColorHex = null);
+    string? PreferredColorHex = null,
+    string? ThemeName = null);
 
 /// <summary>
 /// Signs in without Google, for local development only. Refused unless it has been

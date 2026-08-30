@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ApiError, type ApiClient } from '@/api/client'
 import { resetDatabase, rotateDeviceId } from '@/offline/db'
+import { findAccent, resolveAccent, type AccentTheme } from '@/domain/themes'
 
 export interface AuthenticatedUser {
   id: string
@@ -12,6 +13,8 @@ export interface AuthenticatedUser {
   prefersLightTheme: boolean
   /** The colour they would like in the groups they join, if they have said. */
   preferredColorHex?: string | null
+  /** The accent the whole application wears for them, if they have said. */
+  themeName?: string | null
 }
 
 export interface AuthTokens {
@@ -78,6 +81,16 @@ export const useAuthStore = defineStore('auth', () => {
     if (storedTheme.value) return storedTheme.value
     return user.value?.prefersLightTheme ? 'light' : 'dark'
   })
+
+  /**
+   * The accent the app is wearing.
+   *
+   * From the account rather than from the device, because somebody who picks a
+   * colour means it wherever they sign in. It is right on the first paint without
+   * waiting for anything: the signed-in user is mirrored into storage with the
+   * session, so it comes back with it.
+   */
+  const accent = computed<AccentTheme>(() => resolveAccent(user.value?.themeName))
 
   function attachApi(client: ApiClient): void {
     api = client
@@ -367,11 +380,36 @@ export const useAuthStore = defineStore('auth', () => {
     prefersLightTheme?: boolean
     // An empty string clears it, as the API reads null as "not supplied".
     preferredColorHex?: string | null
+    themeName?: string
     locale?: string
   }): Promise<void> {
     const updated = await requireApi().patch<AuthenticatedUser>('/auth/me', changes)
     user.value = updated
     persist()
+  }
+
+  /**
+   * Wears a different accent.
+   *
+   * Applied here and then sent, rather than the other way round: the whole
+   * application changes colour on the tap, and a spinner over a swatch while a
+   * server agrees would be absurd. A refused or unreachable server leaves the
+   * choice showing, which is the same bargain the light switch makes.
+   */
+  async function setAccent(name: string): Promise<void> {
+    const theme = findAccent(name)
+    if (!theme || !user.value) return
+
+    user.value = { ...user.value, themeName: theme.name }
+    persist()
+
+    if (!api) return
+
+    try {
+      await updateProfile({ themeName: theme.name })
+    } catch {
+      // The colour is already on; agreeing with the server is a nicety.
+    }
   }
 
   async function setTheme(next: Theme): Promise<void> {
@@ -443,6 +481,7 @@ export const useAuthStore = defineStore('auth', () => {
     isSignedIn,
     accessToken,
     theme,
+    accent,
     rememberedAccount,
     resumeSession,
     forgetDevice,
@@ -455,6 +494,7 @@ export const useAuthStore = defineStore('auth', () => {
     signOut,
     updateProfile,
     setTheme,
+    setAccent,
     deleteAccount,
   }
 })
