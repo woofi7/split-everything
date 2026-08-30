@@ -97,6 +97,12 @@ them for secure contexts: the service worker, so no PWA install or offline shell
 and Web Push. Sign in with the development form; a Google OAuth client cannot list
 an IP address as an authorised origin.
 
+Everything else does work there, including the statement importer. It hashes each
+row with SHA-256 to ask the server whether the transaction is already recorded,
+and `crypto.subtle` is secure-context only, so the app carries its own SHA-256 for
+that case. It is the same algorithm, tested against the published vectors and
+against `crypto.subtle` itself, because the hashes are compared with the server's.
+
 ### Signing in locally
 
 `appsettings.Development.json` sets `Auth:AllowDevelopmentSignIn`, so the sign-in
