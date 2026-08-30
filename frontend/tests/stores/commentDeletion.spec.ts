@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { db, resetDatabase } from '@/offline/db'
 import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
-import { waitFor } from '../support/viewHarness'
+import { signInForTests, waitFor } from '../support/viewHarness'
 
 /**
  * Deleting your own comment.
@@ -95,6 +95,8 @@ describe('removing a comment', () => {
 
   beforeEach(async () => {
     setActivePinia(createPinia())
+    // The sync path refuses to talk to the server as nobody.
+    signInForTests()
     await resetDatabase()
     await seed()
   })

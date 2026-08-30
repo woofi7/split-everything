@@ -13,6 +13,7 @@ import { netBalances, simplifyDebts, pairwiseDebts, type MemberBalance, type Tra
 import { roundMoney } from '@/domain/money'
 import type { SyncEngine } from '@/offline/syncEngine'
 import { newId } from '@/domain/ids'
+import { useAuthStore } from '@/stores/auth'
 
 export interface ExpenseDraft {
   groupId: string
@@ -568,6 +569,12 @@ export const useExpensesStore = defineStore('expenses', () => {
   }
 
   async function sync(): Promise<void> {
+    // Nobody to sync as. Every request would be refused, and asked here rather
+    // than at each caller because this is the only place that talks to the
+    // server: startup repairs the outbox and ends with a drain, the tab becoming
+    // visible asks for one, and both happen on the sign-in page.
+    if (!useAuthStore().isSignedIn) return
+
     isSyncing.value = true
     try {
       await requireSync().flush()
