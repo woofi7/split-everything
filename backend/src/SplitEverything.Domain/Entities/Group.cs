@@ -14,6 +14,23 @@ public class Group : SyncableEntity
     public string? IconName { get; set; }
     public string ColorHex { get; set; } = "#4f46e5";
 
+    /// <summary>
+    /// How a new expense in this group is split unless someone says otherwise.
+    ///
+    /// A group setting rather than a device preference: how a household divides
+    /// its costs is a fact about the household, and it should hold on whichever
+    /// phone the next expense is typed on.
+    /// </summary>
+    public SplitType DefaultSplitType { get; set; } = SplitType.Equal;
+
+    /// <summary>
+    /// Per-member values for the default split, as member id to weight, or null
+    /// when the default needs none. Stored as JSON because the shape is a map
+    /// keyed by rows in another table, and a table of its own would buy nothing:
+    /// it is only ever read and written whole.
+    /// </summary>
+    public string? DefaultSplitValuesJson { get; set; }
+
     /// <summary>Frozen: readable, no new writes accepted.</summary>
     public bool IsArchived { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }

@@ -44,6 +44,7 @@ const participantIds = ref<string[]>([])
 const splitValues = ref<Record<string, number>>({})
 const error = ref<string | null>(null)
 const isSaving = ref(false)
+const makeDefault = ref(false)
 
 /** Short, so all four fit one row on a phone without wrapping. */
 const splitTypes: Array<{ value: SplitType; label: string }> = [
@@ -120,7 +121,33 @@ async function selectGroup(nextGroupId: string): Promise<void> {
 
   const mine = active.find((member) => member.userId === auth.user?.id)?.id
   paidByMemberId.value = mine ?? active[0]?.id ?? ''
-  splitValues.value = {}
+
+  applyGroupDefault(loaded?.defaultSplitType, loaded?.defaultSplitValues, active.map((m) => m.id))
+}
+
+/**
+ * Starts the form from how this group splits.
+ *
+ * A household that always divides rent sixty forty had to say so on every
+ * expense. Stored values are filtered to people who are still in the group: a
+ * weight for someone who has left would make the split refuse to add up, and the
+ * person would have no idea why.
+ */
+function applyGroupDefault(
+  type: SplitType | undefined,
+  values: Record<string, number> | null | undefined,
+  activeIds: readonly string[],
+): void {
+  splitType.value = type ?? 'Equal'
+
+  if (!values || splitType.value === 'Equal') {
+    splitValues.value = {}
+    return
+  }
+
+  splitValues.value = Object.fromEntries(
+    Object.entries(values).filter(([memberId]) => activeIds.includes(memberId)),
+  )
 }
 
 /**
@@ -172,6 +199,23 @@ const previewProblem = computed(() => {
  * Only when editing. Adding is a tab, and the tab is already lit: a back button
  * there would compete with it.
  */
+/**
+ * Offered only when it would change something. Ticking it to record the split the
+ * group already uses is a control that does nothing.
+ */
+const canSetDefault = computed(() => {
+  if (!group.value) return false
+
+  const current = group.value.defaultSplitType ?? 'Equal'
+  if (current !== splitType.value) return true
+  if (splitType.value === 'Equal') return false
+
+  const stored = group.value.defaultSplitValues ?? {}
+  return participantIds.value.some(
+    (memberId) => (stored[memberId] ?? null) !== (splitValues.value[memberId] ?? null),
+  )
+})
+
 const backTarget = computed(() =>
   isEditing.value && groupId.value
     ? { name: 'expense', params: { groupId: groupId.value, expenseId: editingId.value } }
@@ -247,6 +291,21 @@ async function save(): Promise<void> {
     splitType: splitType.value,
     participantIds: participantIds.value,
     splitValues: splitValues.value,
+  }
+
+  // Before the expense, because the split it records is the one on screen now, and
+  // a failure here should not cost the expense.
+  if (makeDefault.value) {
+    try {
+      await groups.setDefaultSplit(
+        group.value.id,
+        splitType.value,
+        splitType.value === 'Equal' ? null : { ...splitValues.value },
+      )
+    } catch {
+      // Worth saying, but not worth refusing to save the expense over.
+      error.value = 'Saved, but the group default could not be changed.'
+    }
   }
 
   try {
@@ -435,6 +494,14 @@ async function save(): Promise<void> {
           </li>
         </ul>
       </fieldset>
+
+      <label
+        v-if="canSetDefault"
+        class="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-muted)]"
+      >
+        <input v-model="makeDefault" type="checkbox" data-testid="make-default" />
+        Split every new expense in {{ group?.name }} this way
+      </label>
 
       <p v-if="previewProblem" class="text-xs text-[var(--text-muted)]" aria-live="polite">
         {{ previewProblem }}

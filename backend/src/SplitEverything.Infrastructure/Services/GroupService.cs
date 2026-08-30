@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SplitEverything.Application.Abstractions;
 using SplitEverything.Application.Common;
@@ -110,7 +111,29 @@ public sealed class GroupService(
                 .ToList(),
             myMemberId is null ? 0m : balances.GetValueOrDefault(myMemberId.Value),
             totals?.Total ?? 0m,
-            totals?.Count ?? 0);
+            totals?.Count ?? 0,
+            group.DefaultSplitType,
+            ReadDefaultSplitValues(group.DefaultSplitValuesJson));
+    }
+
+    /// <summary>
+    /// The stored default split values, or null. Unreadable JSON is treated as no
+    /// default rather than as an error: it would only ever mean a shape from an
+    /// older version, and refusing to load a group over it would be absurd.
+    /// </summary>
+    internal static IReadOnlyDictionary<Guid, decimal>? ReadDefaultSplitValues(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<Guid, decimal>>(json);
+            return parsed is { Count: > 0 } ? parsed : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     public async Task<IReadOnlyList<GroupSummaryDto>> ListAsync(
@@ -179,6 +202,18 @@ public sealed class GroupService(
         if (request.BaseCurrency is not null)
             group.BaseCurrency = GroupAccess.NormalizeCurrency(request.BaseCurrency, "Base currency");
 
+        if (request.DefaultSplitType is { } defaultSplit)
+        {
+            group.DefaultSplitType = defaultSplit;
+
+            // Only meaningful alongside a type. An equal split needs none, and an
+            // empty map is the explicit clear, the same convention as the text
+            // fields above.
+            group.DefaultSplitValuesJson = defaultSplit == SplitType.Equal
+                ? null
+                : await BuildDefaultSplitValuesAsync(groupId, request.DefaultSplitValues, ct);
+        }
+
         await writer.RecordAsync(group, SyncEntityType.Group, groupId, SyncOperation.Update,
             DeviceFor(userId), userId, GroupPayload(group), ct: ct);
 
@@ -193,6 +228,33 @@ public sealed class GroupService(
     /// sent an empty string to clear it. Rejects anything too long for the column
     /// rather than letting the database truncate it into something meaningless.
     /// </summary>
+    /// <summary>
+    /// Validates and serialises the default split values.
+    ///
+    /// Members are checked against the group: a value for someone who is not in it
+    /// would sit in the group forever, silently ignored by every form that read it.
+    /// </summary>
+    private async Task<string?> BuildDefaultSplitValuesAsync(
+        Guid groupId, IReadOnlyDictionary<Guid, decimal>? values, CancellationToken ct)
+    {
+        if (values is null || values.Count == 0) return null;
+
+        var members = (await db.GroupMembers
+            .Where(m => m.GroupId == groupId && !m.IsDeleted)
+            .Select(m => m.Id)
+            .ToListAsync(ct)).ToHashSet();
+
+        foreach (var (memberId, value) in values)
+        {
+            if (!members.Contains(memberId))
+                throw new ValidationException("A default split value names someone who is not in this group.");
+            if (value < 0m)
+                throw new ValidationException("A default split value cannot be negative.");
+        }
+
+        return JsonSerializer.Serialize(values);
+    }
+
     private static string? Clearable(string value, string field, int maxLength)
     {
         var trimmed = value.Trim();
@@ -468,6 +530,10 @@ public sealed class GroupService(
     {
         group.Id, group.Name, group.Description, group.BaseCurrency,
         group.IconName, group.ColorHex, group.IsArchived, group.LineageId,
+        // In the payload so another device learns the group's default split from
+        // the delta pull rather than only on a full read.
+        DefaultSplitType = (int)group.DefaultSplitType,
+        group.DefaultSplitValuesJson,
         group.IsDeleted
     };
 

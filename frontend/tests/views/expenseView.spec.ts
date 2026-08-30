@@ -306,3 +306,80 @@ describe('ExpenseView card colour', () => {
     expect(style).toContain('--surface-raised')
   })
 })
+
+describe('ExpenseView split type', () => {
+  it('says how the expense was split, not just how much', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense({ splitType: 'Percentage' })],
+    })
+    await settle()
+
+    // Two expenses with identical shares can have been divided by quite different
+    // rules, and the rule is what someone checks when the numbers look wrong.
+    expect(wrapper.find('[data-testid="split-type"]').text()).toBe('By percentage')
+  })
+
+  it('names an equal split too', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense({ splitType: 'Equal' })],
+    })
+    await settle()
+
+    expect(wrapper.find('[data-testid="split-type"]').text()).toBe('Equally')
+  })
+
+  it('shows the percentage behind each share', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [
+        testExpense({
+          splitType: 'Percentage',
+          amount: 100,
+          splits: [
+            { memberId: ALICE, amount: 70, amountInBaseCurrency: 70, inputValue: 70 },
+            { memberId: BOB, amount: 30, amountInBaseCurrency: 30, inputValue: 30 },
+          ],
+        }),
+      ],
+    })
+    await settle()
+
+    const text = textOf(wrapper)
+    expect(text).toContain('70%')
+    expect(text).toContain('30%')
+  })
+
+  it('counts shares as shares', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [
+        testExpense({
+          splitType: 'Shares',
+          amount: 90,
+          splits: [
+            { memberId: ALICE, amount: 60, amountInBaseCurrency: 60, inputValue: 2 },
+            { memberId: BOB, amount: 30, amountInBaseCurrency: 30, inputValue: 1 },
+          ],
+        }),
+      ],
+    })
+    await settle()
+
+    const text = textOf(wrapper)
+    expect(text).toContain('2 shares')
+    expect(text).toContain('1 share')
+  })
+
+  it('says nothing about weights for an equal split', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense({ splitType: 'Equal' })],
+    })
+    await settle()
+
+    // Equal has no weight to show; an empty label beside each name would be noise.
+    expect(textOf(wrapper)).not.toContain('shares')
+  })
+})

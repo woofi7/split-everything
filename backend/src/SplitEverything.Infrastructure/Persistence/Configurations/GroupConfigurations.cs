@@ -17,6 +17,7 @@ public class GroupConfiguration : IEntityTypeConfiguration<Group>
         builder.Property(g => g.IconName).HasMaxLength(48);
         builder.Property(g => g.ColorHex).HasMaxLength(9).IsRequired();
         builder.Property(g => g.VectorClockJson).HasColumnType("jsonb").IsRequired();
+        builder.Property(g => g.DefaultSplitValuesJson).HasColumnType("jsonb");
         builder.Property(g => g.LastWriterDeviceId).HasMaxLength(64);
 
         builder.HasIndex(g => g.LineageId);
