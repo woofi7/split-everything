@@ -52,7 +52,8 @@ public enum ActivityKind
     GroupMerged = 13,
     GroupSplit = 14,
     DebtNudge = 15,
-    ImportCommitted = 16
+    ImportCommitted = 16,
+    MembersMerged = 17
 }
 
 public enum SyncOperation

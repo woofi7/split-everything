@@ -53,6 +53,12 @@ public sealed record GroupSummaryDto(
 
 
 /// <summary>Adds someone who already has an account, rather than a placeholder.</summary>
+/// <summary>
+/// Folds one member into another. The source is emptied and removed; the target
+/// ends up owning everything the source paid, owed, was owed and said.
+/// </summary>
+public sealed record MergeMembersRequest(Guid SourceMemberId, Guid TargetMemberId);
+
 public sealed record AddUserMemberRequest(Guid UserId);
 
 /// <summary>

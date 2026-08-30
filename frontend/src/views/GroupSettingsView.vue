@@ -47,6 +47,48 @@ const addable = ref<AddableUser[]>([])
 const error = ref<string | null>(null)
 const message = ref<string | null>(null)
 
+/** Who is being merged away, while the confirmation is open. */
+const merging = ref<{ id: string; displayName: string } | null>(null)
+const mergeInto = ref('')
+const isMerging = ref(false)
+
+/**
+ * Who this person could be merged into: everyone else still in the group.
+ *
+ * The owner is a valid target and never a source, so the group always keeps one.
+ */
+const mergeTargets = computed(() =>
+  (group.value?.members ?? []).filter(
+    (member) => member.id !== merging.value?.id && member.status === 'Active',
+  ),
+)
+
+function startMerge(member: { id: string; displayName: string }): void {
+  error.value = null
+  message.value = null
+  merging.value = { id: member.id, displayName: member.displayName }
+  mergeInto.value = ''
+}
+
+async function confirmMerge(): Promise<void> {
+  const source = merging.value
+  if (!source || !mergeInto.value) return
+
+  error.value = null
+  isMerging.value = true
+
+  try {
+    await groups.mergeMembers(groupId.value, source.id, mergeInto.value)
+    message.value = `${source.displayName} was merged.`
+    merging.value = null
+    await loadAddable()
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Could not merge those two.'
+  } finally {
+    isMerging.value = false
+  }
+}
+
 
 onMounted(async () => {
   const group = await groups.get(groupId.value)
@@ -234,16 +276,92 @@ async function unarchive(): Promise<void> {
               (removed)
             </span>
           </span>
-          <button
-            v-if="member.status === 'Active' && member.role !== 'Owner'"
-            type="button"
-            class="shrink-0 text-xs text-[var(--text-muted)] underline"
-            @click="removeMember(member.id)"
-          >
-            Remove
-          </button>
+          <span class="flex shrink-0 items-center gap-3">
+            <!--
+              Offered on everyone but the owner, and only where there is someone to
+              merge into. It is how the two halves of one person become one: a name
+              a CSV import invented, and the account they later signed up with.
+            -->
+            <button
+              v-if="member.status === 'Active' && member.role !== 'Owner' && (group?.members?.length ?? 0) > 1"
+              type="button"
+              :data-testid="`merge-${member.id}`"
+              class="text-xs text-[var(--text-muted)] underline"
+              @click="startMerge(member)"
+            >
+              Merge
+            </button>
+            <button
+              v-if="member.status === 'Active' && member.role !== 'Owner'"
+              type="button"
+              class="text-xs text-[var(--text-muted)] underline"
+              @click="removeMember(member.id)"
+            >
+              Remove
+            </button>
+          </span>
         </li>
       </ul>
+
+      <!--
+        The warning is the feature. Everything this moves keeps working afterwards,
+        which is exactly why a mistake is invisible: the balances are simply wrong
+        from then on, and nothing records what they used to be.
+      -->
+      <div
+        v-if="merging"
+        data-testid="merge-confirm"
+        class="mb-3 flex flex-col gap-3 rounded-lg border p-3"
+        style="border-color: var(--color-owing)"
+        role="alertdialog"
+        aria-label="Merge two people"
+      >
+        <p class="text-sm">
+          Move everything {{ merging.displayName }} paid, owes and is owed onto
+          someone else, and remove them from the group.
+        </p>
+
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">Merge into</span>
+          <select
+            v-model="mergeInto"
+            data-testid="merge-target"
+            class="tap-target rounded-lg border bg-[var(--surface)] px-3"
+            style="border-color: var(--border)"
+          >
+            <option value="" disabled>Choose a person</option>
+            <option v-for="target in mergeTargets" :key="target.id" :value="target.id">
+              {{ target.displayName }}
+            </option>
+          </select>
+        </label>
+
+        <p class="text-xs text-owing">
+          This cannot be undone. Their expenses, settlements and comments become
+          {{ mergeTargets.find((t) => t.id === mergeInto)?.displayName ?? 'the other person' }}'s
+          permanently, and there is no record of which ones moved.
+        </p>
+
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="btn btn-press btn-secondary flex-1"
+            style="border-color: var(--border)"
+            @click="merging = null"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid="merge-confirm-button"
+            class="btn btn-press btn-danger flex-1"
+            :disabled="!mergeInto || isMerging"
+            @click="confirmMerge"
+          >
+            {{ isMerging ? 'Merging' : 'Merge for good' }}
+          </button>
+        </div>
+      </div>
 
       <PersonPicker
         :candidates="addable"

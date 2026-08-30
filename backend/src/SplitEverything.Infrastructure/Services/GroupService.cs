@@ -378,6 +378,225 @@ public sealed class GroupService(
         => new(member.Id, member.UserId, member.DisplayName, avatarUrl,
             member.Role, member.Status, member.UserId is null, 0m);
 
+    /// <summary>
+    /// Folds one member into another.
+    ///
+    /// Everything the source paid, owed, was owed and said becomes the target's,
+    /// and the source is removed. It exists because the same person can end up in
+    /// a group twice: once as a name a CSV import invented, and again as the
+    /// account they signed up with.
+    ///
+    /// One way only. Nothing records which rows moved, so nothing can move them
+    /// back, which is why the caller has to mean it.
+    /// </summary>
+    public async Task<GroupDto> MergeMembersAsync(
+        Guid userId, Guid groupId, MergeMembersRequest request, CancellationToken ct = default)
+    {
+        var actor = await GroupAccess.RequireAdminAsync(db, userId, groupId, ct);
+        var group = await GroupAccess.RequireGroupAsync(db, groupId, ct);
+        GroupAccess.RequireWritable(group);
+
+        if (request.SourceMemberId == request.TargetMemberId)
+            throw new ValidationException("Pick two different people to merge.");
+
+        var source = await RequireMemberAsync(groupId, request.SourceMemberId, ct);
+        var target = await RequireMemberAsync(groupId, request.TargetMemberId, ct);
+
+        // The group has to keep an owner, and the owner is never the one to lose.
+        if (source.Role == GroupRole.Owner)
+            throw new ValidationException(
+                "The group owner cannot be merged away. Merge the other person into the owner instead.");
+
+        var deviceId = DeviceFor(userId);
+        var summary = $"Merged {source.DisplayName} into {target.DisplayName}";
+
+        // Expenses first, with everything hanging off them. A split and an item
+        // share are both keyed by member and both may already exist for the
+        // target, in which case the two become one rather than colliding on the
+        // unique index they share.
+        var expenses = await db.Expenses
+            .Include(e => e.Splits)
+            .Include(e => e.Items).ThenInclude(i => i.Shares)
+            .Where(e => e.GroupId == groupId && (
+                e.PaidByMemberId == source.Id ||
+                e.Splits.Any(s => s.MemberId == source.Id) ||
+                e.Items.Any(i => i.Shares.Any(sh => sh.MemberId == source.Id))))
+            .ToListAsync(ct);
+
+        foreach (var expense in expenses)
+        {
+            if (expense.PaidByMemberId == source.Id) expense.PaidByMemberId = target.Id;
+
+            MergeSplits(expense, source.Id, target.Id);
+            foreach (var item in expense.Items) MergeShares(item, source.Id, target.Id);
+
+            expense.Revision++;
+            db.ExpenseRevisions.Add(new ExpenseRevision
+            {
+                ExpenseId = expense.Id,
+                GroupId = expense.GroupId,
+                Revision = expense.Revision,
+                EditedByUserId = userId,
+                EditedByDeviceId = deviceId,
+                EditedAt = clock.UtcNow,
+                VectorClockJson = expense.VectorClockJson,
+                SnapshotJson = JsonSerializer.Serialize(ExpenseService.ExpensePayload(expense)),
+                ChangeSummary = summary
+            });
+
+            await writer.RecordAsync(expense, SyncEntityType.Expense, groupId, SyncOperation.Update,
+                deviceId, userId, ExpenseService.ExpensePayload(expense), ct: ct);
+        }
+
+        var settlements = await db.Settlements
+            .Where(s => s.GroupId == groupId
+                        && (s.FromMemberId == source.Id || s.ToMemberId == source.Id))
+            .ToListAsync(ct);
+
+        foreach (var settlement in settlements)
+        {
+            if (settlement.FromMemberId == source.Id) settlement.FromMemberId = target.Id;
+            if (settlement.ToMemberId == source.Id) settlement.ToMemberId = target.Id;
+
+            // A payment from someone to themselves says nothing. It only ever meant
+            // anything while the two were different people.
+            var operation = settlement.FromMemberId == settlement.ToMemberId
+                ? SyncOperation.Delete
+                : SyncOperation.Update;
+
+            await writer.RecordAsync(settlement, SyncEntityType.Settlement, groupId, operation,
+                deviceId, userId, SettlementService.SettlementPayload(settlement), ct: ct);
+        }
+
+        var comments = await db.ExpenseComments
+            .Where(c => c.GroupId == groupId && c.AuthorMemberId == source.Id)
+            .ToListAsync(ct);
+
+        foreach (var comment in comments)
+        {
+            comment.AuthorMemberId = target.Id;
+            await writer.RecordAsync(comment, SyncEntityType.ExpenseComment, groupId,
+                SyncOperation.Update, deviceId, userId,
+                new { comment.Id, comment.ExpenseId, comment.AuthorMemberId, comment.ParentCommentId, comment.Body },
+                ct: ct);
+        }
+
+        // Not synced, so repointed without a log entry, but still repointed: a
+        // recurring expense left pointing at a removed member would come due and
+        // fail, and the activity feed would name nobody.
+        await db.RecurringExpenses
+            .Where(r => r.GroupId == groupId && r.PaidByMemberId == source.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(r => r.PaidByMemberId, target.Id), ct);
+
+        await db.ActivityLog
+            .Where(a => a.GroupId == groupId && a.ActorMemberId == source.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(a => a.ActorMemberId, target.Id), ct);
+
+        // An invite still out there would otherwise hand its taker a member row
+        // that no longer exists.
+        await db.GroupInvites
+            .Where(i => i.GroupId == groupId && i.ClaimsMemberId == source.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(i => i.ClaimsMemberId, target.Id), ct);
+
+        if (MergeDefaultSplitValues(group, source.Id, target.Id))
+        {
+            group.UpdatedAt = clock.UtcNow;
+            await writer.RecordAsync(group, SyncEntityType.Group, groupId, SyncOperation.Update,
+                deviceId, userId, GroupPayload(group), ct: ct);
+        }
+
+        // Nothing points at the source any more, so it goes rather than lingering
+        // as a person with no history who cannot be told apart from a real one.
+        source.Status = MembershipStatus.Removed;
+        source.LeftAt = clock.UtcNow;
+        await writer.RecordAsync(source, SyncEntityType.GroupMember, groupId, SyncOperation.Delete,
+            deviceId, userId, MemberPayload(source), ct: ct);
+
+        await activity.RecordAsync(groupId, ActivityKind.MembersMerged, userId, actor.Id,
+            SyncEntityType.GroupMember, target.Id,
+            $"{actor.DisplayName} merged {source.DisplayName} into {target.DisplayName} in {group.Name}",
+            ct: ct);
+
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
+
+        return await GetAsync(userId, groupId, ct);
+    }
+
+    /// <summary>
+    /// Moves the source's share of an expense onto the target, adding to whatever
+    /// the target already had. Two shares of one expense held by what turns out to
+    /// be one person are one share.
+    /// </summary>
+    private void MergeSplits(Expense expense, Guid sourceId, Guid targetId)
+    {
+        var mine = expense.Splits.FirstOrDefault(s => s.MemberId == sourceId);
+        if (mine is null) return;
+
+        var theirs = expense.Splits.FirstOrDefault(s => s.MemberId == targetId);
+
+        if (theirs is null)
+        {
+            mine.MemberId = targetId;
+            return;
+        }
+
+        theirs.Amount += mine.Amount;
+        theirs.AmountInBaseCurrency += mine.AmountInBaseCurrency;
+
+        // The input is what someone typed: two shares, two percentages or two
+        // exact amounts all add up. Null means the split type does not take one.
+        theirs.InputValue = mine.InputValue is null && theirs.InputValue is null
+            ? null
+            : (theirs.InputValue ?? 0m) + (mine.InputValue ?? 0m);
+
+        expense.Splits.Remove(mine);
+        db.ExpenseSplits.Remove(mine);
+    }
+
+    /// <summary>
+    /// The same for an itemised line, where a share is membership rather than an
+    /// amount: being on it twice is being on it once.
+    /// </summary>
+    private void MergeShares(ExpenseItem item, Guid sourceId, Guid targetId)
+    {
+        var mine = item.Shares.FirstOrDefault(s => s.MemberId == sourceId);
+        if (mine is null) return;
+
+        if (item.Shares.Any(s => s.MemberId == targetId))
+        {
+            item.Shares.Remove(mine);
+            db.ExpenseItemShares.Remove(mine);
+            return;
+        }
+
+        mine.MemberId = targetId;
+    }
+
+    /// <summary>
+    /// Moves the source's weight in the group default onto the target. Returns
+    /// whether anything changed, so the group is only re-recorded when it did.
+    /// </summary>
+    private static bool MergeDefaultSplitValues(Group group, Guid sourceId, Guid targetId)
+    {
+        var stored = ReadDefaultSplitValues(group.DefaultSplitValuesJson);
+        if (stored is null || !stored.TryGetValue(sourceId, out var weight)) return false;
+
+        var values = new Dictionary<Guid, decimal>(stored);
+        values.Remove(sourceId);
+        values[targetId] = values.TryGetValue(targetId, out var existing) ? existing + weight : weight;
+
+        group.DefaultSplitValuesJson = values.Count == 0
+            ? null
+            : JsonSerializer.Serialize(values);
+
+        return true;
+    }
+
+    private async Task<GroupMember> RequireMemberAsync(Guid groupId, Guid memberId, CancellationToken ct)
+        => await db.GroupMembers.FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == groupId, ct)
+           ?? throw new NotFoundException($"Member {memberId}");
+
     public async Task RemoveMemberAsync(Guid userId, Guid groupId, Guid memberId, CancellationToken ct = default)
     {
         var actor = await GroupAccess.RequireAdminAsync(db, userId, groupId, ct);
