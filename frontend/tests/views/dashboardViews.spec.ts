@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import ActivityView from '@/views/ActivityView.vue'
 import StatsView from '@/views/StatsView.vue'
-import { fakeApi, mountView, settle, testGroup, textOf } from '../support/viewHarness'
+import { GROUP_ID, fakeApi, mountView, settle, testGroup, textOf } from '../support/viewHarness'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: {}, query: {} }),
@@ -199,13 +199,29 @@ describe('StatsView', () => {
     )
   })
 
-  it('asks for all groups by default', async () => {
+  it('opens on the group the rest of the app is on', async () => {
     const client = api()
     await mountView(StatsView, { api: client })
+    await settle()
+
+    // Not a total across groups nobody asked for.
+    expect(client.get).toHaveBeenCalledWith(
+      '/stats',
+      expect.objectContaining({ groupId: GROUP_ID, granularity: 'month' }),
+    )
+  })
+
+  it('can still be asked for every group', async () => {
+    const client = api()
+    const { wrapper } = await mountView(StatsView, { api: client })
+    await settle()
+
+    await wrapper.find('select').setValue('')
+    await settle()
 
     expect(client.get).toHaveBeenCalledWith(
       '/stats',
-      expect.objectContaining({ groupId: undefined, granularity: 'month' }),
+      expect.objectContaining({ groupId: undefined }),
     )
   })
 
@@ -222,5 +238,59 @@ describe('StatsView', () => {
     const { wrapper } = await mountView(StatsView, { api: api({ spendOverTime: [] }) })
 
     expect(wrapper.find('[role="img"]').exists()).toBe(false)
+  })
+})
+
+describe('ActivityView opening an expense', () => {
+  const entry = (overrides: Record<string, unknown> = {}) => ({
+    id: 1,
+    groupId: GROUP_ID,
+    groupName: 'Roommates',
+    kind: 'ExpenseAdded',
+    actorName: 'Alice',
+    subjectType: 'Expense',
+    subjectId: 'expense-1',
+    summary: 'Alice added Dinner',
+    occurredAt: '2026-01-05T12:00:00Z',
+    ...overrides,
+  })
+
+  it('links an expense entry to the expense', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({ '/activity': () => ({ items: [entry()] }), '/groups': () => [testGroup()] }),
+    })
+    await settle()
+
+    const row = wrapper.find('[data-testid="activity-row"]')
+    expect(row.attributes('data-linked')).toBe('true')
+
+    const link = wrapper.findAllComponents(RouterLinkStub)
+      .find((l) => JSON.stringify(l.props().to).includes('expense-1'))
+    expect(link).toBeDefined()
+  })
+
+  it('leaves an entry with nothing to open as plain text', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({
+        '/activity': () => ({ items: [entry({ subjectType: 'GroupMember', subjectId: 'm1' })] }),
+        '/groups': () => [testGroup()],
+      }),
+    })
+    await settle()
+
+    // A card that looks tappable and does nothing is worse than one that does not.
+    expect(wrapper.find('[data-testid="activity-row"]').attributes('data-linked')).toBe('false')
+  })
+
+  it('leaves an entry with no group as plain text', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: fakeApi({
+        '/activity': () => ({ items: [entry({ groupId: null })] }),
+        '/groups': () => [testGroup()],
+      }),
+    })
+    await settle()
+
+    expect(wrapper.find('[data-testid="activity-row"]').attributes('data-linked')).toBe('false')
   })
 })

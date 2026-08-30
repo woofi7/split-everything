@@ -39,7 +39,11 @@ async function bootstrap(): Promise<void> {
   // Views resolve the client through the provider rather than building their own.
   setApiClient(api)
   auth.attachApi(api)
-  useGroupsStore().attachApi(api)
+  const groupsStore = useGroupsStore()
+  groupsStore.attachApi(api)
+  // Restored before any screen reads it, so the app opens on the group it was left
+  // on rather than flicking to a different one.
+  groupsStore.restoreMainGroup()
 
   // Before the router runs, so the guard sees the session rather than bouncing
   // someone to sign-in while a good session sits in the cookie the app cannot

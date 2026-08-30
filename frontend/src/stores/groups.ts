@@ -4,6 +4,8 @@ import { db, type LocalGroup, type LocalMember } from '@/offline/db'
 import type { ApiClient } from '@/api/client'
 import type { AddableUser } from '@/api/types'
 
+const MAIN_GROUP_KEY = 'split-everything.main-group'
+
 interface GroupSummaryDto {
   id: string
   name: string
@@ -61,6 +63,52 @@ export const useGroupsStore = defineStore('groups', () => {
     ),
   )
 
+  /**
+   * The group the app is about, and the default every screen falls back to.
+   *
+   * A device preference rather than account state: which group you are looking at
+   * is about the screen in your hand, and it has to survive a reload without
+   * waiting on the network.
+   */
+  const mainGroupId = ref<string | null>(null)
+
+  const mainGroup = computed(() =>
+    groups.value.find((group) => group.id === mainGroupId.value),
+  )
+
+  function restoreMainGroup(): void {
+    const stored = localStorage.getItem(MAIN_GROUP_KEY)
+    if (stored) mainGroupId.value = stored
+  }
+
+  function setMainGroup(groupId: string): void {
+    // Ignored rather than trusted: pointing every screen at a group we do not have
+    // would empty all of them at once.
+    if (!groups.value.some((group) => group.id === groupId)) return
+
+    mainGroupId.value = groupId
+    localStorage.setItem(MAIN_GROUP_KEY, groupId)
+  }
+
+  /**
+   * Keeps the choice pointing at something real.
+   *
+   * Called after every list load, because a group can be archived, left or deleted
+   * on another device, and a main group that no longer exists shows as an empty
+   * app rather than as an error.
+   */
+  function settleMainGroup(): void {
+    const candidates = groups.value.filter((group) => !group.isArchived)
+
+    if (mainGroupId.value && candidates.some((group) => group.id === mainGroupId.value)) return
+
+    const next = candidates[0]?.id ?? null
+    mainGroupId.value = next
+
+    if (next) localStorage.setItem(MAIN_GROUP_KEY, next)
+    else localStorage.removeItem(MAIN_GROUP_KEY)
+  }
+
   function attachApi(client: ApiClient): void {
     api = client
   }
@@ -75,6 +123,7 @@ export const useGroupsStore = defineStore('groups', () => {
 
     // Cache first, so the screen has content before the network answers.
     groups.value = await db.groups.toArray()
+    settleMainGroup()
 
     try {
       const summaries = await requireApi().get<GroupSummaryDto[]>('/groups', {
@@ -85,6 +134,7 @@ export const useGroupsStore = defineStore('groups', () => {
       await db.groups.bulkPut(merged)
       groups.value = merged
       isOffline.value = false
+      settleMainGroup()
     } catch {
       // Keep the cached list: an unreachable server is a normal state here.
       isOffline.value = true
@@ -231,6 +281,10 @@ export const useGroupsStore = defineStore('groups', () => {
     isOffline,
     attachApi,
     loadAll,
+    mainGroupId,
+    mainGroup,
+    restoreMainGroup,
+    setMainGroup,
     get,
     refresh,
     create,

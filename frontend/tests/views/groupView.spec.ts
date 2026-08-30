@@ -145,3 +145,41 @@ describe('GroupView', () => {
     expect(link).toBeDefined()
   })
 })
+
+describe('GroupView expense rows', () => {
+  it('shows the date of each expense', async () => {
+    const { wrapper } = await mountView(GroupView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense({ spentAt: '2026-03-14T12:00:00Z', description: 'Dinner' })],
+    })
+    await settle()
+
+    // A list of amounts with no dates cannot be reconciled against anything.
+    expect(textOf(wrapper)).toMatch(/14 Mar|Mar 14/)
+  })
+
+  it('marks each row with the colour of whoever paid', async () => {
+    const { wrapper } = await mountView(GroupView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense({ paidByMemberId: ALICE })],
+    })
+    await settle()
+
+    // Scoped to the expense list: the balance rows carry swatches of their own.
+    const swatches = wrapper
+      .findAll('span[aria-hidden="true"]')
+      .filter((span) => (span.attributes('style') ?? '').includes('background-color'))
+
+    expect(swatches.length).toBeGreaterThan(0)
+  })
+
+  it('still names who paid', async () => {
+    const { wrapper } = await mountView(GroupView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense({ paidByMemberId: ALICE })],
+    })
+    await settle()
+
+    expect(textOf(wrapper)).toContain('Alice paid')
+  })
+})

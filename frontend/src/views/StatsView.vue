@@ -45,6 +45,7 @@ const groups = useGroupsStore()
 const expenses = useExpensesStore()
 
 const dashboard = ref<Dashboard | null>(null)
+/** Starts on the main group, which is what the rest of the app is showing. */
 const groupId = ref<string>('')
 const granularity = ref<'day' | 'week' | 'month'>('month')
 const isLoading = ref(true)
@@ -53,6 +54,11 @@ const isOffline = ref(false)
 
 onMounted(async () => {
   await groups.loadAll()
+
+  // Opens on the group the rest of the app is showing, rather than on a total
+  // across groups that nobody asked for.
+  groupId.value = groups.mainGroupId ?? ''
+
   await load()
 })
 
