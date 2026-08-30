@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
+import GroupMenu from '@/components/groups/GroupMenu.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
@@ -59,6 +60,23 @@ onMounted(async () => {
   groupId.value = groups.mainGroupId ?? ''
 
   await load()
+
+  /**
+   * Follows the group the menu switches to.
+   *
+   * The filter below can also say All groups, which the app's group never does,
+   * so the two are not the same choice. But changing group in the corner is a
+   * statement about what you are looking at, and a chart left on the old one
+   * would be answering a question nobody is asking any more.
+   *
+   * Watched from here rather than at setup, so that loading the groups settling
+   * the main group for the first time does not read as someone switching it and
+   * send a second request for the same chart.
+   */
+  watch(() => groups.mainGroupId, (next) => {
+    groupId.value = next ?? ''
+    void load()
+  })
 })
 
 async function load(): Promise<void> {
@@ -145,12 +163,17 @@ const bucketLabel = (bucket: string) =>
 
 <template>
   <AppShell
-    title="Stats"
+    :title="groups.mainGroup?.name ?? 'Stats'"
+    :subtitle="groups.mainGroup ? 'Stats' : undefined"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
     :is-offline="isOffline"
     :is-syncing="expenses.isSyncing"
   >
+    <template #header-action>
+      <GroupMenu />
+    </template>
+
     <div class="mb-4 flex gap-2">
       <select
         v-model="groupId"
@@ -194,7 +217,12 @@ const bucketLabel = (bucket: string) =>
 
       <section v-if="dashboard.spendOverTime.length > 0" class="surface-card mb-4 p-4">
         <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">Spending over time</h2>
-        <ul class="flex h-32 items-end gap-1" role="img" :aria-label="chartDescription">
+        <ul
+          class="flex h-32 items-end gap-1"
+          data-testid="spend-chart"
+          role="img"
+          :aria-label="chartDescription"
+        >
           <li
             v-for="point in dashboard.spendOverTime"
             :key="point.bucket"
