@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import type { Component } from 'vue'
 import ActivityView from '@/views/ActivityView.vue'
-import AddExpenseView from '@/views/AddExpenseView.vue'
+import ExpenseFormView from '@/views/ExpenseFormView.vue'
 import ConflictsView from '@/views/ConflictsView.vue'
 import ExpenseView from '@/views/ExpenseView.vue'
 import GroupSettingsView from '@/views/GroupSettingsView.vue'
@@ -70,7 +70,7 @@ const inApp: Array<[string, Component]> = [
   ['Dashboard', DashboardView],
   ['Group settings', GroupSettingsView],
   ['New group', NewGroupView],
-  ['Add expense', AddExpenseView],
+  ['Add expense', ExpenseFormView],
   ['Expense', ExpenseView],
   ['Settle up', SettleView],
   ['Activity', ActivityView],
@@ -101,12 +101,17 @@ const subScreens: Array<[string, Component, string]> = [
   ['Not found', NotFoundView, 'Dashboard'],
 ]
 
+/**
+ * The expense form is left out on purpose. The route mock above hands every view
+ * the same params, which puts the form into edit mode, where it does have a back
+ * button. Both of its modes are covered in its own spec, where the route can be
+ * set per test.
+ */
 const tabScreens: Array<[string, Component]> = [
   ['Dashboard', DashboardView],
   ['Activity', ActivityView],
   ['Stats', StatsView],
   ['Profile', ProfileView],
-  ['Add expense', AddExpenseView],
 ]
 
 describe('the back button', () => {

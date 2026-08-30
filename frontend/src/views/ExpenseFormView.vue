@@ -17,7 +17,21 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const groupId = ref(String(route.query.groupId ?? ''))
+/**
+ * One form, two jobs.
+ *
+ * Editing asks exactly the same questions as adding, so this view does both rather
+ * than a second copy of the split logic drifting from this one the first time
+ * either changed. The route decides: an expense id in the path means edit.
+ */
+const editingId = computed(() => {
+  const id = route.params.expenseId
+  return typeof id === 'string' && id ? id : null
+})
+
+const isEditing = computed(() => editingId.value !== null)
+
+const groupId = ref(String(route.params.groupId ?? route.query.groupId ?? ''))
 const description = ref('')
 const amountInput = ref('')
 const spentAt = ref(new Date().toISOString().slice(0, 10))
@@ -39,10 +53,44 @@ const splitTypes: Array<{ value: SplitType; label: string }> = [
 onMounted(async () => {
   void categories.load()
   await groups.loadAll()
-  // The main group, then whatever the query asked for, then anything at all. The
-  // query wins when it is there, because it means someone arrived from a group.
+  await expenses.hydrate()
+
+  // The main group, then whatever the route asked for, then anything at all. The
+  // route wins when it is there, because it means someone arrived from a group.
   await selectGroup(groupId.value || groups.mainGroupId || groups.visibleGroups[0]?.id || '')
+
+  // After the group, because selecting one resets who is involved.
+  if (isEditing.value) prefillFromExpense()
 })
+
+/**
+ * Fills the form from the expense being edited.
+ *
+ * The split values come back out of the stored shares rather than being
+ * recomputed, so an uneven split someone set by hand is what they see when they
+ * open it again.
+ */
+function prefillFromExpense(): void {
+  const existing = expenses.expenses.find((candidate) => candidate.id === editingId.value)
+  if (!existing) {
+    error.value = 'That expense is not on this device.'
+    return
+  }
+
+  description.value = existing.description
+  amountInput.value = existing.amount.toFixed(2)
+  spentAt.value = existing.spentAt.slice(0, 10)
+  splitType.value = existing.splitType
+  categoryId.value = existing.categoryId ?? null
+  paidByMemberId.value = existing.paidByMemberId
+  participantIds.value = existing.splits.map((split) => split.memberId)
+
+  splitValues.value = Object.fromEntries(
+    existing.splits
+      .filter((split) => split.inputValue !== null)
+      .map((split) => [split.memberId, split.inputValue as number]),
+  )
+}
 
 const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
 const members = computed(() => group.value?.members.filter((m) => m.status === 'Active') ?? [])
@@ -119,6 +167,16 @@ const previewProblem = computed(() => {
   }
 })
 
+/**
+ * Only when editing. Adding is a tab, and the tab is already lit: a back button
+ * there would compete with it.
+ */
+const backTarget = computed(() =>
+  isEditing.value && groupId.value
+    ? { name: 'expense', params: { groupId: groupId.value, expenseId: editingId.value } }
+    : undefined,
+)
+
 const memberName = (memberId: string) =>
   members.value.find((member) => member.id === memberId)?.displayName ?? 'Unknown'
 
@@ -138,22 +196,33 @@ async function save(): Promise<void> {
 
   isSaving.value = true
 
-  try {
-    await expenses.add({
-      groupId: group.value.id,
-      paidByMemberId: paidByMemberId.value,
-      description: description.value,
-      amount: amount.value,
-      currency: currency.value,
-      spentAt: new Date(`${spentAt.value}T12:00:00Z`),
-      splitType: splitType.value,
-      participantIds: participantIds.value,
-      splitValues: splitValues.value,
-      categoryId: categoryId.value,
-    })
+  const fields = {
+    paidByMemberId: paidByMemberId.value,
+    description: description.value,
+    amount: amount.value,
+    currency: currency.value,
+    spentAt: new Date(`${spentAt.value}T12:00:00Z`),
+    splitType: splitType.value,
+    participantIds: participantIds.value,
+    splitValues: splitValues.value,
+    categoryId: categoryId.value,
+  }
 
-    // Queued locally, so this returns straight away whether online or not.
-    await router.replace({ name: 'group', params: { groupId: group.value.id } })
+  try {
+    if (editingId.value) {
+      await expenses.edit(editingId.value, fields)
+
+      // Back to the expense, which is where the change is visible.
+      await router.replace({
+        name: 'expense',
+        params: { groupId: group.value.id, expenseId: editingId.value },
+      })
+    } else {
+      await expenses.add({ groupId: group.value.id, ...fields })
+
+      // Queued locally, so this returns straight away whether online or not.
+      await router.replace({ name: 'group', params: { groupId: group.value.id } })
+    }
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not save the expense.'
   } finally {
@@ -163,9 +232,18 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Add expense">
+  <AppShell
+    :title="isEditing ? 'Edit expense' : 'Add expense'"
+    :back-to="backTarget"
+    :back-label="isEditing ? 'Expense' : 'Dashboard'"
+  >
     <form class="flex flex-col gap-5" @submit.prevent="save">
-      <label class="flex flex-col gap-1">
+      <!--
+        Only when adding. Moving an expense between groups has to carry its
+        history, comments and audit trail with it, which is what the transfer
+        feature is for; a dropdown here would look like it did that and would not.
+      -->
+      <label v-if="!isEditing" class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">Group</span>
         <select
           :value="groupId"
@@ -327,7 +405,7 @@ async function save(): Promise<void> {
         class="btn btn-press btn-primary w-full"
         :disabled="isSaving || preview.length === 0"
       >
-        {{ isSaving ? 'Saving' : 'Save expense' }}
+        {{ isSaving ? 'Saving' : isEditing ? 'Save changes' : 'Save expense' }}
       </button>
 
       <p class="text-center text-xs text-[var(--text-muted)]">

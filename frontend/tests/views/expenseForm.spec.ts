@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import AddExpenseView from '@/views/AddExpenseView.vue'
+import ExpenseFormView from '@/views/ExpenseFormView.vue'
 import { db, resetDatabase } from '@/offline/db'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { useCategoriesStore } from '@/stores/categories'
 import { SyncEngine } from '@/offline/syncEngine'
+import { textOf, waitFor } from '../support/viewHarness'
 
 const groupId = 'group-1'
 const alice = 'member-alice'
@@ -16,8 +17,11 @@ const bob = 'member-bob'
 const push = vi.fn()
 const replace = vi.fn()
 
+/** Mutable, because this one form serves both adding and editing. */
+let routeParams: Record<string, string> = {}
+
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: {}, query: {}, fullPath: '/add' }),
+  useRoute: () => ({ params: routeParams, query: {}, fullPath: '/add' }),
   useRouter: () => ({ push, replace }),
   RouterLink: RouterLinkStub,
 }))
@@ -118,7 +122,7 @@ async function mountView() {
     delete: vi.fn(),
   } as never)
 
-  const wrapper = mount(AddExpenseView, {
+  const wrapper = mount(ExpenseFormView, {
     global: { stubs: { RouterLink: RouterLinkStub } },
   })
 
@@ -138,8 +142,9 @@ async function settle(): Promise<void> {
   }
 }
 
-describe('AddExpenseView', () => {
+describe('ExpenseFormView', () => {
   beforeEach(() => {
+    routeParams = {}
     push.mockClear()
     replace.mockClear()
   })
@@ -276,7 +281,7 @@ describe('AddExpenseView', () => {
   })
 })
 
-describe('AddExpenseView categories', () => {
+describe('ExpenseFormView categories', () => {
   beforeEach(() => {
     push.mockClear()
     replace.mockClear()
@@ -314,5 +319,201 @@ describe('AddExpenseView categories', () => {
     await settle()
 
     expect(expenses.expenses.at(-1)?.categoryId).toBeNull()
+  })
+})
+
+describe('ExpenseFormView editing an expense', () => {
+  const existing = {
+    id: 'expense-1',
+    groupId,
+    paidByMemberId: bob,
+    description: 'Groceries at Metro',
+    amount: 84.32,
+    currency: 'CAD',
+    amountInBaseCurrency: 84.32,
+    exchangeRate: 1,
+    spentAt: '2026-03-14T12:00:00.000Z',
+    categoryId: 'c2',
+    splitType: 'Shares' as const,
+    receiptId: null,
+    notes: null,
+    splits: [
+      { memberId: alice, amount: 56.21, amountInBaseCurrency: 56.21, inputValue: 2 },
+      { memberId: bob, amount: 28.11, amountInBaseCurrency: 28.11, inputValue: 1 },
+    ],
+    items: [],
+    revision: 1,
+    isDeleted: false,
+    vectorClock: {},
+    serverSeq: 1,
+    pending: false,
+  }
+
+  beforeEach(() => {
+    push.mockClear()
+    replace.mockClear()
+    routeParams = { groupId, expenseId: 'expense-1' }
+  })
+
+  async function mountEdit() {
+    setActivePinia(createPinia())
+    await resetDatabase()
+    await db.groups.put(group)
+    await db.expenses.put(existing)
+
+    const auth = useAuthStore()
+    auth.user = {
+      id: 'user-1',
+      email: 'alice@example.com',
+      displayName: 'Alice',
+      avatarUrl: null,
+      defaultCurrency: 'CAD',
+      prefersLightTheme: false,
+    } as never
+
+    const groups = useGroupsStore()
+    groups.attachApi({
+      get: vi.fn(async (path: string) =>
+        path === '/groups' ? [{ ...group, memberCount: 2, lastActivityAt: null }] : group,
+      ),
+      post: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
+    } as never)
+
+    const categories = useCategoriesStore()
+    categories.attachApi({
+      get: vi.fn(async () => [
+        { id: 'c1', key: 'groceries', name: 'Groceries', iconName: 'cart-shopping', colorHex: '#16a34a', sortOrder: 1 },
+        { id: 'c2', key: 'dining', name: 'Restaurants', iconName: 'utensils', colorHex: '#f97316', sortOrder: 2 },
+      ]),
+      post: vi.fn(), patch: vi.fn(), delete: vi.fn(),
+    } as never)
+
+    const expenses = useExpensesStore()
+    expenses.attachSync(new SyncEngine(fakeSyncApi(), () => false))
+
+    const wrapper = mount(ExpenseFormView, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+    await settle()
+
+    return { wrapper, expenses }
+  }
+
+  it('says it is editing rather than adding', async () => {
+    const { wrapper } = await mountEdit()
+
+    expect(wrapper.find('h1').text()).toBe('Edit expense')
+  })
+
+  it('fills the form from the expense', async () => {
+    const { wrapper } = await mountEdit()
+
+    expect((wrapper.find('input[placeholder="Groceries"]').element as HTMLInputElement).value)
+      .toBe('Groceries at Metro')
+    expect((wrapper.find('input[inputmode="decimal"]').element as HTMLInputElement).value)
+      .toBe('84.32')
+    expect((wrapper.find('input[type="date"]').element as HTMLInputElement).value)
+      .toBe('2026-03-14')
+    expect((wrapper.find('[data-testid="category"]').element as HTMLSelectElement).value)
+      .toBe('c2')
+  })
+
+  it('keeps an uneven split someone set by hand', async () => {
+    const { wrapper } = await mountEdit()
+
+    // Read back out of the stored shares rather than recomputed, or the shares
+    // people chose would be lost the moment they opened the form.
+    const selected = wrapper
+      .findAll('button')
+      .filter((button) => button.classes().includes('text-brand-400'))
+      .map((button) => button.text())
+
+    expect(selected).toContain('By shares')
+
+    // The amount, plus one input per participant for their share.
+    expect(wrapper.findAll('input[inputmode="decimal"]').length).toBe(3)
+  })
+
+  it('keeps who paid', async () => {
+    const { wrapper } = await mountEdit()
+
+    const payer = wrapper.findAll('select').find((select) =>
+      (select.element as HTMLSelectElement).value === bob,
+    )
+    expect(payer).toBeDefined()
+  })
+
+  it('does not offer to move the expense to another group', async () => {
+    const { wrapper } = await mountEdit()
+
+    // Moving one has to carry its history, comments and audit trail; that is the
+    // transfer feature, and a dropdown here would look like it did that.
+    expect(textOf(wrapper)).not.toContain('Group')
+  })
+
+  it('saves the change and returns to the expense', async () => {
+    const { wrapper, expenses } = await mountEdit()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Groceries at IGA')
+    await wrapper.find('form').trigger('submit')
+    // The redirect is the last thing the save does, so it is the only safe signal
+    // that the whole action finished.
+    await waitFor(() => replace.mock.calls.length > 0)
+
+    expect(expenses.expenses.find((e) => e.id === 'expense-1')?.description)
+      .toBe('Groceries at IGA')
+    expect(replace).toHaveBeenCalledWith({
+      name: 'expense',
+      params: { groupId, expenseId: 'expense-1' },
+    })
+  })
+
+  it('bumps the revision, so the change is on the record', async () => {
+    const { wrapper, expenses } = await mountEdit()
+
+    await wrapper.find('input[inputmode="decimal"]').setValue('90.00')
+    await wrapper.find('form').trigger('submit')
+    await waitFor(() => replace.mock.calls.length > 0)
+
+    expect(expenses.expenses.find((e) => e.id === 'expense-1')?.revision).toBe(2)
+  })
+
+  it('queues the change so it works offline', async () => {
+    const { wrapper } = await mountEdit()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Something else')
+    await wrapper.find('form').trigger('submit')
+    await waitFor(async () => (await db.outbox.count()) > 0)
+
+    const queued = await db.outbox.toArray()
+    expect(queued).toHaveLength(1)
+    expect(queued[0].operation).toBe('Update')
+  })
+
+  it('offers a way back to the expense', async () => {
+    const { wrapper } = await mountEdit()
+
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(true)
+  })
+
+  it('says so when the expense is not on this device', async () => {
+    setActivePinia(createPinia())
+    await resetDatabase()
+    await db.groups.put(group)
+
+    const auth = useAuthStore()
+    auth.user = { id: 'user-1', email: 'a@b.c', displayName: 'Alice', avatarUrl: null, defaultCurrency: 'CAD', prefersLightTheme: false } as never
+
+    const groups = useGroupsStore()
+    groups.attachApi({ get: vi.fn(async () => group), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } as never)
+    useCategoriesStore().attachApi({ get: vi.fn(async () => []), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } as never)
+    useExpensesStore().attachSync(new SyncEngine(fakeSyncApi(), () => false))
+
+    const wrapper = mount(ExpenseFormView, { global: { stubs: { RouterLink: RouterLinkStub } } })
+    await settle()
+
+    expect(textOf(wrapper)).toContain('not on this device')
   })
 })
