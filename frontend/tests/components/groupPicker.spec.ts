@@ -63,7 +63,10 @@ describe('GroupPicker', () => {
 
   it('opens the group it switches to at the top', async () => {
     withGroups(group('g1', 'Roommates'), group('g2', 'Ski trip'))
-    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const page = document.createElement('main')
+    page.setAttribute('data-app-page', '')
+    page.scrollTop = 250
+    document.body.appendChild(page)
     const wrapper = mountPicker()
 
     try {
@@ -72,9 +75,9 @@ describe('GroupPicker', () => {
 
       // Left alone the screen opens wherever the last group was being read, which
       // is nowhere in this one.
-      expect(scrollTo).toHaveBeenCalledWith(0, 0)
+      expect(page.scrollTop).toBe(0)
     } finally {
-      scrollTo.mockRestore()
+      page.remove()
     }
   })
 

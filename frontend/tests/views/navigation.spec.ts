@@ -186,7 +186,8 @@ describe('the bottom tab bar', () => {
       expenses: [testExpense()],
     })
 
-    // Without the padding the bar covers the last row of a list.
-    expect(wrapper.find('main').classes()).toContain('pb-28')
+    // The bar is a row of the frame now rather than something over the page, so
+    // this is only clearance for the raised centre button.
+    expect(wrapper.find('main').classes()).toContain('pb-10')
   })
 })

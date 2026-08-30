@@ -46,10 +46,24 @@
   --text-muted: var(--color-ink-500);
 }
 
+/*
+ * The app is a frame, not a document.
+ *
+ * The window itself never scrolls: the page scrolls inside the shell. A phone
+ * hides and shows its own toolbar as the window scrolls, and everything pinned to
+ * the bottom of the screen moves with it - which is how a swipe across the screen
+ * could make the tab bar drop away. A window that never scrolls has a toolbar
+ * that never moves, so neither does the bar.
+ *
+ * It costs the height of that toolbar for good, since it can no longer be
+ * scrolled out of the way, and buys a screen that holds still. Installed to a
+ * home screen there is no toolbar and nothing to pay.
+ */
 html,
-body,
-#app {
-  min-height: 100%;
+body {
+  height: 100%;
+  /* Sideways as well: nothing in a list view should shift the page across. */
+  overflow: hidden;
 }
 
 body {
@@ -57,14 +71,20 @@ body {
   background: var(--surface);
   color: var(--text);
   font-family: var(--font-sans);
-  /* Mobile first: the bottom nav must clear the home indicator. */
-  padding-bottom: env(safe-area-inset-bottom);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Nothing in a list view should be able to scroll the page sideways. */
-body {
-  overflow-x: hidden;
+/*
+ * The frame, in dvh rather than vh or a percentage of the body.
+ *
+ * Those two are the tall viewport, measured as though the toolbar were hidden,
+ * and it is never hidden now: the foot of the app, tab bar and all, would sit
+ * below the glass. dvh is the viewport as it actually is, and with nothing
+ * scrolling it does not change under us.
+ */
+#app {
+  height: 100vh;
+  height: 100dvh;
 }
 
 /*

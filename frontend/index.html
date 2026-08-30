@@ -25,7 +25,10 @@
 
       body {
         margin: 0;
-        min-height: 100vh;
+        /* The app is a frame the height of the screen, and this is what fills it
+           until the stylesheet that says so has loaded. dvh rather than vh: vh is
+           measured as though a phone's toolbar were hidden, and it is not. */
+        min-height: 100dvh;
         background: #0f172a;
         color: #e2e8f0;
         font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -33,7 +36,7 @@
 
       .boot {
         display: flex;
-        min-height: 100vh;
+        min-height: 100dvh;
         flex-direction: column;
         align-items: center;
         justify-content: center;

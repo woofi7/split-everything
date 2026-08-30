@@ -75,7 +75,13 @@ const routes: RouteRecordRaw[] = [
 export const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior: (_to, _from, saved) => saved ?? { top: 0 },
+  /*
+   * No scroll behaviour, because the window has no scroll: it is a frame the
+   * height of the screen, and the page scrolls inside the shell. Every screen
+   * brings its own, which starts at the top; the two that stay put while their
+   * group changes underneath - the dashboard and the picker - put it back
+   * themselves.
+   */
 })
 
 /**

@@ -54,21 +54,29 @@ const hasSyncNews = computed(
 </script>
 
 <template>
-  <div class="mx-auto flex min-h-screen max-w-2xl flex-col">
+  <!--
+    The frame: the height of the screen, once, and it never grows. Everything that
+    scrolls scrolls inside it, which is what keeps the tab bar below from moving -
+    a window that scrolls is a window whose browser slides its own toolbar about,
+    and everything pinned to the bottom of the screen goes with it.
+
+    Full width, with the page centred inside: the bar spans the window on a wide
+    screen the way it did when it was pinned there.
+  -->
+  <div class="flex h-full flex-col">
     <!--
-      No chrome at the top: the page is the page, and the only fixed furniture is
-      the tab bar at the bottom. What the header used to hold now scrolls with the
-      content, so it takes no room once you are reading.
-    -->
-    <!--
-      Named so a gesture can move it. Changing group is a swipe across the screen
-      on the group screens, and the page it is leaving slides out with the finger;
-      the shell holds the page, so the shell has to be the thing that can be moved.
+      No chrome at the top: the page is the page, and the only furniture is the tab
+      bar at the bottom. What the header used to hold now scrolls with the content,
+      so it takes no room once you are reading.
+
+      Named so a gesture can move it, too. Changing group is a swipe across the
+      screen on the group screens, and the page it is leaving slides out with the
+      finger; the shell holds the page, so the shell has to be the movable thing.
     -->
     <main
-      data-swipe-page
-      class="flex-1 px-4 pt-[max(1rem,env(safe-area-inset-top))]"
-      :class="props.showNav ? 'pb-28' : 'pb-8'"
+      data-app-page
+      class="mx-auto min-h-0 w-full max-w-2xl flex-1 overflow-y-auto overscroll-contain px-4 pt-[max(1rem,env(safe-area-inset-top))]"
+      :class="props.showNav ? 'pb-10' : 'pb-[max(2rem,env(safe-area-inset-bottom))]'"
     >
       <!--
         Back on its own, top left, as a button rather than a chevron tucked beside

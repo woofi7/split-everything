@@ -46,7 +46,7 @@ function withGroups(...list: ReturnType<typeof group>[]) {
 /** The shell's page, which the gesture slides out from under the incoming one. */
 function pageElement(): HTMLElement {
   const page = document.createElement('main')
-  page.setAttribute('data-swipe-page', '')
+  page.setAttribute('data-app-page', '')
   document.body.appendChild(page)
   return page
 }
@@ -128,7 +128,7 @@ describe('GroupSwipe', () => {
   afterEach(() => {
     for (const wrapper of mounted.splice(0)) wrapper.unmount()
     vi.useRealTimers()
-    document.querySelectorAll('[data-swipe-page]').forEach((page) => page.remove())
+    document.querySelectorAll('[data-app-page]').forEach((page) => page.remove())
   })
 
   it('moves to the next group on a swipe to the left', async () => {
@@ -214,26 +214,18 @@ describe('GroupSwipe', () => {
 
   it('lands the new group at the top of its screen', async () => {
     const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
-    pageElement()
-    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
-    Object.defineProperty(window, 'scrollY', { value: 400, configurable: true })
+    const page = pageElement()
+    page.scrollTop = 400
     mountSwipe()
 
-    try {
-      drag({ x: 300, y: 400 }, { x: 100, y: 400 })
-      release({ x: 100, y: 400 })
-      await land()
+    drag({ x: 300, y: 400 }, { x: 100, y: 400 })
+    release({ x: 100, y: 400 })
+    await land()
 
-      // Otherwise it opens wherever the last group was being read, which is
-      // nowhere in this one, and a phone answers a scroll position that jumps by
-      // a few hundred pixels by sliding its own toolbar about, taking the tab bar
-      // with it.
-      expect(store.mainGroupId).toBe('g2')
-      expect(scrollTo).toHaveBeenCalledWith(0, 0)
-    } finally {
-      scrollTo.mockRestore()
-      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true })
-    }
+    // Otherwise it opens wherever the last group was being read, which is nowhere
+    // in this one. The page is what scrolls, not the window.
+    expect(store.mainGroupId).toBe('g2')
+    expect(page.scrollTop).toBe(0)
   })
 
   it('stops the browser holding the old scroll through the change', async () => {
