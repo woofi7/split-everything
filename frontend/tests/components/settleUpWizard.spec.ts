@@ -107,7 +107,10 @@ function fakeClient(overrides: Partial<Record<string, unknown>> = {}) {
 
   return {
     upload,
-    get: vi.fn(async () => []),
+    get: vi.fn(async (path: string) =>
+      path.startsWith('/users/addable')
+        ? [{ id: 'user-7', displayName: 'Emma Accounts', email: 'accounts@example.com', avatarUrl: null }]
+        : []),
     post: vi.fn(async () => ({})),
     put: vi.fn(async () => ({})),
     delete: vi.fn(async () => ({})),
@@ -461,7 +464,9 @@ describe('SettleUpWizard', () => {
 
     await wrapper.find('input[value="existing"]').setValue()
     await flushPromises()
-    await wrapper.findAll('[data-testid="name-map"]')[0].find('select').setValue('m1')
+    // The value says which kind of answer it is: a member of this group, an
+    // account anywhere here, or nobody yet.
+    await wrapper.findAll('[data-testid="name-map"]')[0].find('select').setValue('member:m1')
     await wrapper.find('[data-testid="to-preview"]').trigger('click')
     await flushPromises()
 
@@ -469,6 +474,39 @@ describe('SettleUpWizard', () => {
     const request = JSON.parse((form as Record<string, string>).request)
     expect(request.groupId).toBe('group-ski')
     expect(request.memberNameMapping.Emma).toBe('m1')
+    expect(request.memberUserMapping).toEqual({})
+  })
+
+  it('sends a name mapped onto an account anywhere here', async () => {
+    const wrapper = mountWizard()
+    await choose(wrapper)
+
+    await wrapper.findAll('[data-testid="name-map"]')[0].find('select').setValue('user:user-7')
+    await wrapper.find('[data-testid="to-preview"]').trigger('click')
+    await flushPromises()
+
+    const [, form] = client.upload.mock.calls.at(-1)!
+    const request = JSON.parse((form as Record<string, string>).request)
+
+    // Two shapes, because they are not the same thing: one is already in the
+    // group, the other has to be made a member as the import runs.
+    expect(request.memberUserMapping.Emma).toBe('user-7')
+    expect(request.memberNameMapping.Emma).toBeNull()
+  })
+
+  it('offers everyone with an account, not only the group members', async () => {
+    const wrapper = mountWizard()
+    await choose(wrapper)
+
+    const options = wrapper
+      .findAll('[data-testid="name-map"]')[0]
+      .findAll('option')
+      .map((option) => option.text())
+
+    // An export is another group's history: the people in it usually have
+    // accounts here and only their names came across.
+    expect(options[0]).toBe('Add as a new person')
+    expect(options.some((text) => text.includes('accounts@example.com'))).toBe(true)
   })
 
   it('names the columns it will use, so a wrong guess is visible', async () => {

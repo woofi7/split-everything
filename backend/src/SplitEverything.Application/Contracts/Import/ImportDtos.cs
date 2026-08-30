@@ -45,7 +45,12 @@ public sealed record CsvPreviewRequest(
     CsvColumnMapping Mapping,
     // Settle Up exports carry display names, not emails; the user maps them to members.
     IReadOnlyDictionary<string, Guid?> MemberNameMapping,
-    string? FallbackCurrency);
+    string? FallbackCurrency,
+    // Names matched to an account rather than to a member of this group. The
+    // account may not be in the group yet, and the group may not exist yet, which
+    // is the normal case for an export: it is somebody else's group history and
+    // the people in it have their own accounts here.
+    IReadOnlyDictionary<string, Guid>? MemberUserMapping = null);
 
 public sealed record ParsedExpenseRow(
     int RowNumber,
@@ -93,7 +98,12 @@ public sealed record CsvCommitRequest(
     bool CreateMissingMembers,
     bool SkipDuplicates,
     string? FallbackCurrency,
-    string? SourceLabel);
+    string? SourceLabel,
+    // Names matched to an account rather than to a member of this group. Each one
+    // becomes a member of the group as the import runs, so an export can be bound
+    // to the people who are already here rather than to placeholders wearing their
+    // names.
+    IReadOnlyDictionary<string, Guid>? MemberUserMapping = null);
 
 public sealed record ImportCommitResult(
     Guid ImportBatchId,

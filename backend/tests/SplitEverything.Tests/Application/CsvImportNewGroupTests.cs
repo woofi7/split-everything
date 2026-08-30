@@ -188,4 +188,132 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
         result.GroupId.ShouldBe(group.Id);
         (await NewContext().Groups.CountAsync(g => g.Name == "Roommates")).ShouldBe(1);
     }
+
+    /// <summary>
+    /// Binding an exported name to an account rather than to a member.
+    ///
+    /// An export is another group's history. The people in it usually have
+    /// accounts here already and only their names came across, so the useful
+    /// answer to "who is Alice" is an account, which may not be in this group and
+    /// in the ordinary case is being imported into a group that does not exist yet.
+    /// </summary>
+    [Fact]
+    public async Task An_exported_name_can_be_bound_to_an_account()
+    {
+        var user = await TestData.SeedUserAsync(Db, "Owner", "owner@example.com", "google-owner");
+        var alice = await TestData.SeedUserAsync(Db, "Alice", "alice@example.com", "google-alice");
+
+        var result = await Imports.CommitCsvAsync(user.Id, Csv("settleup-basic.csv"),
+            CommitInto(null, "Imported") with
+            {
+                MemberUserMapping = new Dictionary<string, Guid> { ["Alice"] = alice.Id },
+            });
+
+        var group = await Groups.GetAsync(user.Id, result.GroupId);
+        var bound = group.Members.FirstOrDefault(m => m.UserId == alice.Id);
+
+        bound.ShouldNotBeNull();
+        // Their own name and their own colour, not a placeholder wearing the name
+        // from the file.
+        bound.DisplayName.ShouldBe("Alice");
+        bound.ColorHex.ShouldNotBeNull();
+        bound.IsPlaceholder.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_bound_account_owns_the_rows_that_named_it()
+    {
+        var user = await TestData.SeedUserAsync(Db, "Owner", "owner@example.com", "google-owner");
+        var alice = await TestData.SeedUserAsync(Db, "Alice", "alice@example.com", "google-alice");
+
+        var result = await Imports.CommitCsvAsync(user.Id, Csv("settleup-basic.csv"),
+            CommitInto(null, "Imported") with
+            {
+                MemberUserMapping = new Dictionary<string, Guid> { ["Alice"] = alice.Id },
+            });
+
+        var fresh = NewContext();
+        var member = await fresh.GroupMembers
+            .FirstAsync(m => m.GroupId == result.GroupId && m.UserId == alice.Id);
+
+        // The whole point: the history lands on the person, not beside them.
+        (await fresh.Expenses.CountAsync(e => e.PaidByMemberId == member.Id))
+            .ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task A_bound_account_is_not_duplicated_when_it_is_already_a_member()
+    {
+        var owner = await TestData.SeedUserAsync(Db, "Owner", "owner@example.com", "google-owner");
+        var alice = await TestData.SeedUserAsync(Db, "Alice", "alice@example.com", "google-alice");
+        var group = await Groups.CreateAsync(owner.Id,
+            new CreateGroupRequest("Roommates", "CAD", null, null, null, null));
+        await Groups.AddUserMemberAsync(owner.Id, group.Id, new AddUserMemberRequest(alice.Id));
+
+        await Imports.CommitCsvAsync(owner.Id, Csv("settleup-basic.csv"),
+            CommitInto(group.Id, null) with
+            {
+                MemberUserMapping = new Dictionary<string, Guid> { ["Alice"] = alice.Id },
+            });
+
+        // A second row for one account would collide with the one-membership-per-user
+        // index and orphan whatever history points at the first.
+        var fresh = NewContext();
+        (await fresh.GroupMembers.CountAsync(m => m.GroupId == group.Id && m.UserId == alice.Id))
+            .ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_bound_account_that_was_removed_comes_back_rather_than_doubling()
+    {
+        var owner = await TestData.SeedUserAsync(Db, "Owner", "owner@example.com", "google-owner");
+        var alice = await TestData.SeedUserAsync(Db, "Alice", "alice@example.com", "google-alice");
+        var group = await Groups.CreateAsync(owner.Id,
+            new CreateGroupRequest("Roommates", "CAD", null, null, null, null));
+        var added = await Groups.AddUserMemberAsync(owner.Id, group.Id, new AddUserMemberRequest(alice.Id));
+        await Groups.RemoveMemberAsync(owner.Id, group.Id, added.Id);
+
+        await Imports.CommitCsvAsync(owner.Id, Csv("settleup-basic.csv"),
+            CommitInto(group.Id, null) with
+            {
+                MemberUserMapping = new Dictionary<string, Guid> { ["Alice"] = alice.Id },
+            });
+
+        var fresh = NewContext();
+        var members = await fresh.GroupMembers
+            .Where(m => m.GroupId == group.Id && m.UserId == alice.Id)
+            .ToListAsync();
+
+        members.Count.ShouldBe(1);
+        members[0].Status.ShouldBe(MembershipStatus.Active);
+    }
+
+    [Fact]
+    public async Task A_previewed_name_bound_to_an_account_is_no_longer_unmapped()
+    {
+        var user = await TestData.SeedUserAsync(Db, "Owner", "owner@example.com", "google-owner");
+        var alice = await TestData.SeedUserAsync(Db, "Alice", "alice@example.com", "google-alice");
+
+        var preview = await Imports.PreviewCsvAsync(user.Id, Csv("settleup-basic.csv"),
+            new CsvPreviewRequest(null, BasicMapping(), new Dictionary<string, Guid?>(), "CAD",
+                new Dictionary<string, Guid> { ["Alice"] = alice.Id }));
+
+        // Saying somebody is not a member yet, when the import is about to make
+        // them one, is a warning about nothing.
+        preview.UnmappedMemberNames.ShouldNotContain("Alice");
+        preview.Rows.ShouldNotContain(r => r.Problems.Any(p => p.Contains("Alice is not a member")));
+    }
+
+    [Fact]
+    public async Task Binding_a_name_to_an_account_that_does_not_exist_is_refused()
+    {
+        var user = await TestData.SeedUserAsync(Db, "Owner", "owner@example.com", "google-owner");
+
+        await Should.ThrowAsync<NotFoundException>(() => Imports.CommitCsvAsync(
+            user.Id, Csv("settleup-basic.csv"),
+            CommitInto(null, "Imported") with
+            {
+                MemberUserMapping = new Dictionary<string, Guid> { ["Alice"] = Guid.CreateVersion7() },
+            }));
+    }
 }
