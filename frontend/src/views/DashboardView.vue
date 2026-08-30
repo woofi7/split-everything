@@ -333,6 +333,8 @@ const recaps = computed(() => {
             ],
     })),
     currency.value,
+    new Date(),
+    group.value?.ignoredNamePatterns ?? [],
   )
 
   return new Map(summaries.map((summary) => [summary.key, summary]))

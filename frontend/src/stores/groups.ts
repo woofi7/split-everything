@@ -11,6 +11,7 @@ const MAIN_GROUP_KEY = 'split-everything.main-group'
 interface GroupSummaryDto {
   defaultSplitType?: SplitType
   defaultSplitValues?: Record<string, number> | null
+  ignoredNamePatterns?: string[] | null
   id: string
   name: string
   baseCurrency: string
@@ -238,6 +239,7 @@ export const useGroupsStore = defineStore('groups', () => {
       // that edits both can save both in one request rather than half-succeeding.
       defaultSplitType: SplitType
       defaultSplitValues: Record<string, number> | null
+      ignoredNamePatterns: string[]
     }>,
   ): Promise<LocalGroup> {
     // The API reads null as "not supplied" and an empty string as an explicit
@@ -468,6 +470,7 @@ function toLocalGroup(dto: GroupSummaryDto, existing: LocalGroup[]): LocalGroup 
     // A summary carries neither, so the cached copy holds them until a detail read.
     defaultSplitType: dto.defaultSplitType ?? previous?.defaultSplitType ?? 'Equal',
     defaultSplitValues: dto.defaultSplitValues ?? previous?.defaultSplitValues ?? null,
+    ignoredNamePatterns: dto.ignoredNamePatterns ?? previous?.ignoredNamePatterns ?? null,
     myNetBalance: dto.myNetBalance,
     totalSpend: dto.totalSpend ?? previous?.totalSpend ?? 0,
     expenseCount: dto.expenseCount ?? previous?.expenseCount ?? 0,

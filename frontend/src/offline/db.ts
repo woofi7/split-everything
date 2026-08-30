@@ -32,6 +32,13 @@ export interface LocalGroup {
   defaultSplitType?: SplitType
   /** Member id to weight, for a default that needs values. */
   defaultSplitValues?: Record<string, number> | null
+  /**
+   * Expense names to leave out of the highlights, as regular expressions.
+   *
+   * A display rule and nothing more: it decides which expense gets called the
+   * biggest of its month, and never what anything cost.
+   */
+  ignoredNamePatterns?: string[] | null
   myNetBalance: number
   totalSpend: number
   expenseCount: number

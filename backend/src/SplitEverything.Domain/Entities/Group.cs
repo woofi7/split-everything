@@ -31,6 +31,22 @@ public class Group : SyncableEntity
     /// </summary>
     public string? DefaultSplitValuesJson { get; set; }
 
+    /// <summary>
+    /// Patterns for expenses to leave out of the highlights, as a JSON array of
+    /// regular expressions. Null or empty when a group wants none.
+    ///
+    /// A household with rent in it has one expense every month that is larger than
+    /// everything else put together, and "the biggest thing you bought in August"
+    /// answering "the rent" every time is a fact nobody needed telling. These say
+    /// which names to skip when picking that out.
+    ///
+    /// They never change what anything cost. Totals, balances and who owes whom are
+    /// money that moved, and a display rule has no business touching them - a group
+    /// total that quietly disagrees with the expenses under it is a bug report, not
+    /// a feature.
+    /// </summary>
+    public string? IgnoredNamePatternsJson { get; set; }
+
     /// <summary>Frozen: readable, no new writes accepted.</summary>
     public bool IsArchived { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }

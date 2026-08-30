@@ -125,7 +125,8 @@ public sealed class GroupService(
             totals?.Total ?? 0m,
             totals?.Count ?? 0,
             group.DefaultSplitType,
-            ReadDefaultSplitValues(group.DefaultSplitValuesJson));
+            ReadDefaultSplitValues(group.DefaultSplitValuesJson),
+            ReadIgnoredNamePatterns(group.IgnoredNamePatternsJson));
     }
 
     /// <summary>
@@ -133,6 +134,26 @@ public sealed class GroupService(
     /// default rather than as an error: it would only ever mean a shape from an
     /// older version, and refusing to load a group over it would be absurd.
     /// </summary>
+    /// <summary>
+    /// The stored patterns, or null. Unreadable JSON is treated as none rather than
+    /// as an error, the same as the default split above it: refusing to load a group
+    /// over a display rule would be absurd.
+    /// </summary>
+    internal static IReadOnlyList<string>? ReadIgnoredNamePatterns(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<string>>(json);
+            return parsed is { Count: > 0 } ? parsed : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     internal static IReadOnlyDictionary<Guid, decimal>? ReadDefaultSplitValues(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
@@ -226,6 +247,9 @@ public sealed class GroupService(
                 : await BuildDefaultSplitValuesAsync(groupId, request.DefaultSplitValues, ct);
         }
 
+        if (request.IgnoredNamePatterns is { } patterns)
+            group.IgnoredNamePatternsJson = BuildIgnoredNamePatterns(patterns);
+
         await writer.RecordAsync(group, SyncEntityType.Group, groupId, SyncOperation.Update,
             DeviceFor(userId), userId, GroupPayload(group), ct: ct);
 
@@ -246,6 +270,44 @@ public sealed class GroupService(
     /// Members are checked against the group: a value for someone who is not in it
     /// would sit in the group forever, silently ignored by every form that read it.
     /// </summary>
+    /// <summary>
+    /// Validates and serialises the patterns to leave out of the highlights.
+    ///
+    /// The patterns are globs, not regular expressions: a name matches if it contains
+    /// the text, and a star stands for any run of characters. "Loyer*" is what a
+    /// person writes when they mean "anything starting with Loyer", and reading that
+    /// as a regex would match "Loye" and miss every rent there has ever been. So
+    /// there is nothing here that can fail to compile, and nothing that can be made
+    /// to backtrack for a second either.
+    ///
+    /// Bounded all the same: a group setting is not a place to store a program, and
+    /// ten patterns of two hundred characters is far more than the job needs.
+    /// </summary>
+    private static string? BuildIgnoredNamePatterns(IReadOnlyList<string> patterns)
+    {
+        const int MaxPatterns = 10;
+        const int MaxLength = 200;
+
+        var cleaned = patterns
+            .Select(pattern => pattern.Trim())
+            .Where(pattern => pattern.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (cleaned.Count == 0) return null;
+
+        if (cleaned.Count > MaxPatterns)
+            throw new ValidationException($"A group can have at most {MaxPatterns} patterns to ignore.");
+
+        foreach (var pattern in cleaned)
+        {
+            if (pattern.Length > MaxLength)
+                throw new ValidationException($"A pattern cannot be longer than {MaxLength} characters.");
+        }
+
+        return JsonSerializer.Serialize(cleaned);
+    }
+
     private async Task<string?> BuildDefaultSplitValuesAsync(
         Guid groupId, IReadOnlyDictionary<Guid, decimal>? values, CancellationToken ct)
     {
@@ -831,6 +893,7 @@ public sealed class GroupService(
         // the delta pull rather than only on a full read.
         DefaultSplitType = (int)group.DefaultSplitType,
         group.DefaultSplitValuesJson,
+        group.IgnoredNamePatternsJson,
         group.IsDeleted
     };
 

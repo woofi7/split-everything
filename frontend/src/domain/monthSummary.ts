@@ -1,4 +1,5 @@
 import { roundMoney } from './money'
+import { matchesAnyNamePattern } from './namePatterns'
 
 /**
  * What a finished month came to.
@@ -30,8 +31,20 @@ export interface MonthSummary {
   /** Largest contribution first, so the list reads in the order that matters. */
   byMember: MonthTotalByMember[]
 
-  /** The single largest expense of the month, or null in a month with none. */
+  /**
+   * The single largest expense of the month, ignoring any name the group asked to
+   * leave out. Null in a month where everything was ignored, or which has none.
+   */
   biggest: { description: string; amount: number } | null
+
+  /**
+   * What the ignored expenses came to, and how many there were.
+   *
+   * Shown rather than silently dropped: a household with rent in it wants to know
+   * that 1,500 of the month was rent, and a total that quietly omits it is a total
+   * nobody can check against the list underneath.
+   */
+  ignored: { total: number; count: number } | null
 
   /**
    * Against the month before it, when there is one to compare with. The percentage
@@ -59,7 +72,11 @@ export function summariseMonths(
   expenses: readonly MonthSpend[],
   currency: string,
   today: Date = new Date(),
+  ignoredNamePatterns: readonly string[] = [],
 ): MonthSummary[] {
+  const isIgnored = (description: string) =>
+    matchesAnyNamePattern(description, ignoredNamePatterns)
+
   const current = monthKeyOf(today)
 
   const byMonth = new Map<string, MonthSpend[]>()
@@ -103,7 +120,13 @@ export function summariseMonths(
       .filter((entry) => entry.amount !== 0)
       .sort((left, right) => right.amount - left.amount || left.memberId.localeCompare(right.memberId))
 
-    const biggest = month.reduce<MonthSpend | null>(
+    // The biggest thing worth calling biggest. A rent line every month is larger
+    // than everything else put together and says nothing that the total has not
+    // already said.
+    const considered = month.filter((expense) => !isIgnored(expense.description))
+    const skipped = month.filter((expense) => isIgnored(expense.description))
+
+    const biggest = considered.reduce<MonthSpend | null>(
       (largest, expense) =>
         largest === null || expense.amountInBaseCurrency > largest.amountInBaseCurrency
           ? expense
@@ -140,6 +163,15 @@ export function summariseMonths(
             label: previousKey,
           },
       versusAverage: average === null ? null : roundMoney(total - average, currency),
+      ignored: skipped.length === 0
+        ? null
+        : {
+            total: roundMoney(
+              skipped.reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
+              currency,
+            ),
+            count: skipped.length,
+          },
     }
   })
 
