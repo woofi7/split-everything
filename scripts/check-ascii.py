@@ -32,21 +32,23 @@ EXEMPT = (
     '*.lock',
 )
 
-# What each offender is, so a failure reads as an instruction rather than a hex dump.
+# What each offender is, so a failure reads as an instruction rather than a hex
+# dump. Written as escapes because this file has to pass its own check: a table of
+# forbidden characters that contains them would flag itself, which it did.
 NAMES = {
-    '—': 'em dash',
-    '–': 'en dash',
-    '→': 'right arrow',
-    '←': 'left arrow',
-    '…': 'ellipsis',
-    '‘': 'curly quote',
-    '’': 'curly quote',
-    '“': 'curly double quote',
-    '”': 'curly double quote',
-    '•': 'bullet',
-    ' ': 'non-breaking space',
-    '✓': 'check mark',
-    '﻿': 'byte order mark',
+    '\u2014': 'em dash',
+    '\u2013': 'en dash',
+    '\u2192': 'right arrow',
+    '\u2190': 'left arrow',
+    '\u2026': 'ellipsis',
+    '\u2018': 'curly quote',
+    '\u2019': 'curly quote',
+    '\u201c': 'curly double quote',
+    '\u201d': 'curly double quote',
+    '\u2022': 'bullet',
+    '\u00a0': 'non-breaking space',
+    '\u2713': 'check mark',
+    '\ufeff': 'byte order mark',
 }
 
 
