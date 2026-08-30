@@ -9,6 +9,7 @@ import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
+import { checkForAppUpdate } from '@/native/appUpdate'
 import { useApi } from '@/api/provider'
 import { looksOffline } from '@/api/client'
 import { db } from '@/offline/db'
@@ -165,6 +166,7 @@ const pull = useTemplateRef<{ done: () => void }>('pull')
 
 async function refresh(): Promise<void> {
   try {
+    await checkForAppUpdate()
     await expenses.sync()
   } catch {
     // Offline. The feed below still tries, and says so if it cannot.

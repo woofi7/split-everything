@@ -17,6 +17,7 @@ import { formatMoney } from '@/domain/money'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
+import { checkForAppUpdate } from '@/native/appUpdate'
 import type { LocalExpense } from '@/offline/db'
 
 /**
@@ -352,6 +353,8 @@ const pull = useTemplateRef<{ done: () => void }>('pull')
 
 async function refresh(): Promise<void> {
   try {
+    // Pulling down means "get me the latest", which includes the app itself.
+    await checkForAppUpdate()
     await expenses.sync()
     await groups.loadAll()
     await loadMainGroup()

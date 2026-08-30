@@ -6,6 +6,7 @@ import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import { db, type LocalConflict, type OutboxOperation } from '@/offline/db'
 import { useApi } from '@/api/provider'
 import { useExpensesStore } from '@/stores/expenses'
+import { checkForAppUpdate } from '@/native/appUpdate'
 
 const expenses = useExpensesStore()
 
@@ -36,6 +37,8 @@ async function load(): Promise<void> {
 const pull = useTemplateRef<{ done: () => void }>('pull')
 
 async function refresh(): Promise<void> {
+  // Pulling down means "get me the latest", which includes the app itself.
+  await checkForAppUpdate()
   await syncNow()
   pull.value?.done()
 }

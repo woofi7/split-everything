@@ -277,6 +277,28 @@ describe('DashboardView on the main group', () => {
     expect(wrapper.text()).toContain('Offline')
   })
 
+  it('asks whether there is a new version when pulled down', async () => {
+    const update = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { getRegistration: vi.fn(async () => ({ update })) },
+    })
+
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense()],
+    })
+    await settle()
+
+    // Pulling down is somebody asking for the latest. A home-screen app is resumed
+    // rather than navigated, so this is close to the only time the browser is asked.
+    wrapper.findComponent({ name: 'PullToRefresh' }).vm.$emit('refresh')
+    await settle()
+
+    expect(update).toHaveBeenCalled()
+    Reflect.deleteProperty(navigator, 'serviceWorker')
+  })
+
   /**
    * The order the screen is read in.
    *
