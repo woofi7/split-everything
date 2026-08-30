@@ -44,7 +44,15 @@ const routes: RouteRecordRaw[] = [
     name: 'expense',
     component: () => import('@/views/ExpenseView.vue'),
   },
-  { path: '/add', name: 'add-expense', component: () => import('@/views/AddExpenseView.vue') },
+  { path: '/add', name: 'add-expense', component: () => import('@/views/ExpenseFormView.vue') },
+  {
+    // The same form as adding, deliberately. Editing an expense asks exactly the
+    // same questions, and a second copy of the split logic would drift from this
+    // one the first time either changed.
+    path: '/groups/:groupId/expenses/:expenseId/edit',
+    name: 'edit-expense',
+    component: () => import('@/views/ExpenseFormView.vue'),
+  },
   { path: '/activity', name: 'activity', component: () => import('@/views/ActivityView.vue') },
   { path: '/stats', name: 'stats', component: () => import('@/views/StatsView.vue') },
   { path: '/import', name: 'import', component: () => import('@/views/ImportView.vue') },

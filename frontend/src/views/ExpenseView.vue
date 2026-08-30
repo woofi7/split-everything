@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
@@ -217,6 +217,15 @@ async function remove(): Promise<void> {
       </section>
 
       <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
+
+      <RouterLink
+        v-if="!confirmingDelete"
+        :to="{ name: 'edit-expense', params: { groupId, expenseId } }"
+        data-testid="edit-expense"
+        class="btn btn-press btn-secondary w-full"
+      >
+        Edit this expense
+      </RouterLink>
 
       <button
         v-if="!confirmingDelete"
