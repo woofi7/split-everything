@@ -66,16 +66,44 @@ describe('ProfileView', () => {
       expect(wrapper.findAll('[data-testid^="colour-"]')).toHaveLength(12)
     })
 
-    it('saves the one that is tapped', async () => {
+    it('waits for Save, like the name beside it', async () => {
       const api = fakeApi({ '/auth/me': () => ({ ...testUser, preferredColorHex: '#f97316' }) })
       const { wrapper } = await mountView(ProfileView, { api })
 
       await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
       await settle()
 
+      expect(api.patch).not.toHaveBeenCalled()
+      // Shown as chosen while it waits, or there is nothing to say it worked.
+      expect(wrapper.find('[data-testid="colour-f97316"]').attributes('aria-pressed')).toBe('true')
+    })
+
+    it('saves the one that is tapped, with the profile', async () => {
+      const api = fakeApi({ '/auth/me': () => ({ ...testUser, preferredColorHex: '#f97316' }) })
+      const { wrapper } = await mountView(ProfileView, { api })
+
+      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
+      await settle(1)
+      await wrapper.find('form').trigger('submit')
+      await settle()
+
       expect(api.patch).toHaveBeenCalledWith(
         '/auth/me',
         expect.objectContaining({ preferredColorHex: '#f97316' }),
+      )
+    })
+
+    it('says nothing about a colour that was not touched', async () => {
+      const api = fakeApi({ '/auth/me': () => testUser })
+      const { wrapper } = await mountView(ProfileView, { api })
+
+      await wrapper.find('form').trigger('submit')
+      await settle()
+
+      // Null would read as "not supplied" anyway, but sending nothing is honest.
+      expect(api.patch).toHaveBeenCalledWith(
+        '/auth/me',
+        expect.not.objectContaining({ preferredColorHex: expect.anything() }),
       )
     })
 
@@ -100,9 +128,12 @@ describe('ProfileView', () => {
       await settle(1)
 
       await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
+      await settle(1)
+      await wrapper.find('form').trigger('submit')
       await settle()
 
-      // The only way back to having no preference.
+      // The only way back to having no preference, and an empty string is how the
+      // API is told to clear rather than to leave alone.
       expect(api.patch).toHaveBeenCalledWith(
         '/auth/me',
         expect.objectContaining({ preferredColorHex: '' }),
@@ -115,6 +146,8 @@ describe('ProfileView', () => {
       const { wrapper } = await mountView(ProfileView, { api })
 
       await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
+      await settle(1)
+      await wrapper.find('form').trigger('submit')
       await settle()
 
       expect(textOf(wrapper)).toContain('not one of the colours')

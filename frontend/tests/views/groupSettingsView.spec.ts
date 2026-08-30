@@ -1006,15 +1006,73 @@ describe('GroupSettingsView', () => {
       expect(wrapper.findAll('[data-testid^="colour-"]')).toHaveLength(12)
     })
 
-    it('saves the colour that is picked', async () => {
+    it('holds a picked colour until the settings are saved', async () => {
       const { wrapper, client } = await open(ALICE)
 
       await wrapper.find('[data-testid="colour-14b8a6"]').trigger('click')
       await settle()
 
+      // Nothing on this screen commits on its own, a colour included.
+      expect(client.patch).not.toHaveBeenCalled()
+      expect(wrapper.find(`[data-testid="recolour-${ALICE}"]`).attributes('style'))
+        .toContain('rgb(20, 184, 166)')
+      expect(wrapper.find('[data-testid="save-settings"]').exists()).toBe(true)
+    })
+
+    it('saves the colour with the button', async () => {
+      const { wrapper, client } = await open(ALICE)
+
+      await wrapper.find('[data-testid="colour-14b8a6"]').trigger('click')
+      await settle(1)
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
+      await settle()
+
       expect(client.patch).toHaveBeenCalledWith(
         `/groups/${GROUP_ID}/members/${ALICE}/color`,
         { colorHex: '#14b8a6' },
+      )
+    })
+
+    it('stops being a change when the stored colour is picked again', async () => {
+      const { wrapper } = await open(ALICE)
+
+      // Alice already holds indigo in this group.
+      await wrapper.find('[data-testid="colour-6366f1"]').trigger('click')
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+    })
+
+    it('shows the swap before it is saved', async () => {
+      const { wrapper } = await open(ALICE)
+
+      // Bob holds orange in this fixture; Alice holds indigo.
+      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
+      await settle(1)
+
+      // Two people the same colour, even for a moment, is the one thing this is
+      // meant to prevent.
+      expect(wrapper.find(`[data-testid="recolour-${ALICE}"]`).attributes('style'))
+        .toContain('rgb(249, 115, 22)')
+      expect(wrapper.find(`[data-testid="recolour-${BOB}"]`).attributes('style'))
+        .toContain('rgb(99, 102, 241)')
+    })
+
+    it('saves both sides of a swap', async () => {
+      const { wrapper, client } = await open(ALICE)
+
+      await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
+      await settle(1)
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
+      await settle()
+
+      expect(client.patch).toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}/members/${ALICE}/color`,
+        { colorHex: '#f97316' },
+      )
+      expect(client.patch).toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}/members/${BOB}/color`,
+        { colorHex: '#6366f1' },
       )
     })
 
@@ -1030,6 +1088,8 @@ describe('GroupSettingsView', () => {
       client.patch.mockRejectedValue(new Error('Only an owner or an admin can change'))
 
       await wrapper.find('[data-testid="colour-14b8a6"]').trigger('click')
+      await settle(1)
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle()
 
       expect(textOf(wrapper)).toContain('Only an owner or an admin')
