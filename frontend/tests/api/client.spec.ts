@@ -297,6 +297,38 @@ describe('probing for a session', () => {
  * flush and a token refresh are each single-flight, every later one waited behind
  * a promise that was never going to resolve.
  */
+describe('an error with no body', () => {
+  function clientOn(status: number) {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(null, { status })) as never
+    return new ApiClient({
+      baseUrl: '/api',
+      getAccessToken: () => 'token-1',
+      getDeviceId: () => 'device-a',
+      onUnauthorized: vi.fn(),
+    })
+  }
+
+  it('explains a route the server does not have', async () => {
+    // What a frontend newer than its backend looks like from the UI. "The server
+    // returned 405" sent someone looking for a bug in the app.
+    const error = await clientOn(405).post('/groups/1/members/merge', {}).catch((e) => e as ApiError)
+
+    expect(error.message).toContain('older version')
+  })
+
+  it('explains a missing endpoint the same way', async () => {
+    const error = await clientOn(404).get('/nope').catch((e) => e as ApiError)
+
+    expect(error.message).toContain('older version')
+  })
+
+  it('still reports any other status plainly', async () => {
+    const error = await clientOn(500).get('/groups').catch((e) => e as ApiError)
+
+    expect(error.message).toContain('500')
+  })
+})
+
 describe('a request that never answers', () => {
   let fetchMock: ReturnType<typeof vi.fn>
 

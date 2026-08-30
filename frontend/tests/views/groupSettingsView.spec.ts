@@ -236,6 +236,39 @@ describe('GroupSettingsView', () => {
     expect(tagged).toHaveLength(1)
   })
 
+  it('says a removed member is removed, and leaves it at that', async () => {
+    const removed = testGroup()
+    removed.members[1] = { ...removed.members[1], status: 'Removed' }
+
+    const { wrapper } = await mountView(GroupSettingsView, {
+      api: fakeApi({ '/groups': () => removed }),
+      groups: [removed],
+    })
+
+    const row = wrapper.findAll('li').find((li) => li.text().includes('Bob'))!
+    // Both notes at once read as a puzzle. Removed is the fact that matters.
+    expect(row.text()).toContain('(removed)')
+    expect(row.text()).not.toContain('not signed in yet')
+  })
+
+  it('marks who owns the group', async () => {
+    const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+
+    const rows = wrapper.findAll('li')
+    const owner = rows.find((row) => row.find('[data-testid="owner-tag"]').exists())
+
+    // The one person no merge or removal can take out of the group, and the only
+    // one who can do either.
+    expect(owner).toBeDefined()
+    expect(owner!.text()).toContain('Alice')
+  })
+
+  it('marks exactly one owner', async () => {
+    const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+
+    expect(wrapper.findAll('[data-testid="owner-tag"]')).toHaveLength(1)
+  })
+
   it('cannot add someone who has no account', async () => {
     const client = api({ '/users/addable': () => [] })
 
@@ -429,47 +462,124 @@ describe('GroupSettingsView', () => {
    * the account they later signed up with. Both halves carry expenses, so neither
    * can just be deleted.
    *
-   * Everything still works afterwards, which is exactly why a mistake here is
-   * invisible: the balances are simply wrong from then on, and nothing records
-   * what they used to be. So the warning is part of the feature.
+   * One action asking for a pair, rather than something done to a row: who goes
+   * and who inherits reads as one sentence, which is what makes it hard to get
+   * backwards. Everything still works afterwards, which is exactly why a mistake
+   * is invisible, so the warning is part of the feature.
    */
   describe('merging two people', () => {
-    it('offers a merge on someone who is not the owner', async () => {
+    /** A group holding one person twice, which is what a merge is for. */
+    function twiceOver() {
+      const group = testGroup()
+      group.members = [
+        group.members[0],
+        { ...group.members[1], displayName: 'Emma', status: 'Removed' },
+        { ...group.members[1], id: 'member-emma', displayName: 'Emma', userId: 'user-emma', isPlaceholder: false },
+      ]
+      return group
+    }
+
+    async function openMerge(group = twiceOver()) {
+      const client = fakeApi({ '/groups': () => group })
+      const mounted = await mountView(GroupSettingsView, { api: client, groups: [group] })
+
+      await mounted.wrapper.find('[data-testid="merge-open"]').trigger('click')
+      await settle(1)
+
+      return { ...mounted, client }
+    }
+
+    it('is one action rather than a control on every row', async () => {
       const { wrapper } = await mountView(GroupSettingsView, { api: api() })
 
-      expect(wrapper.find(`[data-testid="merge-${BOB}"]`).exists()).toBe(true)
+      expect(wrapper.find('[data-testid="merge-open"]').exists()).toBe(true)
+      expect(wrapper.find(`[data-testid="merge-${BOB}"]`).exists()).toBe(false)
     })
 
-    it('offers a merge on someone who has been removed', async () => {
-      const removed = testGroup()
-      removed.members[1] = { ...removed.members[1], status: 'Removed' }
+    it('is an icon, so it says what it is without words', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
 
-      const { wrapper } = await mountView(GroupSettingsView, {
-        api: fakeApi({ '/groups': () => removed }),
-        groups: [removed],
-      })
+      const button = wrapper.find('[data-testid="merge-open"]')
+      // Icon only, so the name has to be carried for anyone who cannot see it.
+      expect(button.text()).toBe('')
+      expect(button.attributes('aria-label')).toBe('Merge two people')
+      expect(button.attributes('title')).toBe('Merge two people')
+    })
+
+    it('asks who goes and who stays', async () => {
+      const { wrapper } = await openMerge()
+
+      expect(wrapper.find('[data-testid="merge-source"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="merge-target"]').exists()).toBe(true)
+    })
+
+    it('asks nothing of the server until it is confirmed', async () => {
+      const { wrapper, client } = await openMerge()
+
+      expect(wrapper.find('[data-testid="merge-confirm"]').exists()).toBe(true)
+      expect(client.post).not.toHaveBeenCalledWith(
+        `/groups/${GROUP_ID}/members/merge`,
+        expect.anything(),
+      )
+    })
+
+    it('says that it cannot be undone before anything is chosen', async () => {
+      const { wrapper } = await openMerge()
+
+      expect(wrapper.find('[data-testid="merge-confirm"]').text()).toContain('cannot be undone')
+    })
+
+    it('names both people once they are chosen', async () => {
+      const { wrapper } = await openMerge()
+
+      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
+      await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
+      await settle(1)
+
+      const text = wrapper.find('[data-testid="merge-confirm"]').text()
+      expect(text).toContain('will be removed')
+      expect(text).toContain('cannot be undone')
+    })
+
+    it('will not merge until both are chosen', async () => {
+      const { wrapper } = await openMerge()
+
+      expect(wrapper.find('[data-testid="merge-confirm-button"]').attributes('disabled'))
+        .toBeDefined()
+
+      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
+      await settle(1)
+
+      // One of the two is not a merge.
+      expect(wrapper.find('[data-testid="merge-confirm-button"]').attributes('disabled'))
+        .toBeDefined()
+    })
+
+    it('offers a removed member as the one to merge away', async () => {
+      const { wrapper } = await openMerge()
 
       // Removing a member deactivates it rather than deleting it, because it
-      // still holds expenses. That leftover is the most likely thing anyone wants
-      // to merge, and gating the button on Active hid it on exactly that row.
-      expect(wrapper.find(`[data-testid="merge-${BOB}"]`).exists()).toBe(true)
+      // still holds expenses. That leftover is the most likely thing to merge.
+      const options = wrapper
+        .findAll('[data-testid="merge-source"] option')
+        .map((option) => option.attributes('value'))
+
+      expect(options).toContain(BOB)
     })
 
-    it('does not offer to merge someone into a removed member', async () => {
-      const removed = testGroup()
-      removed.members = [
-        removed.members[0],
-        { ...removed.members[1], status: 'Removed' },
-        { ...removed.members[1], id: 'member-carol', displayName: 'Carol', status: 'Active' },
-      ]
+    it('says which of two people with the same name is the removed one', async () => {
+      const { wrapper } = await openMerge()
 
-      const { wrapper } = await mountView(GroupSettingsView, {
-        api: fakeApi({ '/groups': () => removed }),
-        groups: [removed],
-      })
+      const labels = wrapper
+        .findAll('[data-testid="merge-source"] option')
+        .map((option) => option.text())
 
-      await wrapper.find('[data-testid="merge-member-carol"]').trigger('click')
-      await settle(1)
+      // Both are called Emma. Without this the list is two identical rows.
+      expect(labels.some((label) => label.includes('Emma (removed)'))).toBe(true)
+    })
+
+    it('does not offer a removed member as the one to keep', async () => {
+      const { wrapper } = await openMerge()
 
       const options = wrapper
         .findAll('[data-testid="merge-target"] option')
@@ -480,103 +590,47 @@ describe('GroupSettingsView', () => {
       expect(options).not.toContain(BOB)
     })
 
-    it('offers no merge when there is nobody left to merge into', async () => {
-      // Contrived: in practice the owner is active and is always a valid target.
-      // It pins the second half of the rule, so the button can never open a
-      // dialog whose only choice is nobody.
-      const alone = testGroup()
-      alone.members = [
-        { ...alone.members[0], status: 'Removed' },
-        alone.members[1],
-      ]
-
-      const { wrapper } = await mountView(GroupSettingsView, {
-        api: fakeApi({ '/groups': () => alone }),
-        groups: [alone],
-      })
-
-      expect(wrapper.find(`[data-testid="merge-${BOB}"]`).exists()).toBe(false)
-    })
-
-    it('does not offer to merge the owner away', async () => {
-      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
-
-      // A group has to keep an owner, and merging the other way round does the
-      // same job.
+    it('does not offer the owner as the one to merge away', async () => {
+      const { wrapper } = await openMerge()
       const owner = testGroup().members.find((m) => m.role === 'Owner')!
-      expect(wrapper.find(`[data-testid="merge-${owner.id}"]`).exists()).toBe(false)
+
+      const options = wrapper
+        .findAll('[data-testid="merge-source"] option')
+        .map((option) => option.attributes('value'))
+
+      expect(options).not.toContain(owner.id)
     })
 
-    it('asks nothing of the server until it is confirmed', async () => {
-      const client = api()
-      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+    it('does not offer the same person on both sides', async () => {
+      const { wrapper } = await openMerge()
 
-      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
-      await settle(1)
-
-      expect(wrapper.find('[data-testid="merge-confirm"]').exists()).toBe(true)
-      expect(client.post).not.toHaveBeenCalledWith(
-        `/groups/${GROUP_ID}/members/merge`,
-        expect.anything(),
-      )
-    })
-
-    it('says that it cannot be undone', async () => {
-      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
-
-      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
-      await settle(1)
-
-      expect(wrapper.find('[data-testid="merge-confirm"]').text())
-        .toContain('cannot be undone')
-    })
-
-    it('will not merge until a target is chosen', async () => {
-      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
-
-      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
-      await settle(1)
-
-      const confirm = wrapper.find('[data-testid="merge-confirm-button"]')
-      expect(confirm.attributes('disabled')).toBeDefined()
-    })
-
-    it('does not offer to merge someone into themselves', async () => {
-      const { wrapper } = await mountView(GroupSettingsView, { api: api() })
-
-      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
+      await wrapper.find('[data-testid="merge-source"]').setValue('member-emma')
       await settle(1)
 
       const options = wrapper
         .findAll('[data-testid="merge-target"] option')
         .map((option) => option.attributes('value'))
 
-      expect(options).not.toContain(BOB)
+      expect(options).not.toContain('member-emma')
     })
 
     it('merges once confirmed', async () => {
-      const client = api()
-      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      const { wrapper, client } = await openMerge()
 
-      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
-      await settle(1)
-      const owner = testGroup().members.find((m) => m.role === 'Owner')!
-      await wrapper.find('[data-testid="merge-target"]').setValue(owner.id)
+      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
+      await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
 
       expect(client.post).toHaveBeenCalledWith(
         `/groups/${GROUP_ID}/members/merge`,
-        { sourceMemberId: BOB, targetMemberId: owner.id },
+        { sourceMemberId: BOB, targetMemberId: 'member-emma' },
       )
     })
 
     it('can be backed out of', async () => {
-      const client = api()
-      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      const { wrapper, client } = await openMerge()
 
-      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
-      await settle(1)
       await wrapper.findAll('button').find((b) => b.text() === 'Cancel')!.trigger('click')
       await settle(1)
 
@@ -587,19 +641,62 @@ describe('GroupSettingsView', () => {
       )
     })
 
-    it('reports a refusal from the server', async () => {
-      const client = api()
+    it('reports a refusal in the dialog, where the eye already is', async () => {
+      const { wrapper, client } = await openMerge()
       client.post.mockRejectedValue(new Error('The group owner cannot be merged away.'))
-      const { wrapper } = await mountView(GroupSettingsView, { api: client })
 
-      await wrapper.find(`[data-testid="merge-${BOB}"]`).trigger('click')
-      await settle(1)
-      const owner = testGroup().members.find((m) => m.role === 'Owner')!
-      await wrapper.find('[data-testid="merge-target"]').setValue(owner.id)
+      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
+      await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
 
-      expect(textOf(wrapper)).toContain('cannot be merged away')
+      // At the foot of the section it read as nothing having happened at all.
+      expect(wrapper.find('[data-testid="merge-confirm"]').text())
+        .toContain('cannot be merged away')
+    })
+
+    it('reports it once, not in two places', async () => {
+      const { wrapper, client } = await openMerge()
+      client.post.mockRejectedValue(new Error('The group owner cannot be merged away.'))
+
+      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
+      await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
+      await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
+      await settle()
+
+      const alerts = wrapper
+        .findAll('[role="alert"]')
+        .filter((node) => node.text().includes('cannot be merged away'))
+
+      expect(alerts).toHaveLength(1)
+    })
+
+    it('offers no merge to someone who is only a member', async () => {
+      const group = twiceOver()
+      group.members = group.members.map((member) =>
+        member.role === 'Owner' ? { ...member, role: 'Member' } : member,
+      )
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => group }),
+        groups: [group],
+      })
+
+      // It rewrites everyone's balances, so the server allows only an owner or an
+      // admin. Offering the button anyway would end in a refusal.
+      expect(wrapper.find('[data-testid="merge-open"]').exists()).toBe(false)
+    })
+
+    it('offers no merge in a group with nobody to merge', async () => {
+      const alone = testGroup()
+      alone.members = [alone.members[0]]
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => alone }),
+        groups: [alone],
+      })
+
+      expect(wrapper.find('[data-testid="merge-open"]').exists()).toBe(false)
     })
   })
 })
