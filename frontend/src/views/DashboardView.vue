@@ -329,8 +329,13 @@ const spentOn = (iso: string) =>
         data-testid="balance-line"
         class="surface-card mb-4 flex items-center justify-between gap-3 p-4"
       >
-        <span class="flex min-w-0 items-baseline gap-2">
-          <span class="shrink-0 text-sm text-[var(--text-muted)]">Your balance</span>
+        <!--
+          Label over number, and at least as tall as the button beside it so the
+          row reads as one block rather than a number with a control floating next
+          to it. Centred, so it stays level whichever of the two is taller.
+        -->
+        <span class="flex min-h-11 min-w-0 flex-col justify-center">
+          <span class="text-xs text-[var(--text-muted)]">Your balance</span>
           <MoneyAmount :amount="group.myNetBalance" :currency="currency" signed size="lg" />
         </span>
 
