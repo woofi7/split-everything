@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 
 const props = defineProps<{
   pendingCount: number
@@ -38,12 +39,25 @@ const state = computed(() => {
   if (props.isOffline) return { key: 'offline', label: 'Offline', tone: 'text-[var(--text-muted)]' }
   return { key: 'synced', label: 'All synced', tone: 'text-[var(--text-muted)]' }
 })
+
+/**
+ * Whether there is anything behind the message.
+ *
+ * A count is a question, and the screen that answers it was two taps away under
+ * a heading nobody would think to look under. It is a link exactly when queued or
+ * refused work exists, and plain text otherwise: syncing and offline on their own
+ * lead to an empty page.
+ */
+const hasSomethingToShow = computed(() => props.pendingCount > 0 || props.rejectedCount > 0)
 </script>
 
 <template>
-  <p
+  <component
+    :is="hasSomethingToShow ? RouterLink : 'p'"
+    :to="hasSomethingToShow ? { name: 'conflicts' } : undefined"
+    :data-testid="hasSomethingToShow ? 'sync-indicator-link' : undefined"
     class="flex items-center gap-2 text-xs"
-    :class="state.tone"
+    :class="[state.tone, hasSomethingToShow ? 'underline decoration-dotted underline-offset-2' : '']"
     :data-state="state.key"
     role="status"
     aria-live="polite"
@@ -60,5 +74,5 @@ const state = computed(() => {
       aria-hidden="true"
     />
     {{ state.label }}
-  </p>
+  </component>
 </template>
