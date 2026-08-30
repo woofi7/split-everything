@@ -4,12 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
+import { useCategoriesStore } from '@/stores/categories'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { calculateSplit, type SplitType } from '@/domain/splitting'
 import { parseAmountInput } from '@/domain/money'
 
 const groups = useGroupsStore()
+const categories = useCategoriesStore()
 const expenses = useExpensesStore()
 const auth = useAuthStore()
 const route = useRoute()
@@ -20,6 +22,7 @@ const description = ref('')
 const amountInput = ref('')
 const spentAt = ref(new Date().toISOString().slice(0, 10))
 const splitType = ref<SplitType>('Equal')
+const categoryId = ref<string | null>(null)
 const paidByMemberId = ref('')
 const participantIds = ref<string[]>([])
 const splitValues = ref<Record<string, number>>({})
@@ -34,6 +37,7 @@ const splitTypes: Array<{ value: SplitType; label: string }> = [
 ]
 
 onMounted(async () => {
+  void categories.load()
   await groups.loadAll()
   // The main group, then whatever the query asked for, then anything at all. The
   // query wins when it is there, because it means someone arrived from a group.
@@ -145,6 +149,7 @@ async function save(): Promise<void> {
       splitType: splitType.value,
       participantIds: participantIds.value,
       splitValues: splitValues.value,
+      categoryId: categoryId.value,
     })
 
     // Queued locally, so this returns straight away whether online or not.
@@ -185,6 +190,26 @@ async function save(): Promise<void> {
           class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
           style="border-color: var(--border)"
         />
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-sm text-[var(--text-muted)]">Category</span>
+        <!--
+          Offered at last: the API has served these from the start and nothing
+          asked, so every expense was uncategorised and the by-category breakdown
+          in stats read "Uncategorised, 100%".
+        -->
+        <select
+          v-model="categoryId"
+          data-testid="category"
+          class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
+          style="border-color: var(--border)"
+        >
+          <option :value="null">No category</option>
+          <option v-for="category in categories.all" :key="category.id" :value="category.id">
+            {{ category.name }}
+          </option>
+        </select>
       </label>
 
       <div class="grid grid-cols-2 gap-3">

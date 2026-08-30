@@ -162,6 +162,18 @@ describe('StatsView', () => {
     expect(bars[1].attributes('style')).toContain('height: 50%')
   })
 
+  it('gives each bar a parent with a height to be a percentage of', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+
+    // The bars carried a percentage height inside an auto-height list item, so it
+    // resolved against nothing and the whole chart rendered flat. jsdom does no
+    // layout, which is why the style assertion above passed while the chart was
+    // empty on screen.
+    const items = wrapper.findAll('[role="img"] li')
+    expect(items.length).toBeGreaterThan(0)
+    for (const item of items) expect(item.classes()).toContain('h-full')
+  })
+
   it('gives a tiny bucket a visible floor rather than an invisible bar', async () => {
     const { wrapper } = await mountView(StatsView, {
       api: api({
