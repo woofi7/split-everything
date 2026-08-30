@@ -20,6 +20,22 @@ export interface LocalStatsExpense {
   amountInBaseCurrency: number
   spentAt: string
   splits: readonly { memberId: string; amountInBaseCurrency: number }[]
+  /** Who put money in. Absent on a row saved before the app knew about several. */
+  payers?: readonly { memberId: string; amountInBaseCurrency: number }[]
+}
+
+/**
+ * Who paid an expense, however the row was stored.
+ *
+ * The same fallback the balances use: an expense from an older build names one
+ * payer and no contributions, and that member paid the whole amount.
+ */
+function payersOf(
+  expense: LocalStatsExpense,
+): readonly { memberId: string; amountInBaseCurrency: number }[] {
+  return expense.payers && expense.payers.length > 0
+    ? expense.payers
+    : [{ memberId: expense.paidByMemberId, amountInBaseCurrency: expense.amountInBaseCurrency }]
 }
 
 export interface LocalStatsSettlement {
@@ -86,9 +102,14 @@ export function computeStats(input: LocalStatsInput): LocalStats {
     0,
   )
 
-  const myPaid = expenses
-    .filter((expense) => mine.has(expense.paidByMemberId))
-    .reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0)
+  const myPaid = expenses.reduce(
+    (sum, expense) =>
+      sum +
+      payersOf(expense)
+        .filter((payer) => mine.has(payer.memberId))
+        .reduce((part, payer) => part + payer.amountInBaseCurrency, 0),
+    0,
+  )
 
   return {
     currency,
@@ -125,10 +146,12 @@ function spendOverTime(
 
       const paid = new Map<string, number>()
       for (const expense of inBucket) {
-        paid.set(
-          expense.paidByMemberId,
-          (paid.get(expense.paidByMemberId) ?? 0) + expense.amountInBaseCurrency,
-        )
+        for (const payer of payersOf(expense)) {
+          paid.set(
+            payer.memberId,
+            (paid.get(payer.memberId) ?? 0) + payer.amountInBaseCurrency,
+          )
+        }
       }
 
       const payers = [...paid.entries()]
@@ -164,7 +187,7 @@ function byMember(
   return input.members
     .map((member) => {
       const paid = input.expenses
-        .filter((expense) => expense.paidByMemberId === member.id)
+        .flatMap((expense) => payersOf(expense).filter((payer) => payer.memberId === member.id))
         .reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0)
 
       const owed = input.expenses.reduce(

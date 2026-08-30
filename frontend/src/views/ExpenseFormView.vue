@@ -8,7 +8,7 @@ import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { calculateSplit, splitValuesFor, type SplitType } from '@/domain/splitting'
-import { parseAmountInput } from '@/domain/money'
+import { formatMoney, parseAmountInput, roundMoney } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
 
 const groups = useGroupsStore()
@@ -41,6 +41,17 @@ const amountInput = ref('')
 const spentAt = ref(new Date().toISOString().slice(0, 10))
 const splitType = ref<SplitType>('Equal')
 const paidByMemberId = ref('')
+
+/**
+ * Who paid, when it was not one person.
+ *
+ * Empty is the ordinary case and means the single payer above. Non-empty, the
+ * amount of the expense is the sum of these rather than something typed: two
+ * people putting in 40 and 25 have spent 65, and asking for the total as well
+ * would be asking for a number the app can already work out - and one more thing
+ * that can disagree with the rest of the screen.
+ */
+const payers = ref<Array<{ memberId: string; amount: string }>>([])
 const participantIds = ref<string[]>([])
 const splitValues = ref<Record<string, number>>({})
 const error = ref<string | null>(null)
@@ -88,6 +99,14 @@ function prefillFromExpense(): void {
   paidByMemberId.value = existing.paidByMemberId
   participantIds.value = existing.splits.map((split) => split.memberId)
 
+  payers.value =
+    (existing.payers ?? []).length > 1
+      ? existing.payers!.map((payer) => ({
+          memberId: payer.memberId,
+          amount: payer.amount.toFixed(2),
+        }))
+      : []
+
   splitValues.value = Object.fromEntries(
     existing.splits
       .filter((split) => split.inputValue !== null)
@@ -98,7 +117,61 @@ function prefillFromExpense(): void {
 const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
 const members = computed(() => group.value?.members.filter((m) => m.status === 'Active') ?? [])
 const currency = computed(() => group.value?.baseCurrency ?? auth.user?.defaultCurrency ?? 'CAD')
-const amount = computed(() => parseAmountInput(amountInput.value) ?? 0)
+/**
+ * What the expense cost: the sum of the contributions when several people paid,
+ * otherwise whatever was typed.
+ */
+const amount = computed(() =>
+  isShared.value ? paidTotal.value : (parseAmountInput(amountInput.value) ?? 0),
+)
+
+const isShared = computed(() => payers.value.length > 0)
+
+const paidTotal = computed(() =>
+  roundMoney(
+    payers.value.reduce((sum, payer) => sum + (parseAmountInput(payer.amount) ?? 0), 0),
+    currency.value,
+  ),
+)
+
+/** The members not already named as payers, so the second row cannot repeat the first. */
+const availablePayers = computed(() =>
+  members.value.filter(
+    (member) => !payers.value.some((payer) => payer.memberId === member.id),
+  ),
+)
+
+/**
+ * Splitting the payment starts from what is on screen: whoever was going to pay,
+ * for what was typed, plus an empty row for the next person. Nothing is lost by
+ * turning it on and off again.
+ */
+function sharePayment(): void {
+  const others = members.value.filter((member) => member.id !== paidByMemberId.value)
+
+  payers.value = [
+    { memberId: paidByMemberId.value, amount: amountInput.value.trim() || '' },
+    { memberId: others[0]?.id ?? '', amount: '' },
+  ].filter((payer) => payer.memberId !== '')
+}
+
+function stopSharing(): void {
+  // The total stays: it is what the expense costs either way, and clearing it
+  // would throw away a figure the person had already worked out.
+  amountInput.value = paidTotal.value > 0 ? paidTotal.value.toFixed(2) : amountInput.value
+  paidByMemberId.value = payers.value[0]?.memberId ?? paidByMemberId.value
+  payers.value = []
+}
+
+function addPayer(): void {
+  const next = availablePayers.value[0]
+  if (next) payers.value.push({ memberId: next.id, amount: '' })
+}
+
+function removePayer(index: number): void {
+  payers.value.splice(index, 1)
+  if (payers.value.length < 2) stopSharing()
+}
 
 /**
  * Switching group resets who is involved and who paid, because member ids do not
@@ -283,8 +356,24 @@ async function save(): Promise<void> {
 
   isSaving.value = true
 
+  // Rows with nothing in them are somebody part-way through typing, not a payer
+  // of zero: dropped rather than refused.
+  const contributions = payers.value
+    .filter((payer) => payer.memberId && (parseAmountInput(payer.amount) ?? 0) > 0)
+    .map((payer) => ({
+      memberId: payer.memberId,
+      amount: parseAmountInput(payer.amount) as number,
+    }))
+
+  if (isShared.value && contributions.length < 2) {
+    error.value = t('Say what each person paid, or go back to a single payer.')
+    isSaving.value = false
+    return
+  }
+
   const fields = {
-    paidByMemberId: paidByMemberId.value,
+    paidByMemberId: isShared.value ? contributions[0].memberId : paidByMemberId.value,
+    payers: isShared.value ? contributions : undefined,
     description: description.value,
     amount: amount.value,
     currency: currency.value,
@@ -354,12 +443,29 @@ async function save(): Promise<void> {
           <span class="text-xs text-[var(--text-muted)]">
             {{ t('Amount ({currency})', { currency }) }}
           </span>
+
+          <!--
+            Read rather than typed once several people are paying: the total is the
+            sum of what each of them put in, and a field that can disagree with the
+            numbers directly below it is a field that will.
+          -->
+          <p
+            v-if="isShared"
+            data-testid="shared-total"
+            class="tap-target flex items-center rounded-lg border bg-[var(--surface-sunken)] px-3 text-2xl font-semibold tabular-nums"
+            style="border-color: var(--border)"
+          >
+            {{ formatMoney(paidTotal, currency) }}
+          </p>
+
           <input
+            v-else
             v-model="amountInput"
             type="text"
             inputmode="decimal"
             required
             placeholder="0.00"
+            data-testid="amount"
             class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-3 text-2xl font-semibold tabular-nums"
             style="border-color: var(--border)"
           />
@@ -410,7 +516,7 @@ async function save(): Promise<void> {
           </select>
         </label>
 
-        <label class="flex min-w-0 flex-col gap-1">
+        <label v-if="!isShared" class="flex min-w-0 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Who paid') }}</span>
           <select
             v-model="paidByMemberId"
@@ -424,6 +530,81 @@ async function save(): Promise<void> {
           </select>
         </label>
       </div>
+
+      <!--
+        More than one person paying for the same thing: two cards at the till, or
+        somebody short of cash. What each of them put in is not the same question as
+        what each of them owes, so it is asked here and split below as usual.
+      -->
+      <div v-if="isShared" class="flex flex-col gap-2">
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Who paid') }}</span>
+          <button
+            type="button"
+            data-testid="single-payer"
+            class="text-xs text-brand-400"
+            @click="stopSharing"
+          >{{ t('One person paid') }}
+          </button>
+        </div>
+
+        <div
+          v-for="(payer, index) in payers"
+          :key="index"
+          data-testid="payer-row"
+          class="flex items-center gap-2"
+        >
+          <select
+            v-model="payer.memberId"
+            data-testid="payer-member"
+            class="tap-target min-w-0 flex-1 rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
+            style="border-color: var(--border)"
+          >
+            <option v-for="member in members" :key="member.id" :value="member.id">
+              {{ member.displayName }}
+            </option>
+          </select>
+
+          <input
+            v-model="payer.amount"
+            type="text"
+            inputmode="decimal"
+            placeholder="0.00"
+            data-testid="payer-amount"
+            class="tap-target w-24 shrink-0 rounded-lg border bg-[var(--surface-raised)] px-2 text-right text-sm tabular-nums"
+            style="border-color: var(--border)"
+          />
+
+          <button
+            type="button"
+            data-testid="remove-payer"
+            class="tap-target shrink-0 px-2 text-sm text-[var(--text-muted)]"
+            :aria-label="t('Remove')"
+            @click="removePayer(index)"
+          >
+            <span aria-hidden="true">x</span>
+          </button>
+        </div>
+
+        <button
+          v-if="availablePayers.length > 0"
+          type="button"
+          data-testid="add-payer"
+          class="btn btn-press btn-secondary min-h-0 self-start px-3 py-1.5 text-xs"
+          style="border-color: var(--border)"
+          @click="addPayer"
+        >{{ t('Add someone who paid') }}
+        </button>
+      </div>
+
+      <button
+        v-else-if="members.length > 1"
+        type="button"
+        data-testid="share-payment"
+        class="self-start text-xs text-brand-400"
+        @click="sharePayment"
+      >{{ t('Several people paid') }}
+      </button>
 
       <fieldset class="flex flex-col gap-2">
         <legend class="text-xs text-[var(--text-muted)]">{{ t('Split') }}</legend>

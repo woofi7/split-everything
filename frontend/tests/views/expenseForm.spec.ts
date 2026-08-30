@@ -287,6 +287,111 @@ describe('ExpenseFormView', () => {
   })
 })
 
+describe('ExpenseFormView with several payers', () => {
+  beforeEach(async () => {
+    await resetDatabase()
+    setActivePinia(createPinia())
+    push.mockClear()
+    replace.mockClear()
+    routeParams = { groupId }
+  })
+
+  /** Turns on the shared payment rows and fills them in. */
+  async function shareBetween(
+    wrapper: Awaited<ReturnType<typeof mountView>>['wrapper'],
+    amounts: string[],
+  ) {
+    await wrapper.find('[data-testid="share-payment"]').trigger('click')
+    await settle()
+
+    const rows = wrapper.findAll('[data-testid="payer-amount"]')
+    for (const [index, value] of amounts.entries()) await rows[index].setValue(value)
+    await settle()
+  }
+
+  it('offers to split the payment between people', async () => {
+    const { wrapper } = await mountView()
+
+    expect(wrapper.find('[data-testid="share-payment"]').exists()).toBe(true)
+  })
+
+  it('starts with a row for each of two people', async () => {
+    const { wrapper } = await mountView()
+
+    await wrapper.find('[data-testid="share-payment"]').trigger('click')
+    await settle()
+
+    expect(wrapper.findAll('[data-testid="payer-row"]')).toHaveLength(2)
+  })
+
+  it('totals what each person put in rather than asking for the total', async () => {
+    const { wrapper } = await mountView()
+
+    await shareBetween(wrapper, ['40', '25'])
+
+    // The amount field is gone: the total is the sum of the contributions, and a
+    // field that can disagree with the numbers under it is a field that will.
+    expect(wrapper.find('[data-testid="shared-total"]').text()).toContain('65.00')
+    expect(wrapper.find('[data-testid="amount"]').exists()).toBe(false)
+  })
+
+  it('saves who paid what', async () => {
+    const { wrapper, expenses } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Frying pans')
+    await shareBetween(wrapper, ['40', '25'])
+
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const saved = expenses.forGroup(groupId)[0]
+    expect(saved.amount).toBe(65)
+    expect(saved.payers).toEqual([
+      { memberId: alice, amount: 40, amountInBaseCurrency: 40 },
+      { memberId: bob, amount: 25, amountInBaseCurrency: 25 },
+    ])
+  })
+
+  it('splits the total between the participants, not between the payers', async () => {
+    const { wrapper, expenses } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Frying pans')
+    await shareBetween(wrapper, ['40', '25'])
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    // 65 split evenly between the two of them: what each owes has nothing to do
+    // with what each paid.
+    const saved = expenses.forGroup(groupId)[0]
+    expect(saved.splits.map((split) => split.amount)).toEqual([32.5, 32.5])
+  })
+
+  it('goes back to a single payer without losing the total', async () => {
+    const { wrapper } = await mountView()
+
+    await shareBetween(wrapper, ['40', '25'])
+    await wrapper.find('[data-testid="single-payer"]').trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-testid="payer-row"]').exists()).toBe(false)
+    expect((wrapper.find('[data-testid="amount"]').element as HTMLInputElement).value).toBe(
+      '65.00',
+    )
+  })
+
+  it('says so when only one row was filled in', async () => {
+    const { wrapper } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Frying pans')
+    await shareBetween(wrapper, ['40'])
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(textOf(wrapper)).toContain('Say what each person paid')
+  })
+
+})
+
 describe('ExpenseFormView editing an expense', () => {
   const existing = {
     id: 'expense-1',
@@ -355,6 +460,58 @@ describe('ExpenseFormView editing an expense', () => {
 
     return { wrapper, expenses }
   }
+
+  it('reopens an expense several people paid for with its rows filled in', async () => {
+    setActivePinia(createPinia())
+    await resetDatabase()
+    await db.groups.put(group)
+    await db.expenses.put({
+      ...existing,
+      amount: 65,
+      amountInBaseCurrency: 65,
+      splitType: 'Equal' as const,
+      splits: [
+        { memberId: alice, amount: 32.5, amountInBaseCurrency: 32.5, inputValue: null },
+        { memberId: bob, amount: 32.5, amountInBaseCurrency: 32.5, inputValue: null },
+      ],
+      payers: [
+        { memberId: alice, amount: 40, amountInBaseCurrency: 40 },
+        { memberId: bob, amount: 25, amountInBaseCurrency: 25 },
+      ],
+    })
+
+    const auth = useAuthStore()
+    auth.user = {
+      id: 'user-1',
+      email: 'alice@example.com',
+      displayName: 'Alice',
+      avatarUrl: null,
+      defaultCurrency: 'CAD',
+      prefersLightTheme: false,
+    } as never
+
+    const groups = useGroupsStore()
+    groups.attachApi({
+      get: vi.fn(async (path: string) =>
+        path === '/groups' ? [{ ...group, memberCount: 2, lastActivityAt: null }] : group,
+      ),
+      post: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
+    } as never)
+
+    const expenses = useExpensesStore()
+    expenses.attachSync(new SyncEngine(fakeSyncApi(), () => false))
+
+    const wrapper = mount(ExpenseFormView, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+    await settle()
+
+    // Opened as it was saved: the rows are there and the total is read from them.
+    expect(wrapper.findAll('[data-testid="payer-row"]')).toHaveLength(2)
+    expect(wrapper.find('[data-testid="shared-total"]').text()).toContain('65.00')
+  })
 
   it('says it is editing rather than adding', async () => {
     const { wrapper } = await mountEdit()

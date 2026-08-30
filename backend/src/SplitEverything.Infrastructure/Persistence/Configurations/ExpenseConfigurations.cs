@@ -84,6 +84,38 @@ public class ExpenseSplitConfiguration : IEntityTypeConfiguration<ExpenseSplit>
     }
 }
 
+public class ExpensePayerConfiguration : IEntityTypeConfiguration<ExpensePayer>
+{
+    public void Configure(EntityTypeBuilder<ExpensePayer> builder)
+    {
+        builder.ToTable("expense_payers");
+        builder.HasKey(p => p.Id);
+
+        builder.Property(p => p.Amount).HasPrecision(19, 4);
+        builder.Property(p => p.AmountInBaseCurrency).HasPrecision(19, 4);
+        builder.Property(p => p.VectorClockJson).HasColumnType("jsonb").IsRequired();
+        builder.Property(p => p.LastWriterDeviceId).HasMaxLength(64);
+
+        // One row per member per expense: a member who paid twice at the same till
+        // paid one amount as far as this is concerned.
+        builder.HasIndex(p => new { p.ExpenseId, p.MemberId }).IsUnique();
+        builder.HasIndex(p => p.MemberId);
+        builder.HasIndex(p => p.GroupId);
+
+        builder.HasOne(p => p.Expense)
+            .WithMany(e => e.Payers)
+            .HasForeignKey(p => p.ExpenseId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(p => p.Member)
+            .WithMany()
+            .HasForeignKey(p => p.MemberId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Ignore(p => p.Clock);
+    }
+}
+
 public class ExpenseItemConfiguration : IEntityTypeConfiguration<ExpenseItem>
 {
     public void Configure(EntityTypeBuilder<ExpenseItem> builder)

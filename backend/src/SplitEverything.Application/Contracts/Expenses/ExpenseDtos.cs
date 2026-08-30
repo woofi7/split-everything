@@ -4,6 +4,17 @@ namespace SplitEverything.Application.Contracts.Expenses;
 
 public sealed record SplitInputDto(Guid MemberId, decimal? Value);
 
+/// <summary>
+/// One person's contribution to what an expense cost.
+///
+/// Not the same question as a split: this is what came out of whose pocket, and it
+/// only needs saying when more than one pocket was involved.
+/// </summary>
+public sealed record PayerInputDto(Guid MemberId, decimal Amount);
+
+public sealed record ExpensePayerDto(
+    Guid MemberId, string MemberName, decimal Amount, decimal AmountInBaseCurrency);
+
 public sealed record ExpenseItemShareDto(Guid MemberId);
 
 public sealed record ExpenseItemDto(
@@ -24,7 +35,10 @@ public sealed record CreateExpenseRequest(
     // Client-generated id, so an offline create is idempotent on replay.
 Guid? ClientId,
     string? ImportFingerprint,
-    Guid? ImportBatchId);
+    Guid? ImportBatchId,
+    // Left out for the ordinary expense one person paid for, where PaidByMemberId
+    // says it all. When given, the amounts must add up to Amount.
+    IReadOnlyList<PayerInputDto>? Payers = null);
 
 public sealed record UpdateExpenseRequest(
     Guid? PaidByMemberId,
@@ -38,7 +52,10 @@ public sealed record UpdateExpenseRequest(
     Guid? ReceiptId,
     string? Notes,
     // Clock the client based the edit on; concurrent edits are flagged, never overwritten.
-IReadOnlyDictionary<string, long>? BaseVectorClock);
+IReadOnlyDictionary<string, long>? BaseVectorClock,
+    // Several people paying for one thing. Left out, whoever is on the expense
+    // already stays there.
+    IReadOnlyList<PayerInputDto>? Payers = null);
 
 public sealed record ExpenseSplitDto(Guid MemberId, string MemberName, decimal Amount, decimal AmountInBaseCurrency, decimal? InputValue);
 
@@ -61,6 +78,8 @@ public sealed record ExpenseDto(
     Guid? OriginGroupId,
     IReadOnlyList<ExpenseSplitDto> Splits,
     IReadOnlyList<ExpenseItemDto> Items,
+    // Always at least one, and they sum to Amount.
+    IReadOnlyList<ExpensePayerDto> Payers,
     int CommentCount,
     IReadOnlyDictionary<string, long> VectorClock,
     long ServerSeq,

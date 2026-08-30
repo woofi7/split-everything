@@ -73,9 +73,22 @@ export interface LocalItem {
   memberIds: string[]
 }
 
+/**
+ * One person's contribution to what an expense cost.
+ *
+ * Not a split: this is whose pocket it came out of, and it only needs more than one
+ * entry when more than one pocket was involved.
+ */
+export interface LocalPayer {
+  memberId: string
+  amount: number
+  amountInBaseCurrency: number
+}
+
 export interface LocalExpense {
   id: string
   groupId: string
+  /** The largest payer, which is the name the lists show. */
   paidByMemberId: string
   description: string
   amount: number
@@ -86,6 +99,13 @@ export interface LocalExpense {
   splitType: SplitType
   receiptId?: string | null
   notes?: string | null
+  /**
+   * Who put money in. Always at least one, and they sum to the amount.
+   *
+   * Optional on the type only for rows written by an older build of the app, which
+   * had no such field: everything that reads it falls back to the single payer.
+   */
+  payers?: LocalPayer[]
   splits: LocalSplit[]
   items: LocalItem[]
   revision: number
@@ -221,6 +241,30 @@ export class SplitEverythingDb extends Dexie {
     this.version(3).stores({
       activity: 'id, groupId, occurredAt, [groupId+occurredAt]',
     })
+
+    // Who paid, which can now be several people. No index and no new table: payers
+    // live inside the expense they belong to, so this version exists to fill the
+    // field in for rows already on the device rather than to change the schema.
+    // Without it, every expense saved before this build would read as having no
+    // payer at all and drop out of the balances.
+    this.version(4)
+      .stores({})
+      .upgrade((transaction) =>
+        transaction
+          .table<LocalExpense>('expenses')
+          .toCollection()
+          .modify((expense) => {
+            if (expense.payers && expense.payers.length > 0) return
+
+            expense.payers = [
+              {
+                memberId: expense.paidByMemberId,
+                amount: expense.amount,
+                amountInBaseCurrency: expense.amountInBaseCurrency,
+              },
+            ]
+          }),
+      )
   }
 }
 

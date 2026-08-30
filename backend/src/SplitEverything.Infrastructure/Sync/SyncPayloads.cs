@@ -64,6 +64,19 @@ public static class SyncPayloads
         public string? Notes { get; set; }
         public List<SplitPayload> Splits { get; set; } = [];
         public List<ItemPayload> Items { get; set; } = [];
+
+        /// <summary>
+        /// Who put money in. Empty from a client that predates several payers, which
+        /// means the one named in PaidByMemberId paid for the lot.
+        /// </summary>
+        public List<PayerPayload> Payers { get; set; } = [];
+    }
+
+    public sealed class PayerPayload
+    {
+        public Guid MemberId { get; set; }
+        public decimal Amount { get; set; }
+        public decimal? AmountInBaseCurrency { get; set; }
     }
 
     public sealed class SettlementPayload

@@ -100,6 +100,121 @@ describe('expenses store', () => {
     expect(expense.pending).toBe(true)
   })
 
+  describe('an expense several people paid for', () => {
+    /** Alice put in 40, Bob put in 25: 65 in all, split evenly between them. */
+    const shared = {
+      ...draft,
+      amount: 65,
+      payers: [
+        { memberId: alice, amount: 40 },
+        { memberId: bob, amount: 25 },
+      ],
+    }
+
+    it('keeps what each of them put in', async () => {
+      const store = storeWith(false)
+
+      const expense = await store.add(shared)
+
+      expect(expense.payers).toEqual([
+        { memberId: alice, amount: 40, amountInBaseCurrency: 40 },
+        { memberId: bob, amount: 25, amountInBaseCurrency: 25 },
+      ])
+      expect(expense.amount).toBe(65)
+    })
+
+    it('names the expense for the larger contribution', async () => {
+      const store = storeWith(false)
+
+      // Bob paid more here, so it is Bob's name on the card even though the draft
+      // arrived with Alice as the nominal payer.
+      const expense = await store.add({
+        ...shared,
+        payers: [
+          { memberId: alice, amount: 25 },
+          { memberId: bob, amount: 40 },
+        ],
+      })
+
+      expect(expense.paidByMemberId).toBe(bob)
+    })
+
+    it('leaves nobody owing the wrong amount', async () => {
+      const store = storeWith(false)
+      await store.add(shared)
+
+      const balances = store.balanceFor(groupId)
+
+      // 40 in and 32.50 owed is 7.50 up; the other way round is 7.50 down. Crediting
+      // one payer with the whole 65 would say 32.50.
+      expect(balances.find((balance) => balance.memberId === alice)?.net).toBe(7.5)
+      expect(balances.find((balance) => balance.memberId === bob)?.net).toBe(-7.5)
+    })
+
+    it('sends who paid to the server', async () => {
+      const store = storeWith(false)
+      await store.add(shared)
+
+      const queued = (await db.outbox.toArray())[0]
+      const payload = JSON.parse(queued.payloadJson) as {
+        payers: Array<{ memberId: string; amount: number }>
+      }
+
+      expect(payload.payers).toEqual([
+        { memberId: alice, amount: 40, amountInBaseCurrency: 40 },
+        { memberId: bob, amount: 25, amountInBaseCurrency: 25 },
+      ])
+    })
+
+    it('refuses contributions that do not add up to the expense', async () => {
+      const store = storeWith(false)
+
+      // Both numbers came off the same screen: a disagreement means one of them is
+      // not what was typed, and picking a winner is how a total goes wrong quietly.
+      await expect(
+        store.add({ ...shared, amount: 70 }),
+      ).rejects.toThrow(/add up/)
+    })
+
+    it('refuses somebody who is not in the group', async () => {
+      const store = storeWith(false)
+
+      await expect(
+        store.add({
+          ...shared,
+          payers: [
+            { memberId: alice, amount: 40 },
+            { memberId: 'stranger', amount: 25 },
+          ],
+        }),
+      ).rejects.toThrow(/member of this group/)
+    })
+
+    it('keeps the proportions when only the amount is edited', async () => {
+      const store = storeWith(false)
+      const expense = await store.add(shared)
+
+      // Nothing was said about who paid, so the split of the payment stays as it
+      // was, scaled to the new total: 40/25 of 65 becomes 80/50 of 130.
+      const edited = await store.edit(expense.id, { amount: 130 })
+
+      expect(edited.payers).toEqual([
+        { memberId: alice, amount: 80, amountInBaseCurrency: 80 },
+        { memberId: bob, amount: 50, amountInBaseCurrency: 50 },
+      ])
+    })
+
+    it('goes back to one payer when the edit names one', async () => {
+      const store = storeWith(false)
+      const expense = await store.add(shared)
+
+      const edited = await store.edit(expense.id, { paidByMemberId: bob })
+
+      expect(edited.payers).toEqual([{ memberId: bob, amount: 65, amountInBaseCurrency: 65 }])
+      expect(edited.paidByMemberId).toBe(bob)
+    })
+  })
+
   it('computes the splits locally', async () => {
     const store = storeWith(false)
 

@@ -7,7 +7,13 @@ public class Expense : SyncableEntity
     public Guid GroupId { get; set; }
     public Group? Group { get; set; }
 
-    /// <summary>Group member who fronted the money.</summary>
+    /// <summary>
+    /// The member who fronted the money, or the largest of them when several did.
+    ///
+    /// Kept beside <see cref="Payers"/> rather than derived on every read: it is what
+    /// the lists, the filters and an index of four hundred expenses sort and search
+    /// by. Payers is the money; this is the name on the card.
+    /// </summary>
     public Guid PaidByMemberId { get; set; }
     public GroupMember? PaidByMember { get; set; }
 
@@ -54,6 +60,11 @@ public class Expense : SyncableEntity
     /// <summary>Set when a statement or CSV import created this row, for dedupe and traceability.</summary>
     public string? ImportFingerprint { get; set; }
     public Guid? ImportBatchId { get; set; }
+
+    /// <summary>
+    /// Who put in what. Always at least one, and they sum to <see cref="Amount"/>.
+    /// </summary>
+    public ICollection<ExpensePayer> Payers { get; set; } = new List<ExpensePayer>();
 
     public ICollection<ExpenseSplit> Splits { get; set; } = new List<ExpenseSplit>();
     public ICollection<ExpenseItem> Items { get; set; } = new List<ExpenseItem>();

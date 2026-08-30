@@ -439,6 +439,7 @@ public sealed class GroupService(
         // target, in which case the two become one rather than colliding on the
         // unique index they share.
         var expenses = await db.Expenses
+            .Include(e => e.Payers)
             .Include(e => e.Splits)
             .Include(e => e.Items).ThenInclude(i => i.Shares)
             .Where(e => e.GroupId == groupId && (
@@ -703,8 +704,8 @@ public sealed class GroupService(
             .Where(e => e.GroupId == groupId && !e.IsDeleted)
             .Select(e => new
             {
-                e.PaidByMemberId,
-                e.AmountInBaseCurrency,
+                Payers = e.Payers.Where(y => !y.IsDeleted)
+                    .Select(y => new { y.MemberId, y.AmountInBaseCurrency }).ToList(),
                 Splits = e.Splits.Where(s => !s.IsDeleted)
                     .Select(s => new { s.MemberId, s.AmountInBaseCurrency })
                     .ToList()
@@ -717,7 +718,7 @@ public sealed class GroupService(
             .ToListAsync(ct);
 
         var balanceExpenses = expenses.Select(e => new BalanceExpense(
-            e.PaidByMemberId, e.AmountInBaseCurrency,
+            e.Payers.Select(p => (p.MemberId, p.AmountInBaseCurrency)).ToList(),
             e.Splits.Select(s => (s.MemberId, s.AmountInBaseCurrency)).ToList())).ToList();
 
         return BalanceCalculator

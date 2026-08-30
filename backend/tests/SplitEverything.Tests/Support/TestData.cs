@@ -46,19 +46,61 @@ public static class TestData
     public static Expense Expense(
         Guid groupId, Guid payerMemberId, decimal amount,
         string description = "Dinner", string currency = "CAD",
-        DateTimeOffset? spentAt = null) => new()
+        DateTimeOffset? spentAt = null)
     {
-        GroupId = groupId,
-        PaidByMemberId = payerMemberId,
-        Description = description,
-        Amount = amount,
-        Currency = currency,
-        AmountInBaseCurrency = amount,
-        ExchangeRate = 1m,
-        SpentAt = spentAt ?? Jan1,
-        SplitType = SplitType.Equal,
-        Clock = VectorClock.Empty.Tick(DeviceA)
-    };
+        var expense = new Expense
+        {
+            GroupId = groupId,
+            PaidByMemberId = payerMemberId,
+            Description = description,
+            Amount = amount,
+            Currency = currency,
+            AmountInBaseCurrency = amount,
+            ExchangeRate = 1m,
+            SpentAt = spentAt ?? Jan1,
+            SplitType = SplitType.Equal,
+            Clock = VectorClock.Empty.Tick(DeviceA)
+        };
+
+        // Every expense has at least one payer row, and the balances are computed
+        // from those rows: a fixture without one is an expense nobody paid for.
+        expense.Payers.Add(new ExpensePayer
+        {
+            GroupId = groupId,
+            MemberId = payerMemberId,
+            Amount = amount,
+            AmountInBaseCurrency = amount,
+            Clock = VectorClock.Empty.Tick(DeviceA)
+        });
+
+        return expense;
+    }
+
+    /// <summary>An expense several people paid for at once.</summary>
+    public static Expense SharedExpense(
+        Guid groupId, (Guid MemberId, decimal Amount)[] payers,
+        string description = "Dinner", string currency = "CAD",
+        DateTimeOffset? spentAt = null)
+    {
+        var total = payers.Sum(y => y.Amount);
+        var main = payers.OrderByDescending(y => y.Amount).ThenBy(y => y.MemberId).First().MemberId;
+        var expense = Expense(groupId, main, total, description, currency, spentAt);
+
+        expense.Payers.Clear();
+        foreach (var (memberId, amount) in payers)
+        {
+            expense.Payers.Add(new ExpensePayer
+            {
+                GroupId = groupId,
+                MemberId = memberId,
+                Amount = amount,
+                AmountInBaseCurrency = amount,
+                Clock = VectorClock.Empty.Tick(DeviceA)
+            });
+        }
+
+        return expense;
+    }
 
     public static ExpenseSplit Split(Guid expenseId, Guid groupId, Guid memberId, decimal amount) => new()
     {
