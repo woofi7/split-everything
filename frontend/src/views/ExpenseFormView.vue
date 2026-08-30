@@ -6,7 +6,7 @@ import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
-import { calculateSplit, type SplitType } from '@/domain/splitting'
+import { calculateSplit, splitValuesFor, type SplitType } from '@/domain/splitting'
 import { parseAmountInput } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
 
@@ -202,6 +202,26 @@ function chipStyle(memberId: string) {
   }
 }
 
+/**
+ * Switches split type, carrying the division already on screen.
+ *
+ * The values mean something different under each type, so they used to be left as
+ * they were: switching from equal to percentage emptied every box and the split
+ * was invalid until all of them were typed again. Switching type is usually the
+ * start of an adjustment, so the new numbers describe the same division, and the
+ * person changes the one they wanted to change.
+ *
+ * Read from the preview rather than recomputed, so what carries over is exactly
+ * what was on screen, including who had the leftover cent.
+ */
+function changeSplitType(next: SplitType): void {
+  if (next === splitType.value) return
+
+  const current = preview.value
+  splitType.value = next
+  splitValues.value = splitValuesFor(next, current, amount.value)
+}
+
 function toggleParticipant(memberId: string): void {
   const index = participantIds.value.indexOf(memberId)
   if (index >= 0) participantIds.value.splice(index, 1)
@@ -352,7 +372,7 @@ async function save(): Promise<void> {
             type="button"
             class="btn btn-press min-h-0 flex-1 px-1 py-1.5 text-xs"
             :class="splitType === option.value ? 'btn-primary' : 'btn-secondary'"
-            @click="splitType = option.value"
+            @click="changeSplitType(option.value)"
           >
             {{ option.label }}
           </button>
@@ -396,13 +416,18 @@ async function save(): Promise<void> {
               type="number"
               inputmode="decimal"
               step="0.01"
-              class="w-16 rounded border bg-[var(--surface)] px-1 py-0.5 text-right text-xs tabular-nums"
+              class="w-14 rounded border bg-[var(--surface)] px-1 py-0.5 text-right text-xs tabular-nums"
               style="border-color: var(--border)"
               :aria-label="`${splitType} for ${member.displayName}`"
             />
 
+            <!--
+              Shown alongside the input, not instead of it. A percentage on its own
+              does not say what anyone owes, and that is the number people check
+              before saving.
+            -->
             <MoneyAmount
-              v-else-if="shareOf(member.id) !== null"
+              v-if="shareOf(member.id) !== null"
               :amount="shareOf(member.id)!"
               :currency="currency"
               size="sm"

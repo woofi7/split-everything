@@ -527,3 +527,120 @@ describe('ExpenseFormView fits one screen', () => {
     for (const label of labels) expect(label.length).toBeLessThanOrEqual(7)
   })
 })
+
+describe('ExpenseFormView switching split type', () => {
+  beforeEach(() => {
+    routeParams = {}
+    push.mockClear()
+    replace.mockClear()
+  })
+
+  async function withAmount(value: string) {
+    const mounted = await mountView()
+    await mounted.wrapper.find('input[inputmode="decimal"]').setValue(value)
+    await settle()
+    return mounted
+  }
+
+  const pick = async (wrapper: { findAll: (s: string) => any[] }, label: string) => {
+    const button = wrapper.findAll('button[type="button"]').find((b: any) => b.text() === label)
+    await button!.trigger('click')
+  }
+
+  const shareInputs = (wrapper: { findAll: (s: string) => any[] }) =>
+    wrapper.findAll('input[type="number"]').map((input: any) => (input.element as HTMLInputElement).value)
+
+  it('fills the percentages from an equal split', async () => {
+    const { wrapper } = await withAmount('60')
+
+    await pick(wrapper, 'Percent')
+    await settle()
+
+    // Empty boxes meant the split was invalid the moment the type changed.
+    expect(shareInputs(wrapper)).toEqual(['50', '50'])
+  })
+
+  it('fills the exact amounts from an equal split', async () => {
+    const { wrapper } = await withAmount('60')
+
+    await pick(wrapper, 'Exact')
+    await settle()
+
+    expect(shareInputs(wrapper)).toEqual(['30', '30'])
+  })
+
+  it('keeps an uneven division across a change of type', async () => {
+    const { wrapper } = await withAmount('60')
+
+    await pick(wrapper, 'Percent')
+    await settle()
+
+    const inputs = wrapper.findAll('input[type="number"]')
+    await inputs[0].setValue(70)
+    await inputs[1].setValue(30)
+    await settle()
+
+    await pick(wrapper, 'Exact')
+    await settle()
+
+    // Seventy percent of sixty is forty two: the same division, said differently.
+    expect(shareInputs(wrapper)).toEqual(['42', '18'])
+  })
+
+  it('leaves the split valid straight after switching', async () => {
+    const { wrapper } = await withAmount('60')
+
+    await pick(wrapper, 'Percent')
+    await settle()
+
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('shows what each person owes as well as the percentage', async () => {
+    const { wrapper } = await withAmount('60')
+
+    await pick(wrapper, 'Percent')
+    await settle()
+
+    // A percentage on its own does not say what anyone owes, and that is the
+    // number people check before saving.
+    expect(shareInputs(wrapper)).toEqual(['50', '50'])
+    expect(wrapper.text()).toContain('30.00')
+  })
+
+  it('clears the values when going back to equal', async () => {
+    const { wrapper } = await withAmount('60')
+
+    await pick(wrapper, 'Exact')
+    await settle()
+    await pick(wrapper, 'Equally')
+    await settle()
+
+    // Equal needs no values, and stale ones would reappear on the next switch.
+    expect(wrapper.findAll('input[type="number"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('30.00')
+  })
+
+  it('does not fall over with no amount typed yet', async () => {
+    const { wrapper } = await mountView()
+
+    await pick(wrapper, 'Percent')
+    await settle()
+
+    expect(shareInputs(wrapper)).toEqual(['', ''])
+  })
+
+  it('saves what the carried values describe', async () => {
+    const { wrapper, expenses } = await withAmount('60')
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Dinner')
+    await pick(wrapper, 'Percent')
+    await settle()
+    await wrapper.find('form').trigger('submit')
+    await waitFor(() => expenses.forGroup(groupId).length > 0)
+
+    const saved = expenses.forGroup(groupId)[0]
+    expect(saved.splitType).toBe('Percentage')
+    expect(saved.splits.map((split) => split.amount)).toEqual([30, 30])
+  })
+})

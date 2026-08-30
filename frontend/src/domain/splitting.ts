@@ -243,3 +243,46 @@ function reconcile(total: number, currency: string, shares: SplitShare[]): Split
 
   return rounded
 }
+
+/**
+ * The values that describe an existing division under a different split type.
+ *
+ * Switching type is usually the start of an adjustment, not a reset. Emptying the
+ * form meant the split was invalid until every box had been typed again, and the
+ * division someone had already agreed was gone.
+ *
+ * Percentages are reconciled to exactly 100, because rounding each one to two
+ * places can leave three equal parts at 99.99, which the calculator refuses.
+ * Shares are seeded with the amounts themselves: they are a ratio, and the amounts
+ * are the one ratio guaranteed to reproduce the same division exactly.
+ */
+export function splitValuesFor(
+  target: SplitType,
+  shares: readonly { memberId: string; amount: number }[],
+  total: number,
+): Record<string, number> {
+  if (target === 'Equal' || target === 'Itemized') return {}
+  if (shares.length === 0 || total <= 0) return {}
+
+  if (target === 'ExactAmount' || target === 'Shares') {
+    return Object.fromEntries(shares.map((share) => [share.memberId, share.amount]))
+  }
+
+  const percentages = shares.map((share) => ({
+    memberId: share.memberId,
+    value: Math.round((share.amount / total) * 10000) / 100,
+  }))
+
+  // The largest share absorbs the rounding, as it does everywhere else here.
+  const residue = Math.round((100 - percentages.reduce((sum, p) => sum + p.value, 0)) * 100) / 100
+
+  if (residue !== 0) {
+    const largest = percentages.reduce(
+      (best, candidate) => (candidate.value > best.value ? candidate : best),
+      percentages[0],
+    )
+    largest.value = Math.round((largest.value + residue) * 100) / 100
+  }
+
+  return Object.fromEntries(percentages.map((p) => [p.memberId, p.value]))
+}
