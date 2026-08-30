@@ -10,6 +10,12 @@ import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
+import {
+  fillBuckets,
+  formatBucket,
+  formatBucketRange,
+  type Granularity,
+} from '@/domain/buckets'
 
 interface SpendPointMember {
   memberId: string
@@ -49,7 +55,7 @@ const expenses = useExpensesStore()
 const dashboard = ref<Dashboard | null>(null)
 /** Starts on the main group, which is what the rest of the app is showing. */
 const groupId = ref<string>('')
-const granularity = ref<'day' | 'week' | 'month'>('month')
+const granularity = ref<Granularity>('month')
 const isLoading = ref(true)
 const isOffline = ref(false)
 
@@ -99,6 +105,22 @@ async function load(): Promise<void> {
 }
 
 /**
+ * The buckets the chart draws.
+ *
+ * Every one between the first and the last, including the ones nothing happened
+ * in, because otherwise the axis is not time: two bars side by side could be a day
+ * apart or a month, and a quiet fortnight looks like a busy one.
+ */
+const points = computed(() =>
+  fillBuckets(dashboard.value?.spendOverTime ?? [], granularity.value, (bucket) => ({
+    bucket,
+    amount: 0,
+    expenseCount: 0,
+    byMember: [],
+  })),
+)
+
+/**
  * Everyone who paid anything in the window, in a stable order, for the key under
  * the chart. Taken across buckets rather than per bucket so the key does not
  * change as you switch granularity.
@@ -106,7 +128,7 @@ async function load(): Promise<void> {
 const chartPeople = computed(() => {
   const seen = new Map<string, SpendPointMember>()
 
-  for (const point of dashboard.value?.spendOverTime ?? []) {
+  for (const point of points.value) {
     for (const member of point.byMember ?? []) {
       if (!seen.has(member.memberId)) seen.set(member.memberId, member)
     }
@@ -144,17 +166,23 @@ function bucketTitle(point: SpendPoint): string {
   )
 
   const total = formatMoney(point.amount, dashboard.value?.currency ?? 'CAD')
-  return parts.length > 0
-    ? `${bucketLabel(point.bucket)}: ${total} (${parts.join(', ')})`
-    : `${bucketLabel(point.bucket)}: ${total}`
+  const when = bucketRange(point.bucket)
+
+  return parts.length > 0 ? `${when}: ${total} (${parts.join(', ')})` : `${when}: ${total}`
 }
 
-/** A stack of coloured blocks says nothing to a screen reader without this. */
+/**
+ * A stack of coloured blocks says nothing to a screen reader without this.
+ *
+ * Only the buckets something happened in: reading out a hundred empty days is
+ * worse than not reading the chart at all, and every bar is named in its own right
+ * for anyone going through them one by one.
+ */
 const chartDescription = computed(() => {
-  const points = dashboard.value?.spendOverTime ?? []
-  if (points.length === 0) return 'Spending over time'
+  const busy = points.value.filter((point) => point.amount > 0)
+  if (busy.length === 0) return 'Spending over time'
 
-  return `Spending over time, by who paid: ${points.map(bucketTitle).join('; ')}`
+  return `Spending over time, by who paid: ${busy.map(bucketTitle).join('; ')}`
 })
 
 /**
@@ -175,8 +203,7 @@ const pinnedBucket = ref<string | null>(null)
 const selectedBucket = computed(() => hoveredBucket.value ?? pinnedBucket.value)
 
 const selected = computed(
-  () =>
-    dashboard.value?.spendOverTime.find((point) => point.bucket === selectedBucket.value) ?? null,
+  () => points.value.find((point) => point.bucket === selectedBucket.value) ?? null,
 )
 
 function look(bucket: string): void {
@@ -213,27 +240,25 @@ function shareIn(point: SpendPoint, memberId: string): string {
 }
 
 /** Scaled against the largest bucket, so the bars are readable at any spend level. */
-const peak = computed(() =>
-  Math.max(1, ...(dashboard.value?.spendOverTime.map((point) => point.amount) ?? [1])),
-)
+const peak = computed(() => Math.max(1, ...points.value.map((point) => point.amount)))
 
 /**
- * A bucket, as a date on a calendar.
+ * How much air between the bars.
  *
- * Built from its parts rather than parsed as an instant. Read as midnight UTC and
- * then rendered anywhere west of it, the first of a month becomes the last of the
- * month before: a chart of January was labelled Dec 25 in Montreal, and every
- * label on a monthly chart was a month out.
+ * A daily chart of a quarter is a hundred bars, and 4px of gap between each of
+ * them is more gap than chart. Sparse charts keep the gap they had.
  */
-const bucketLabel = (bucket: string): string => {
-  const [year, month, day] = bucket.split('T')[0].split('-').map(Number)
+const chartGap = computed(() => {
+  if (points.value.length > 40) return 'gap-px'
+  if (points.value.length > 20) return 'gap-0.5'
+  return 'gap-1'
+})
 
-  return new Date(year, (month ?? 1) - 1, day ?? 1).toLocaleDateString(undefined, {
-    month: 'short',
-    year: granularity.value === 'month' ? '2-digit' : undefined,
-    day: granularity.value === 'month' ? undefined : 'numeric',
-  })
-}
+/** What goes under a bar: a date, or the name of a month on its own. */
+const bucketLabel = (bucket: string) => formatBucket(bucket, granularity.value)
+
+/** What the bar covers, for whoever asks: a week is a stretch, not a date. */
+const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.value)
 </script>
 
 <template>
@@ -300,7 +325,7 @@ const bucketLabel = (bucket: string): string => {
         </div>
       </section>
 
-      <section v-if="dashboard.spendOverTime.length > 0" class="surface-card mb-4 p-4">
+      <section v-if="points.length > 0" class="surface-card mb-4 p-4">
         <!--
           The bar being asked about is answered here, where the eye already is for
           the heading, and along the key underneath. Nothing when nothing is asked:
@@ -316,7 +341,7 @@ const bucketLabel = (bucket: string): string => {
             data-testid="bar-readout"
             class="flex shrink-0 items-baseline gap-2 text-sm"
           >
-            <span class="text-[var(--text-muted)]">{{ bucketLabel(selected.bucket) }}</span>
+            <span class="text-[var(--text-muted)]">{{ bucketRange(selected.bucket) }}</span>
             <span class="font-semibold tabular-nums">
               {{ formatMoney(selected.amount, dashboard.currency) }}
             </span>
@@ -324,13 +349,14 @@ const bucketLabel = (bucket: string): string => {
         </div>
 
         <ul
-          class="flex h-32 items-end gap-1"
+          class="flex h-32 items-end"
+          :class="chartGap"
           data-testid="spend-chart"
           role="group"
           :aria-label="chartDescription"
         >
           <li
-            v-for="point in dashboard.spendOverTime"
+            v-for="point in points"
             :key="point.bucket"
             class="flex h-full flex-1 items-end"
           >
@@ -353,11 +379,24 @@ const bucketLabel = (bucket: string): string => {
               @click="pin(point.bucket)"
             >
               <!--
+                A day with nothing in it is a line on the floor, not a small bar:
+                a floor height in some colour would read as a small expense, and
+                the whole point of drawing these is that they are empty.
+              -->
+              <span
+                v-if="point.amount <= 0"
+                data-testid="bar-empty"
+                class="block h-0.5 w-full rounded-full"
+                style="background: var(--border)"
+              />
+
+              <!--
                 Stacked by whoever paid, in that person's colour. The total alone
                 says how much a month cost; the split also says who carried it,
                 which is the thing a shared account argues about.
               -->
               <span
+                v-else
                 data-testid="bar-fill"
                 class="flex w-full flex-col-reverse overflow-hidden rounded-t"
                 :style="{ height: `${Math.max(4, (point.amount / peak) * 100)}%` }"
@@ -382,10 +421,8 @@ const bucketLabel = (bucket: string): string => {
           data-testid="chart-dates"
           class="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]"
         >
-          <span>{{ bucketLabel(dashboard.spendOverTime[0].bucket) }}</span>
-          <span>
-            {{ bucketLabel(dashboard.spendOverTime[dashboard.spendOverTime.length - 1].bucket) }}
-          </span>
+          <span>{{ bucketLabel(points[0].bucket) }}</span>
+          <span>{{ bucketLabel(points[points.length - 1].bucket) }}</span>
         </div>
 
         <ul

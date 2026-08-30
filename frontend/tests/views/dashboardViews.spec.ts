@@ -429,6 +429,131 @@ describe('StatsView', () => {
     })
   })
 
+  /**
+   * The chart's axis is time, not a list of the days something happened on.
+   *
+   * Two bars side by side could otherwise be a day apart or a month, and a quiet
+   * fortnight would look exactly like a busy one.
+   */
+  describe('the shape of the axis', () => {
+    const daily = (overrides: Record<string, unknown> = {}) =>
+      fakeApi({
+        '/stats': () => dashboard({
+          spendOverTime: [
+            {
+              bucket: '2026-01-01',
+              amount: 100,
+              expenseCount: 1,
+              byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+            },
+            {
+              bucket: '2026-01-04',
+              amount: 50,
+              expenseCount: 1,
+              byMember: [{ memberId: 'm2', memberName: 'Bob', amount: 50 }],
+            },
+          ],
+          ...overrides,
+        }),
+        '/groups': () => [testGroup()],
+      })
+
+    const atGranularity = async (value: string, api = daily()) => {
+      const mounted = await mountView(StatsView, { api })
+      await mounted.wrapper.findAll('select')[1].setValue(value)
+      await settle()
+      return mounted.wrapper
+    }
+
+    it('shows the days nothing was spent on', async () => {
+      const wrapper = await atGranularity('day')
+
+      // The second and the third of January had nothing, and they are still days.
+      expect(wrapper.findAll('[data-testid="bar"]')).toHaveLength(4)
+      expect(wrapper.findAll('[data-testid="bar-empty"]')).toHaveLength(2)
+      expect(wrapper.findAll('[data-testid="bar-fill"]')).toHaveLength(2)
+    })
+
+    it('draws an empty day as a line on the floor, not a small bar', async () => {
+      const wrapper = await atGranularity('day')
+
+      // A floor height in somebody's colour would read as a small expense.
+      const empty = wrapper.find('[data-testid="bar-empty"]')
+      expect(empty.classes()).toContain('h-0.5')
+      expect(empty.findAll('[data-testid="bar-segment"]')).toHaveLength(0)
+    })
+
+    it('answers an empty day with nothing spent', async () => {
+      const wrapper = await atGranularity('day')
+
+      await wrapper.findAll('[data-testid="bar"]')[1].trigger('mouseenter')
+
+      const readout = wrapper.find('[data-testid="bar-readout"]').text()
+      expect(readout).toMatch(/2 Jan|Jan 2/)
+      expect(readout).toContain('0.00')
+    })
+
+    it('gives the bars less air the more of them there are', async () => {
+      const roomy = await mountView(StatsView, { api: daily() })
+      expect(roomy.wrapper.find('[data-testid="spend-chart"]').classes()).toContain('gap-1')
+
+      // A daily chart of a quarter is a hundred bars, and 4px between each of them
+      // is more gap than chart.
+      const busy = await atGranularity('day', fakeApi({
+        '/stats': () => dashboard({
+          spendOverTime: [
+            {
+              bucket: '2026-01-01',
+              amount: 100,
+              expenseCount: 1,
+              byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+            },
+            {
+              bucket: '2026-03-01',
+              amount: 50,
+              expenseCount: 1,
+              byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 50 }],
+            },
+          ],
+        }),
+        '/groups': () => [testGroup()],
+      }))
+      expect(busy.find('[data-testid="spend-chart"]').classes()).toContain('gap-px')
+    })
+
+    it('says what a week covers when one is asked about', async () => {
+      const wrapper = await atGranularity('week', fakeApi({
+        '/stats': () => dashboard({
+          spendOverTime: [
+            {
+              bucket: '2026-05-11',
+              amount: 100,
+              expenseCount: 1,
+              byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+            },
+          ],
+        }),
+        '/groups': () => [testGroup()],
+      }))
+
+      await wrapper.findAll('[data-testid="bar"]')[0].trigger('mouseenter')
+
+      // A bar labelled by its Monday says nothing about where it ends.
+      const readout = wrapper.find('[data-testid="bar-readout"]').text()
+      expect(readout).toMatch(/11/)
+      expect(readout).toMatch(/17/)
+      expect(readout).toContain(' - ')
+    })
+
+    it('names a month and nothing else', async () => {
+      const wrapper = await atGranularity('month')
+
+      // Not "Jan 26": the year is the same for every bar beside it.
+      expect(wrapper.find('[data-testid="chart-dates"]').text()).toContain('January')
+      expect(wrapper.find('[data-testid="chart-dates"]').text()).not.toContain('26')
+    })
+  })
+
   it('labels a bucket by its own calendar date, not by an instant', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
