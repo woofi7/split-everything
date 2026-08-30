@@ -194,3 +194,49 @@ describe('the group screen expense rows', () => {
     expect(textOf(wrapper)).toContain('Alice paid')
   })
 })
+
+describe('the group screen expense card colour', () => {
+  it('tints each card with the colour of whoever paid', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: api(),
+      expenses: [
+        testExpense({ id: 'e1', paidByMemberId: ALICE }),
+        testExpense({ id: 'e2', paidByMemberId: BOB }),
+      ],
+    })
+    await settle()
+
+    const cards = wrapper.findAll('[data-testid="expense-card"]')
+    expect(cards).toHaveLength(2)
+
+    const backgrounds = cards.map((card) => card.attributes('style'))
+    expect(backgrounds[0]).toContain('background')
+    // Two payers, two colours: the point is telling them apart at a glance.
+    expect(backgrounds[0]).not.toBe(backgrounds[1])
+  })
+
+  it('mixes the colour with the surface rather than using it raw', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: api(),
+      expenses: [testExpense({ paidByMemberId: ALICE })],
+    })
+    await settle()
+
+    const style = wrapper.find('[data-testid="expense-card"]').attributes('style') ?? ''
+
+    // A full-strength colour behind the text would be unreadable in either theme,
+    // and mixing with the surface token keeps it right in both.
+    expect(style).toContain('color-mix')
+    expect(style).toContain('--surface-raised')
+  })
+
+  it('keeps naming who paid, since a colour alone is not a name', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: api(),
+      expenses: [testExpense({ paidByMemberId: ALICE })],
+    })
+    await settle()
+
+    expect(textOf(wrapper)).toContain('Alice paid')
+  })
+})

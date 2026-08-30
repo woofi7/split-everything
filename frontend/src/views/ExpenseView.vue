@@ -45,6 +45,17 @@ const colours = computed(() =>
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
+/** Mixed with the surface, so the text stays readable in either theme. */
+function cardStyle(memberId: string) {
+  const colour = colourOf(memberId)
+
+  return {
+    backgroundColor: `color-mix(in oklab, ${colour} 16%, var(--surface-raised))`,
+    borderColor: `color-mix(in oklab, ${colour} 35%, transparent)`,
+    borderLeftColor: colour,
+  }
+}
+
 async function removeComment(commentId: string): Promise<void> {
   error.value = null
 
@@ -88,7 +99,13 @@ async function remove(): Promise<void> {
     :back-label="group?.name ?? 'Group'"
   >
     <div v-if="expense" class="flex flex-col gap-5">
-      <section class="surface-card p-4">
+      <!-- The same colour the card had in the list, so opening one does not change
+           whose expense it appears to be. -->
+      <section
+        data-testid="expense-card"
+        class="rounded-xl border border-l-4 p-4"
+        :style="cardStyle(expense.paidByMemberId)"
+      >
         <div class="flex items-baseline justify-between gap-3">
           <MoneyAmount :amount="expense.amount" :currency="expense.currency" size="lg" />
           <span

@@ -124,6 +124,24 @@ const plan = computed(() => {
     : expenses.rawDebts(group.value.id)
 })
 
+/**
+ * The payer's colour, as the card itself.
+ *
+ * Mixed with the surface rather than used raw: a full-strength colour behind the
+ * text would be unreadable, and mixing with the token keeps it right in both
+ * themes without a second palette. The left edge takes the colour undiluted, which
+ * is what makes two adjacent cards by different people obvious at a glance.
+ */
+function cardStyle(memberId: string) {
+  const colour = colourOf(memberId)
+
+  return {
+    backgroundColor: `color-mix(in oklab, ${colour} 16%, var(--surface-raised))`,
+    borderColor: `color-mix(in oklab, ${colour} 35%, transparent)`,
+    borderLeftColor: colour,
+  }
+}
+
 const spentOn = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 </script>
@@ -268,7 +286,9 @@ const spentOn = (iso: string) =>
           <li v-for="expense in groupExpenses" :key="expense.id">
             <RouterLink
               :to="{ name: 'expense', params: { groupId: group.id, expenseId: expense.id } }"
-              class="surface-card tap-target flex items-center justify-between gap-3 p-3"
+              data-testid="expense-card"
+              class="tap-target flex items-center justify-between gap-3 rounded-xl border border-l-4 p-3"
+              :style="cardStyle(expense.paidByMemberId)"
             >
               <span class="min-w-0">
                 <span class="flex items-center gap-2">
@@ -281,15 +301,10 @@ const spentOn = (iso: string) =>
                     Waiting
                   </span>
                 </span>
-                <span class="flex items-center gap-1.5 truncate text-xs text-[var(--text-muted)]">
-                  <span
-                    class="h-2 w-2 shrink-0 rounded-full"
-                    :style="{ backgroundColor: colourOf(expense.paidByMemberId) }"
-                    aria-hidden="true"
-                  />
+                <span class="truncate text-xs text-[var(--text-muted)]">
                   {{ memberName(expense.paidByMemberId) }} paid
                   <span aria-hidden="true">-</span>
-                  <span class="shrink-0">{{ spentOn(expense.spentAt) }}</span>
+                  {{ spentOn(expense.spentAt) }}
                 </span>
               </span>
               <MoneyAmount :amount="expense.amount" :currency="expense.currency" size="sm" />
