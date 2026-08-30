@@ -151,7 +151,7 @@ describe('reconcile', () => {
 
   it('retries a change the server refused earlier', async () => {
     // Exactly the state a server-side fix leaves behind: parked, and nothing
-    // retries it, so the row reads as waiting forever.
+    // retries it, so the change never goes anywhere.
     const store = storeWith({ rejectAll: true })
     await store.add(draft)
     // The store's own counter, not the queue: the queue changes first and the
@@ -165,11 +165,14 @@ describe('reconcile', () => {
     store.attachSync(new SyncEngine(api, () => true))
 
     await store.reconcile()
-    await waitFor(
-      () => store.rejectedCount === 0 && store.forGroup(groupId)[0]?.pending === false,
-    )
+    // Waiting on the send itself: the status flips to pending first, and asserting
+    // then catches the queue before anything has drained it.
+    await waitFor(() => api.push.mock.calls.length > 0 && store.rejectedCount === 0)
 
-    expect(api.push).toHaveBeenCalled()
+    // The queue is the durable record, and it is what the retry sends. The row
+    // itself comes back with the next pull, as the server's version rather than
+    // as a local one nobody else has.
+    await waitFor(async () => (await db.outbox.count()) === 0)
     expect(await db.outbox.count()).toBe(0)
   })
 
