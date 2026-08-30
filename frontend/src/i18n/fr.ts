@@ -345,4 +345,26 @@ export const fr: Record<string, string> = {
   'Send now': 'Envoyer maintenant',
   Sending: 'Envoi',
   'Could not send those changes.': "Impossible d'envoyer ces modifications.",
+  // Notifications and installing
+  'Notifications on this device': 'Notifications sur cet appareil',
+  On: 'Activées',
+  Off: 'Désactivées',
+  Working: 'En cours',
+  'Told about a new expense, a settlement or a comment while the app is closed.':
+    "Être averti d'une nouvelle dépense, d'un règlement ou d'un commentaire même quand l'application est fermée.",
+  'Notifications need the app served over https. On a plain address like a local network one, the browser turns them off entirely.':
+    "Les notifications exigent que l'application soit servie en https. Sur une adresse ordinaire, comme celle d'un réseau local, le navigateur les désactive complètement.",
+  'This browser is blocking notifications for this site. Allow them in its site settings, then come back.':
+    'Ce navigateur bloque les notifications pour ce site. Autorisez-les dans ses paramètres de site, puis revenez.',
+  'This browser cannot do notifications.': 'Ce navigateur ne gère pas les notifications.',
+  'Notifications were not allowed.': "Les notifications n'ont pas été autorisées.",
+  'Could not change notifications.': 'Impossible de modifier les notifications.',
+  'Install on this device': 'Installer sur cet appareil',
+  Install: 'Installer',
+  'Opens without browser chrome, keeps its own icon, and works offline.':
+    "S'ouvre sans l'habillage du navigateur, garde sa propre icône et fonctionne hors ligne.",
+  'In Safari: Share, then Add to Home Screen. It then opens like an app, and notifications become possible.':
+    "Dans Safari : Partager, puis Sur l'écran d'accueil. L'application s'ouvre alors comme une application, et les notifications deviennent possibles.",
+  'Installing needs the app served over https. A plain address like a local network one cannot be installed.':
+    "L'installation exige que l'application soit servie en https. Une adresse ordinaire, comme celle d'un réseau local, ne peut pas être installée.",
 }

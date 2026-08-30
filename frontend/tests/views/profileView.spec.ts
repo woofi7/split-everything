@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import ProfileView from '@/views/ProfileView.vue'
+import { watchForInstallPrompt } from '@/native/install'
 import { fakeApi, mountView, settle, testUser, textOf } from '../support/viewHarness'
 
 const replace = vi.fn()
@@ -403,5 +404,164 @@ describe('ProfileView', () => {
 
     expect(targets).toContain('import')
     expect(targets).toContain('conflicts')
+  })
+
+
+  /**
+   * Notifications, and installing it like an application.
+   *
+   * The registration existed and nothing ever called it, so notifications were
+   * unreachable. Both of these need the app served over a secure origin, and what
+   * the screen says depends on why it cannot be offered: those have different
+   * answers.
+   */
+  describe('notifications', () => {
+    /**
+     * A browser that can do them: a secure origin, a service worker container and
+     * a Notification API. jsdom has none of the three, which is also exactly what
+     * a plain-HTTP address looks like, so the supported case is the one that has to
+     * be arranged.
+     */
+    const asSupported = (permission: NotificationPermission = 'default', subscribed = false) => {
+      const previous = {
+        secure: window.isSecureContext,
+        worker: (navigator as { serviceWorker?: unknown }).serviceWorker,
+        manager: (window as { PushManager?: unknown }).PushManager,
+        notification: (window as { Notification?: unknown }).Notification,
+      }
+
+      Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
+      Object.defineProperty(window, 'PushManager', { value: class {}, configurable: true })
+      Object.defineProperty(window, 'Notification', {
+        value: { permission, requestPermission: async () => permission },
+        configurable: true,
+      })
+      Object.defineProperty(navigator, 'serviceWorker', {
+        value: {
+          getRegistration: async () => ({
+            pushManager: { getSubscription: async () => (subscribed ? {} : null) },
+          }),
+        },
+        configurable: true,
+      })
+
+      /*
+       * Put back by deleting rather than by defining undefined: a property defined
+       * with no value still answers `'PushManager' in window`, which left the next
+       * test in this file looking at a browser that half exists.
+       */
+      const put = (target: object, name: string, value: unknown) => {
+        if (value === undefined) delete (target as Record<string, unknown>)[name]
+        else Object.defineProperty(target, name, { value, configurable: true })
+      }
+
+      return () => {
+        put(window, 'isSecureContext', previous.secure)
+        put(window, 'PushManager', previous.manager)
+        put(window, 'Notification', previous.notification)
+        put(navigator, 'serviceWorker', previous.worker)
+      }
+    }
+
+    it('offers a switch when the browser can do them', async () => {
+      const restore = asSupported()
+
+      try {
+        const { wrapper } = await mountView(ProfileView)
+        await settle()
+
+        const toggle = wrapper.find('[data-testid="notifications-toggle"]')
+        expect(toggle.exists()).toBe(true)
+        // Nothing is subscribed, so it reads as off rather than as unavailable.
+        expect(toggle.attributes('aria-pressed')).toBe('false')
+        expect(wrapper.find('[data-testid="notifications-note"]').text()).toContain(
+          'while the app is closed',
+        )
+      } finally {
+        restore()
+      }
+    })
+
+    it('reads as on when this device is already subscribed', async () => {
+      const restore = asSupported('granted', true)
+
+      try {
+        const { wrapper } = await mountView(ProfileView)
+        await settle()
+
+        expect(wrapper.find('[data-testid="notifications-toggle"]').attributes('aria-pressed'))
+          .toBe('true')
+      } finally {
+        restore()
+      }
+    })
+
+    it('says to allow them in the browser when the browser is refusing', async () => {
+      const restore = asSupported('denied')
+
+      try {
+        const { wrapper } = await mountView(ProfileView)
+        await settle()
+
+        // Nothing this app does can change that, so the note has to point at the
+        // only place it can be changed.
+        expect(wrapper.find('[data-testid="notifications-toggle"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="notifications-note"]').text()).toContain(
+          'site settings',
+        )
+      } finally {
+        restore()
+      }
+    })
+
+    it('explains a plain address rather than offering a switch that cannot work', async () => {
+      // The environment here is the same shape as a phone reading this over http on
+      // the local network: no service worker, and not a secure context.
+      const { wrapper } = await mountView(ProfileView)
+      await settle()
+
+      expect(wrapper.find('[data-testid="notifications-toggle"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="notifications-note"]').text()).toContain('https')
+    })
+
+    it('says plainly when a secure browser has no notifications at all', async () => {
+      // An older browser rather than a plain address: nothing to be done about it,
+      // and a different sentence from "serve it over https".
+      Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
+
+      try {
+        const { wrapper } = await mountView(ProfileView)
+        await settle()
+
+        expect(wrapper.find('[data-testid="notifications-note"]').text()).toContain(
+          'cannot do notifications',
+        )
+      } finally {
+        delete (window as unknown as Record<string, unknown>).isSecureContext
+      }
+    })
+  })
+
+  describe('installing it', () => {
+    it('says what installing gets you, before the browser has offered', async () => {
+      const { wrapper } = await mountView(ProfileView)
+      await settle()
+
+      expect(textOf(wrapper)).toContain('Install on this device')
+      // No offer yet, so no button: a dead button is worse than none.
+      expect(wrapper.find('[data-testid="install-app"]').exists()).toBe(false)
+    })
+
+    it('offers the button once the browser says it can', async () => {
+      const { wrapper } = await mountView(ProfileView)
+      const event = new Event('beforeinstallprompt')
+      Object.assign(event, { prompt: async () => {}, userChoice: Promise.resolve({ outcome: 'accepted' }) })
+
+      watchForInstallPrompt()
+      window.dispatchEvent(event)
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="install-app"]').exists()).toBe(true)
+    })
   })
 })

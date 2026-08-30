@@ -12,6 +12,7 @@ import { useAuthStore } from './stores/auth'
 import { useGroupsStore } from './stores/groups'
 import { useExpensesStore } from './stores/expenses'
 import { createRealtimeConnection } from './offline/realtime'
+import { watchForInstallPrompt } from './native/install'
 import {
   BLOCKED_MESSAGE,
   RENDER_MESSAGE,
@@ -153,6 +154,10 @@ async function bootstrap(): Promise<void> {
   // And the code for every other screen, so going offline does not leave the app
   // unable to open any of them.
   void warmRoutes()
+
+  // The browser's offer to install this fires once, early, and long before anybody
+  // opens the profile where the offer belongs.
+  watchForInstallPrompt()
 }
 
 async function watchReplica(): Promise<void> {
