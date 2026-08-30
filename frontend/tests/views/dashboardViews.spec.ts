@@ -109,8 +109,21 @@ describe('StatsView', () => {
     myPaid: 100,
     expenseCount: 3,
     spendOverTime: [
-      { bucket: '2026-01-01', amount: 100, expenseCount: 2 },
-      { bucket: '2026-02-01', amount: 50, expenseCount: 1 },
+      {
+        bucket: '2026-01-01',
+        amount: 100,
+        expenseCount: 2,
+        byMember: [
+          { memberId: 'm1', memberName: 'Alice', amount: 60 },
+          { memberId: 'm2', memberName: 'Bob', amount: 40 },
+        ],
+      },
+      {
+        bucket: '2026-02-01',
+        amount: 50,
+        expenseCount: 1,
+        byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 50 }],
+      },
     ],
     byCategory: [
       {
@@ -155,7 +168,7 @@ describe('StatsView', () => {
   it('draws the spend-over-time bars scaled to the biggest bucket', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    const bars = wrapper.findAll('[role="img"] span')
+    const bars = wrapper.findAll('[role="img"] li > span')
     expect(bars).toHaveLength(2)
     // The tallest bucket fills the chart; the other is proportional.
     expect(bars[0].attributes('style')).toContain('height: 100%')
@@ -178,14 +191,76 @@ describe('StatsView', () => {
     const { wrapper } = await mountView(StatsView, {
       api: api({
         spendOverTime: [
-          { bucket: '2026-01-01', amount: 1000, expenseCount: 1 },
-          { bucket: '2026-02-01', amount: 1, expenseCount: 1 },
+          {
+            bucket: '2026-01-01',
+            amount: 1000,
+            expenseCount: 1,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 1000 }],
+          },
+          {
+            bucket: '2026-02-01',
+            amount: 1,
+            expenseCount: 1,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 1 }],
+          },
         ],
       }),
     })
 
-    const bars = wrapper.findAll('[role="img"] span')
+    const bars = wrapper.findAll('[role="img"] li > span')
     expect(bars[1].attributes('style')).toContain('height: 4%')
+  })
+
+  it('splits each bar by whoever paid, in their own colour', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+
+    // January had two payers, February one.
+    const bars = wrapper.findAll('[role="img"] li')
+    expect(bars[0].findAll('[data-testid="bar-segment"]')).toHaveLength(2)
+    expect(bars[1].findAll('[data-testid="bar-segment"]')).toHaveLength(1)
+
+    const colours = bars[0]
+      .findAll('[data-testid="bar-segment"]')
+      .map((segment) => segment.attributes('style'))
+    expect(colours[0]).not.toBe(colours[1])
+  })
+
+  it('sizes each segment by that person share of the bucket', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+
+    const segments = wrapper.findAll('[role="img"] li')[0].findAll('[data-testid="bar-segment"]')
+    expect(segments[0].attributes('style')).toContain('height: 60%')
+    expect(segments[1].attributes('style')).toContain('height: 40%')
+  })
+
+  it('names the people in a key under the chart', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+
+    // A stack of coloured blocks says nothing without one.
+    const text = textOf(wrapper)
+    expect(text).toContain('Alice')
+    expect(text).toContain('Bob')
+  })
+
+  it('describes the chart for a screen reader', async () => {
+    const { wrapper } = await mountView(StatsView, { api: api() })
+
+    const label = wrapper.find('[role="img"]').attributes('aria-label')
+    expect(label).toContain('by who paid')
+    expect(label).toContain('Alice')
+  })
+
+  it('draws one whole bar when the server sent no breakdown', async () => {
+    const { wrapper } = await mountView(StatsView, {
+      api: api({
+        spendOverTime: [{ bucket: '2026-01-01', amount: 100, expenseCount: 1 }],
+      }),
+    })
+
+    // Rather than an empty bar: an older server, or a bucket with nothing in it.
+    const segments = wrapper.findAll('[data-testid="bar-segment"]')
+    expect(segments).toHaveLength(1)
+    expect(segments[0].attributes('style')).toContain('height: 100%')
   })
 
   it('breaks the spend down by category', async () => {

@@ -1,6 +1,16 @@
 namespace SplitEverything.Application.Contracts.Stats;
 
-public sealed record SpendPointDto(DateOnly Bucket, decimal Amount, int ExpenseCount);
+/// <summary>One person's share of a bucket, so a bar can be stacked by who paid.</summary>
+public sealed record SpendPointMemberDto(Guid MemberId, string MemberName, decimal Amount);
+
+public sealed record SpendPointDto(
+    DateOnly Bucket,
+    decimal Amount,
+    int ExpenseCount,
+    // Who paid within this bucket, largest first, and always summing to Amount.
+    // Anyone who paid nothing in it is left out: a zero-height segment is not
+    // information.
+    IReadOnlyList<SpendPointMemberDto> ByMember);
 
 public sealed record CategorySpendDto(Guid? CategoryId, string CategoryKey, string CategoryName, string IconName, string ColorHex, decimal Amount, int ExpenseCount, decimal Share);
 
