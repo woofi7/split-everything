@@ -43,11 +43,6 @@ public sealed class GroupsController(
     public async Task<ActionResult<GroupDto>> Unarchive(Guid groupId, CancellationToken ct)
         => Ok(await groups.UnarchiveAsync(UserId, groupId, ct));
 
-    [HttpPost("{groupId:guid}/members")]
-    public async Task<ActionResult<GroupMemberDto>> AddPlaceholderMember(
-        Guid groupId, AddPlaceholderMemberRequest request, CancellationToken ct)
-        => Ok(await groups.AddPlaceholderMemberAsync(UserId, groupId, request, ct));
-
     [HttpPost("{groupId:guid}/members/user")]
     public async Task<ActionResult<GroupMemberDto>> AddUserMember(
         Guid groupId, AddUserMemberRequest request, CancellationToken ct)

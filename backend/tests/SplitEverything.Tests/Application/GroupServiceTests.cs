@@ -286,8 +286,10 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
 
         (await Groups.ArchiveAsync(user.Id, group.Id)).IsArchived.ShouldBeTrue();
 
-        await Should.ThrowAsync<GroupArchivedException>(() => Groups.AddPlaceholderMemberAsync(
-            user.Id, group.Id, new AddPlaceholderMemberRequest("Bob")));
+        var bob = await TestData.SeedUserAsync(Db, "Bob", "bob@example.com");
+
+        await Should.ThrowAsync<GroupArchivedException>(() => Groups.AddUserMemberAsync(
+            user.Id, group.Id, new AddUserMemberRequest(bob.Id)));
     }
 
     [Fact]
@@ -321,30 +323,6 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         await Groups.ArchiveAsync(user.Id, group.Id);
 
         (await Groups.ArchiveAsync(user.Id, group.Id)).IsArchived.ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task Adding_a_placeholder_member_returns_it_unclaimed()
-    {
-        var user = await TestData.SeedUserAsync(Db);
-        var group = await Groups.CreateAsync(user.Id, Request());
-
-        var member = await Groups.AddPlaceholderMemberAsync(
-            user.Id, group.Id, new AddPlaceholderMemberRequest("Bob"));
-
-        member.IsPlaceholder.ShouldBeTrue();
-        member.UserId.ShouldBeNull();
-        member.DisplayName.ShouldBe("Bob");
-    }
-
-    [Fact]
-    public async Task A_placeholder_member_needs_a_name()
-    {
-        var user = await TestData.SeedUserAsync(Db);
-        var group = await Groups.CreateAsync(user.Id, Request());
-
-        await Should.ThrowAsync<ValidationException>(() => Groups.AddPlaceholderMemberAsync(
-            user.Id, group.Id, new AddPlaceholderMemberRequest("  ")));
     }
 
     [Fact]

@@ -8,9 +8,9 @@ import type { AddableUser } from '@/api/types'
  *
  * Two ways in, and this field is the first: pick a person who already has an
  * account. The second is an invite link, for someone who has never opened the
- * app. Anyone who is neither can still be added as a placeholder, which is what
- * a CSV import produces and what a name typed here used to produce
- * unconditionally, whether or not that person was already a user.
+ * app. There is no third: a name typed here used to create a member with no
+ * account behind it, which put a person in the group who could never open it,
+ * see what they owed, or be told about it.
  *
  * Matching is fuzzy over name and email, so finding someone does not depend on
  * guessing how their name is spelled or capitalised.
@@ -23,7 +23,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   pick: [person: AddableUser]
-  addPlaceholder: [displayName: string]
 }>()
 
 const RESULT_LIMIT = 8
@@ -48,10 +47,8 @@ function searchFields(person: AddableUser): readonly string[] {
 
 const isOpen = computed(() => results.value.length > 0)
 
-/** Offered only when nobody matches, so it never competes with a real person. */
-const canAddPlaceholder = computed(
-  () => trimmed.value.length > 0 && results.value.length === 0,
-)
+/** Nobody matched. Said rather than left blank, so the field does not look broken. */
+const hasNoMatch = computed(() => trimmed.value.length > 0 && results.value.length === 0)
 
 watch(results, () => {
   activeIndex.value = 0
@@ -69,12 +66,7 @@ function pick(person: AddableUser): void {
   reset()
 }
 
-function addPlaceholder(): void {
-  emit('addPlaceholder', trimmed.value)
-  reset()
-}
-
-/** Cleared after either action, ready for the next person. */
+/** Cleared after picking someone, ready for the next person. */
 function reset(): void {
   query.value = ''
   activeIndex.value = 0
@@ -83,7 +75,6 @@ function reset(): void {
 function onEnter(): void {
   const active = results.value[activeIndex.value]
   if (active) pick(active.item)
-  else if (canAddPlaceholder.value) addPlaceholder()
 }
 
 /** Splits a value around the matched positions, so a fuzzy hit is legible. */
@@ -166,15 +157,13 @@ function emailSegments(result: { item: AddableUser; indices: number[]; fieldInde
       </li>
     </ul>
 
-    <button
-      v-if="canAddPlaceholder"
-      type="button"
-      data-testid="add-placeholder"
-      class="btn btn-press btn-secondary mt-2 w-full justify-start"
-      style="border-color: var(--border)"
-      @click="addPlaceholder"
+    <p
+      v-if="hasNoMatch"
+      data-testid="no-match"
+      class="mt-2 text-xs text-[var(--text-muted)]"
     >
-      Add "{{ trimmed }}" as someone without an account
-    </button>
+      Nobody with an account matches "{{ trimmed }}". Send them an invite link
+      instead, and they join this group when they sign up.
+    </p>
   </div>
 </template>

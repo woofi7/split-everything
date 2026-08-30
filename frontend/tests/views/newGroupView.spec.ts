@@ -12,18 +12,6 @@ vi.mock('vue-router', () => ({
 }))
 
 describe('NewGroupView', () => {
-  /**
-   * Adds someone with no account, through the field a person would use: type a
-   * name nobody matches, then take the fallback.
-   */
-  async function addByName(wrapper: { find: (s: string) => any }, name: string) {
-    await wrapper.find('input[type="search"]').setValue(name)
-    await settle(1)
-    const fallback = wrapper.find('[data-testid="add-placeholder"]')
-    if (fallback.exists()) await fallback.trigger('click')
-    await settle(1)
-  }
-
   it('creates the group and opens it', async () => {
     const api = fakeApi({ '/groups': () => testGroup() })
     const { wrapper } = await mountView(NewGroupView, { api, groups: [] })
@@ -117,66 +105,24 @@ describe('NewGroupView', () => {
     expect(api.post).not.toHaveBeenCalled()
   })
 
-  it('collects people by name before the group exists', async () => {
-    const { wrapper } = await mountView(NewGroupView, { groups: [] })
-
-    await addByName(wrapper, 'Bob')
-
-    expect(textOf(wrapper)).toContain('Bob')
-  })
-
-  it('adds a person on the enter key', async () => {
-    const { wrapper } = await mountView(NewGroupView, { groups: [] })
-
-    const memberInput = wrapper.find('input[type="search"]')
-    await memberInput.setValue('Carol')
-    await settle(1)
-    await memberInput.trigger('keydown', { key: 'Enter' })
-    await settle(1)
-
-    expect(textOf(wrapper)).toContain('Carol')
-  })
-
-  it('ignores a blank name', async () => {
-    const { wrapper } = await mountView(NewGroupView, { groups: [] })
-
-    await addByName(wrapper, '   ')
-
-    expect(wrapper.findAll('[aria-label="People added so far"] li')).toHaveLength(0)
-  })
-
-  it('does not add the same person twice', async () => {
-    const { wrapper } = await mountView(NewGroupView, { groups: [] })
-
-    for (const name of ['Bob', 'bob']) await addByName(wrapper, name)
-
-    expect(wrapper.findAll('[aria-label="People added so far"] li')).toHaveLength(1)
-  })
-
-  it('removes a person again', async () => {
-    const { wrapper } = await mountView(NewGroupView, { groups: [] })
-
-    await addByName(wrapper, 'Bob')
-
-    await wrapper.find('button[aria-label="Remove Bob"]').trigger('click')
-    await settle(1)
-
-    expect(wrapper.findAll('[aria-label="People added so far"] li')).toHaveLength(0)
-  })
-
-  it('sends the collected people with the group', async () => {
+  it('adds nobody when the typed name matches no account', async () => {
     const api = fakeApi({ '/groups': () => testGroup() })
     const { wrapper } = await mountView(NewGroupView, { api, groups: [] })
 
     await wrapper.find('input[placeholder="Roommates"]').setValue('Roommates')
-    await addByName(wrapper, 'Bob')
+    const search = wrapper.find('input[type="search"]')
+    await search.setValue('Bob')
+    await settle(1)
+    await search.trigger('keydown', { key: 'Enter' })
+    await settle(1)
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    expect(api.post).toHaveBeenCalledWith(
-      '/groups',
-      expect.objectContaining({ placeholderMemberNames: ['Bob'] }),
-    )
+    // A typed name used to become a member with no account behind them, who could
+    // never open the group, see what they owed, or be told about it.
+    expect(api.post).toHaveBeenCalledWith('/groups', expect.not.objectContaining({
+      placeholderMemberNames: expect.anything(),
+    }))
   })
 
   it('opens the icon picker rather than asking someone to type a name', async () => {

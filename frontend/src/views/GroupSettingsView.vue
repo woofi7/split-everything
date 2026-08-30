@@ -7,6 +7,7 @@ import IconPicker from '@/components/ui/IconPicker.vue'
 import PersonPicker from '@/components/groups/PersonPicker.vue'
 import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
+import { useAuthStore } from '@/stores/auth'
 import { useApi } from '@/api/provider'
 import type { AddableUser } from '@/api/types'
 
@@ -23,8 +24,19 @@ interface InviteDto {
 const route = useRoute()
 const router = useRouter()
 const groups = useGroupsStore()
+const auth = useAuthStore()
 
 const groupId = computed(() => String(route.params.groupId))
+
+/**
+ * Which of these people is the one reading the list.
+ *
+ * By member row rather than by name: names repeat, and a group can hold two
+ * people called Nicolas.
+ */
+const myMemberId = computed(() =>
+  auth.user ? groups.myMemberId(groupId.value, auth.user.id) : null,
+)
 const name = ref('')
 const iconName = ref<string | null>(null)
 const isPickingIcon = ref(false)
@@ -79,16 +91,6 @@ async function addPerson(person: AddableUser): Promise<void> {
   try {
     await groups.addUserMember(groupId.value, person.id)
     await loadAddable()
-  } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not add that person.'
-  }
-}
-
-/** Someone with no account. Claimed later if they take an invite to this group. */
-async function addPlaceholder(displayName: string): Promise<void> {
-  error.value = null
-  try {
-    await groups.addPlaceholderMember(groupId.value, displayName)
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not add that person.'
   }
@@ -217,6 +219,14 @@ async function unarchive(): Promise<void> {
         >
           <span class="min-w-0 truncate">
             {{ member.displayName }}
+            <span
+              v-if="member.id === myMemberId"
+              data-testid="you-tag"
+              class="ml-1 rounded-full px-1.5 py-0.5 align-middle text-[0.65rem] font-semibold uppercase tracking-wide"
+              style="background: var(--surface-sunken); color: var(--text-muted)"
+            >
+              You
+            </span>
             <span v-if="member.isPlaceholder" class="text-xs text-[var(--text-muted)]">
               (not signed in yet)
             </span>
@@ -239,7 +249,6 @@ async function unarchive(): Promise<void> {
         :candidates="addable"
         label="Add someone to this group"
         @pick="addPerson"
-        @add-placeholder="addPlaceholder"
       />
     </section>
 

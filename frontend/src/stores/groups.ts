@@ -230,12 +230,6 @@ export const useGroupsStore = defineStore('groups', () => {
     upsert(local)
   }
 
-  async function addPlaceholderMember(groupId: string, displayName: string): Promise<void> {
-    await requireApi().post(`/groups/${groupId}/members`, { displayName })
-    await refresh(groupId)
-  }
-
-  /** Adds someone who already has an account, rather than a placeholder. */
   /**
    * Records how this group splits by default, from what someone just used.
    *
@@ -258,6 +252,13 @@ export const useGroupsStore = defineStore('groups', () => {
     upsert(local)
   }
 
+  /**
+   * Adds someone to the group.
+   *
+   * By account, and only by account. A member with no account behind them could
+   * never open the group, see what they owed, or be told about it, so the only
+   * other way in is an invite link they accept themselves.
+   */
   async function addUserMember(groupId: string, userId: string): Promise<void> {
     await requireApi().post(`/groups/${groupId}/members/user`, { userId })
     await refresh(groupId)
@@ -318,7 +319,6 @@ export const useGroupsStore = defineStore('groups', () => {
     update,
     archive,
     unarchive,
-    addPlaceholderMember,
     setDefaultSplit,
     addUserMember,
     addableUsers,

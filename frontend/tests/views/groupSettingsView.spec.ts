@@ -4,6 +4,7 @@ import GroupSettingsView from '@/views/GroupSettingsView.vue'
 import {
   BOB,
   GROUP_ID,
+  USER_ID,
   fakeApi,
   mountView,
   settle,
@@ -200,19 +201,55 @@ describe('GroupSettingsView', () => {
     )
   })
 
-  it('still adds someone with no account, by name', async () => {
+  it('marks which of these people is you', async () => {
+    const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+
+    const rows = wrapper.findAll('li')
+    const mine = rows.find((row) => row.text().includes('Alice'))
+    const theirs = rows.find((row) => row.text().includes('Bob'))
+
+    expect(mine!.find('[data-testid="you-tag"]').exists()).toBe(true)
+    expect(theirs!.find('[data-testid="you-tag"]').exists()).toBe(false)
+  })
+
+  it('marks you by membership rather than by name', async () => {
+    // Names repeat: a group can hold two people called Nicolas, and only one of
+    // them is the one reading the list.
+    const twoAlices = {
+      ...testGroup(),
+      members: [
+        { ...testGroup().members[0], id: 'member-other', userId: 'user-other' },
+        { ...testGroup().members[0], id: 'member-mine', userId: USER_ID },
+      ],
+    }
+
+    const { wrapper } = await mountView(GroupSettingsView, {
+      api: fakeApi({ '/groups': () => twoAlices }),
+      groups: [twoAlices],
+    })
+
+    const tagged = wrapper
+      .findAll('li')
+      .filter((row) => row.find('[data-testid="you-tag"]').exists())
+
+    // Exactly one: matching on the name would have tagged both.
+    expect(tagged).toHaveLength(1)
+  })
+
+  it('cannot add someone who has no account', async () => {
     const client = api({ '/users/addable': () => [] })
 
     const { wrapper } = await mountView(GroupSettingsView, { api: client })
 
     await wrapper.find('input[type="search"]').setValue('Dave')
     await settle()
-    await wrapper.find('[data-testid="add-placeholder"]').trigger('click')
-    await settle()
 
-    expect(client.post).toHaveBeenCalledWith(
+    // An invite link is the only other way in, and the person accepts it
+    // themselves, so the group never holds someone who cannot open it.
+    expect(wrapper.find('[data-testid="add-placeholder"]').exists()).toBe(false)
+    expect(client.post).not.toHaveBeenCalledWith(
       `/groups/${GROUP_ID}/members`,
-      { displayName: 'Dave' },
+      expect.anything(),
     )
   })
 

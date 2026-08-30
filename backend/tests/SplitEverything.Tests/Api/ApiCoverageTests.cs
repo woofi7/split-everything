@@ -104,8 +104,11 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
         await SignInAsync();
         var group = await CreateGroupAsync();
 
-        var added = await Client.PostAsJsonAsync($"/api/groups/{group.Id}/members",
-            new AddPlaceholderMemberRequest("Carol"), Json);
+        await SignInAsAnotherUserAsync("Carol");
+        var carol = await NewContext().Users.FirstAsync(u => u.DisplayName == "Carol");
+
+        var added = await Client.PostAsJsonAsync($"/api/groups/{group.Id}/members/user",
+            new AddUserMemberRequest(carol.Id), Json);
         added.EnsureSuccessStatusCode();
         var member = await added.Content.ReadFromJsonAsync<GroupMemberDto>(Json);
 

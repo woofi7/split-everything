@@ -237,8 +237,11 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         var group = await CreateGroupAsync();
         await Client.PostAsync($"/api/groups/{group.Id}/archive", null);
 
-        var response = await Client.PostAsJsonAsync($"/api/groups/{group.Id}/members",
-            new AddPlaceholderMemberRequest("Carol"), Json);
+        await SignInAsAnotherUserAsync("Carol");
+        var carol = await NewContext().Users.FirstAsync(u => u.DisplayName == "Carol");
+
+        var response = await Client.PostAsJsonAsync($"/api/groups/{group.Id}/members/user",
+            new AddUserMemberRequest(carol.Id), Json);
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }

@@ -18,7 +18,6 @@ const iconName = ref<string | null>(null)
 const isPickingIcon = ref(false)
 
 const icon = computed(() => resolveIcon(iconName.value))
-const memberNames = ref<string[]>([])
 const addable = ref<AddableUser[]>([])
 const chosen = ref<AddableUser[]>([])
 const error = ref<string | null>(null)
@@ -42,18 +41,6 @@ function addPerson(person: AddableUser): void {
   chosen.value.push(person)
 }
 
-function addPlaceholder(displayName: string): void {
-  const trimmed = displayName.trim()
-  if (!trimmed) return
-  if (memberNames.value.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) return
-
-  memberNames.value.push(trimmed)
-}
-
-function removeMember(index: number): void {
-  memberNames.value.splice(index, 1)
-}
-
 function removePerson(index: number): void {
   chosen.value.splice(index, 1)
 }
@@ -73,7 +60,6 @@ async function save(): Promise<void> {
       name: name.value.trim(),
       baseCurrency: baseCurrency.value,
       iconName: iconName.value,
-      placeholderMemberNames: memberNames.value,
     })
 
     // Sequential rather than part of the create: a member row needs a group to
@@ -147,15 +133,14 @@ async function save(): Promise<void> {
 
       <div class="flex flex-col gap-2">
         <span class="text-sm text-[var(--text-muted)]">
-          People. Search anyone who already has an account, or add a name for
-          someone who does not.
+          People. Search anyone who already has an account, or invite them once
+          the group exists.
         </span>
 
         <PersonPicker
           :candidates="addable"
           label="Add someone to this group"
           @pick="addPerson"
-          @add-placeholder="addPlaceholder"
         />
 
         <ul
@@ -175,29 +160,6 @@ async function save(): Promise<void> {
               class="text-[var(--text-muted)]"
               :aria-label="`Remove ${person.displayName}`"
               @click="removePerson(index)"
-            >
-              x
-            </button>
-          </li>
-        </ul>
-
-        <ul
-          v-if="memberNames.length > 0"
-          class="flex flex-wrap gap-2"
-          aria-label="People added so far"
-        >
-          <li
-            v-for="(member, index) in memberNames"
-            :key="member"
-            class="flex items-center gap-1 rounded-full border px-2 py-1 text-sm"
-            style="border-color: var(--border)"
-          >
-            {{ member }}
-            <button
-              type="button"
-              class="text-[var(--text-muted)]"
-              :aria-label="`Remove ${member}`"
-              @click="removeMember(index)"
             >
               x
             </button>

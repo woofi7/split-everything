@@ -299,31 +299,6 @@ public sealed class GroupService(
         return await GetAsync(userId, groupId, ct);
     }
 
-    public async Task<GroupMemberDto> AddPlaceholderMemberAsync(
-        Guid userId, Guid groupId, AddPlaceholderMemberRequest request, CancellationToken ct = default)
-    {
-        var actor = await GroupAccess.RequireMemberAsync(db, userId, groupId, ct);
-        var group = await GroupAccess.RequireGroupAsync(db, groupId, ct);
-        GroupAccess.RequireWritable(group);
-
-        var displayName = GroupAccess.RequireText(request.DisplayName, "Display name", 120);
-
-        var member = NewMember(groupId, null, displayName, GroupRole.Member);
-        db.GroupMembers.Add(member);
-
-        await writer.RecordAsync(member, SyncEntityType.GroupMember, groupId, SyncOperation.Create,
-            DeviceFor(userId), userId, MemberPayload(member), ct: ct);
-
-        await activity.RecordAsync(groupId, ActivityKind.MemberInvited, userId, actor.Id,
-            SyncEntityType.GroupMember, member.Id,
-            $"{actor.DisplayName} added {displayName} to {group.Name}", ct: ct);
-
-        await db.SaveChangesAsync(ct);
-
-        return new GroupMemberDto(member.Id, null, member.DisplayName, null,
-            member.Role, member.Status, true, 0m);
-    }
-
     public async Task<GroupMemberDto> AddUserMemberAsync(
         Guid userId, Guid groupId, AddUserMemberRequest request, CancellationToken ct = default)
     {

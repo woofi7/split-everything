@@ -51,7 +51,6 @@ public sealed record GroupSummaryDto(
     Guid Id, string Name, string BaseCurrency, string? IconName, string ColorHex,
     bool IsArchived, decimal MyNetBalance, int MemberCount, DateTimeOffset? LastActivityAt);
 
-public sealed record AddPlaceholderMemberRequest(string DisplayName);
 
 /// <summary>Adds someone who already has an account, rather than a placeholder.</summary>
 public sealed record AddUserMemberRequest(Guid UserId);
