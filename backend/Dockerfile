@@ -19,15 +19,20 @@ RUN dotnet publish src/SplitEverything.Api/SplitEverything.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Kerberos, which Npgsql looks for while it works out how to authenticate.
+# Two things this image cannot do without, neither of which the runtime carries.
 #
-# The runtime image does not carry it, so the first command on every start failed
-# with "Cannot load library libgssapi_krb5.so.2" before the connection succeeded on
-# a retry: an alarming pair of lines in the log for something nothing here uses.
-# Postgres authenticates with a password; this is only here so the probe finds what
-# it is looking for.
+# libgssapi-krb5-2: Npgsql looks for Kerberos while working out how to authenticate,
+# and without it the first command on every start failed with "Cannot load library
+# libgssapi_krb5.so.2" before succeeding on a retry. Postgres authenticates with a
+# password here; the library is only present so the probe finds what it looks for.
+#
+# curl: the health check below had nothing to make a request with. This image has no
+# wget, no curl and no netcat, so the check failed every time with "wget: not found"
+# and the container was marked unhealthy from its first breath - which also blocked
+# anything waiting on it being healthy. curl earns its two megabytes twice over:
+# once for the check, once for whoever is inside the container asking why.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Receipts live on a mounted volume; the directory has to exist and be writable
@@ -46,6 +51,6 @@ EXPOSE 8080
 # Liveness only: readiness checks the database and would keep the container
 # marked unhealthy through a brief Postgres restart.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD ["/bin/sh", "-c", "wget -qO- http://127.0.0.1:8080/api/health || exit 1"]
+    CMD ["curl", "-fsS", "http://127.0.0.1:8080/api/health"]
 
 ENTRYPOINT ["dotnet", "SplitEverything.Api.dll"]
