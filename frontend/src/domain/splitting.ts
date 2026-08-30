@@ -1,4 +1,4 @@
-import { currencyDecimals, minorUnit, roundMoney } from './money'
+import { minorUnit, roundShare, shareDecimals } from './money'
 
 export type SplitType = 'Equal' | 'Percentage' | 'Shares' | 'ExactAmount' | 'Itemized'
 
@@ -81,7 +81,7 @@ export function calculateSplit(
         currency,
         inputs.map((i) => ({
           memberId: i.memberId,
-          amount: roundMoney(i.value ?? 0, currency),
+          amount: roundShare(i.value ?? 0, currency),
           inputValue: i.value ?? null,
         })),
       )
@@ -178,7 +178,9 @@ function byWeight(
     throw new Error('Split weights must add up to more than zero.')
   }
 
-  const decimals = currencyDecimals(currency)
+  // Share precision, not the currency's: an even split of an odd number of cents
+  // is then actually even, rather than a cent handed to whoever wins the tie-break.
+  const decimals = shareDecimals(currency)
   const factor = 10 ** decimals
   const sign = total < 0 ? -1 : 1
   const totalUnits = Math.round(Math.abs(total) * factor)
@@ -219,10 +221,10 @@ function byWeight(
 function reconcile(total: number, currency: string, shares: SplitShare[]): SplitShare[] {
   const rounded = shares.map((share) => ({
     ...share,
-    amount: roundMoney(share.amount, currency),
+    amount: roundShare(share.amount, currency),
   }))
 
-  const residue = roundMoney(
+  const residue = roundShare(
     total - rounded.reduce((sum, share) => sum + share.amount, 0),
     currency,
   )
@@ -238,7 +240,7 @@ function reconcile(total: number, currency: string, shares: SplitShare[]): Split
 
   rounded[targetIndex] = {
     ...rounded[targetIndex],
-    amount: roundMoney(rounded[targetIndex].amount + residue, currency),
+    amount: roundShare(rounded[targetIndex].amount + residue, currency),
   }
 
   return rounded

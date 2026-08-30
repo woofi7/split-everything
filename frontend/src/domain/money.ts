@@ -29,12 +29,37 @@ export function minorUnit(currency?: string | null): number {
 }
 
 /**
+ * The precision a share is worked out and stored at, two decimals finer than the
+ * currency people pay in.
+ *
+ * A share is not a payment. Half of 66.13 is 33.065, and forcing that to a cent
+ * hands somebody the extra half-cent every time - always the same somebody, since
+ * the tie has to break deterministically for two devices to agree. Over four
+ * hundred expenses in one real group that came to 71 cents of drift.
+ *
+ * Currencies with no sub-unit keep whole units: a third of a yen is not a share of
+ * anything. The server does exactly the same, in CurrencyPrecision.
+ */
+export function shareDecimals(currency?: string | null): number {
+  const decimals = currencyDecimals(currency)
+  return decimals === 0 ? 0 : Math.min(4, decimals + 2)
+}
+
+/** Rounds half to even at share precision, matching the server. */
+export function roundShare(amount: number, currency?: string | null): number {
+  return roundTo(amount, shareDecimals(currency))
+}
+
+/**
  * Rounds half to even, matching the server. Half-up here would make a
  * client-computed split disagree with the same split recomputed on the server,
  * and the difference would surface as a phantom cent of debt.
  */
 export function roundMoney(amount: number, currency?: string | null): number {
-  const decimals = currencyDecimals(currency)
+  return roundTo(amount, currencyDecimals(currency))
+}
+
+function roundTo(amount: number, decimals: number): number {
   const factor = 10 ** decimals
   const scaled = amount * factor
   const floor = Math.floor(scaled)

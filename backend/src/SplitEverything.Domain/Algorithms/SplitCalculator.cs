@@ -120,7 +120,8 @@ public static class SplitCalculator
                 $"Exact amounts must add up to the expense total {total}, got {sum}.", nameof(inputs));
 
         var shares = inputs
-            .Select(i => new SplitShare(i.MemberId, CurrencyPrecision.Round(i.Value ?? 0m, currency), i.Value))
+            .Select(i => new SplitShare(
+                i.MemberId, CurrencyPrecision.RoundStored(i.Value ?? 0m, currency), i.Value))
             .ToList();
 
         return Reconcile(total, currency, shares);
@@ -128,9 +129,16 @@ public static class SplitCalculator
 
     /// <summary>
     /// Weighted split with largest-remainder rounding: floor everyone to a whole
-    /// minor unit, then hand the leftover units out one at a time to the largest
-    /// fractional parts. Ties break on member id so two devices computing the same
-    /// split offline produce byte-identical results.
+    /// unit, then hand the leftover units out one at a time to the largest fractional
+    /// parts. Ties break on member id so two devices computing the same split offline
+    /// produce byte-identical results.
+    ///
+    /// The unit is the stored one rather than the currency's, which is what keeps an
+    /// even split even: half of 66.13 is 33.065, and a tie at the cent has to break
+    /// somewhere - always towards the same member, since the tie-break has to be
+    /// deterministic. That is half a cent of drift per expense, all of it in one
+    /// direction, and it added up to 71 cents against the app a real group's history
+    /// came from.
     /// </summary>
     private static IReadOnlyList<SplitShare> ByWeight(
         decimal total, string currency, IReadOnlyList<SplitInput> inputs, bool keepInput)
@@ -140,7 +148,7 @@ public static class SplitCalculator
         if (weightSum <= 0m)
             throw new ArgumentException("Split weights must add up to more than zero.", nameof(inputs));
 
-        var unit = CurrencyPrecision.MinorUnit(currency);
+        var unit = CurrencyPrecision.StoredUnit(currency);
         var sign = total < 0 ? -1m : 1m;
         var absTotal = Math.Abs(total);
         var totalUnits = (long)Math.Round(absTotal / unit, MidpointRounding.AwayFromZero);
@@ -183,10 +191,10 @@ public static class SplitCalculator
         decimal total, string currency, IReadOnlyList<SplitShare> shares)
     {
         var rounded = shares
-            .Select(s => s with { Amount = CurrencyPrecision.Round(s.Amount, currency) })
+            .Select(s => s with { Amount = CurrencyPrecision.RoundStored(s.Amount, currency) })
             .ToList();
 
-        var residue = CurrencyPrecision.Round(total - rounded.Sum(s => s.Amount), currency);
+        var residue = CurrencyPrecision.RoundStored(total - rounded.Sum(s => s.Amount), currency);
         if (residue == 0m) return rounded;
 
         var targetIndex = Enumerable.Range(0, rounded.Count)
@@ -196,7 +204,7 @@ public static class SplitCalculator
 
         rounded[targetIndex] = rounded[targetIndex] with
         {
-            Amount = CurrencyPrecision.Round(rounded[targetIndex].Amount + residue, currency)
+            Amount = CurrencyPrecision.RoundStored(rounded[targetIndex].Amount + residue, currency)
         };
         return rounded;
     }
