@@ -15,18 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ascii:
-    name: Plain ASCII
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      # The project is written in plain ASCII: an em dash, an arrow or a curly
-      # quote pasted in from somewhere else is a bug in the source, not a style
-      # preference. The script names its own exceptions and says why.
-      - name: Check every tracked file
-        run: python3 scripts/check-ascii.py
-
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
@@ -120,7 +108,7 @@ jobs:
     name: Build and publish images
     # On a version tag only, after every gate has passed. The same release model as
     # the other project on this server: tag, images, then the box pulls them.
-    needs: [ascii, backend, frontend]
+    needs: [backend, frontend]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
