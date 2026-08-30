@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { onMounted, ref, useTemplateRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -66,7 +67,7 @@ function mountGoogleButton(): void {
   if (!google?.accounts?.id || !clientId) {
     // Not an error when there is another way in; the page says so below instead.
     if (!capabilities.value?.developmentSignIn) {
-      error.value = 'Google sign-in is unavailable. Check your connection and try again.'
+      error.value = t('Google sign-in is unavailable. Check your connection and try again.')
     }
     return
   }
@@ -98,7 +99,7 @@ async function signInAsDeveloper(): Promise<void> {
     await auth.signInAsDeveloper(devEmail.value, devName.value)
     await router.replace(redirectTarget())
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not sign you in.'
+    error.value = caught instanceof Error ? caught.message : t('Could not sign you in.')
   } finally {
     isSigningIn.value = false
   }
@@ -106,7 +107,7 @@ async function signInAsDeveloper(): Promise<void> {
 
 async function handleCredential(credential?: string): Promise<void> {
   if (!credential) {
-    error.value = 'Google did not return a credential. Try again.'
+    error.value = t('Google did not return a credential. Try again.')
     return
   }
 
@@ -117,7 +118,7 @@ async function handleCredential(credential?: string): Promise<void> {
     await auth.signInWithGoogle(credential)
     await router.replace(redirectTarget())
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not sign you in.'
+    error.value = caught instanceof Error ? caught.message : t('Could not sign you in.')
   } finally {
     isSigningIn.value = false
   }
@@ -125,7 +126,7 @@ async function handleCredential(credential?: string): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="Split Everything" :show-nav="false">
+  <AppShell :title="t('Split Everything')" :show-nav="false">
     <div class="mx-auto flex max-w-sm flex-col items-center gap-6 py-12 text-center">
       <img
         src="/icons/icon.svg"
@@ -142,9 +143,8 @@ async function handleCredential(credential?: string): Promise<void> {
         means it could not, and the only useful thing here is a way in.
       -->
       <div>
-        <h2 class="text-xl font-semibold">Shared expenses, settled properly</h2>
-        <p class="mt-2 text-sm text-[var(--text-muted)]">
-          Sign in with Google to see your groups. There is no password to remember.
+        <h2 class="text-xl font-semibold">{{ t('Shared expenses, settled properly') }}</h2>
+        <p class="mt-2 text-sm text-[var(--text-muted)]">{{ t('Sign in with Google to see your groups. There is no password to remember.') }}
         </p>
       </div>
 
@@ -157,16 +157,13 @@ async function handleCredential(credential?: string): Promise<void> {
         @submit.prevent="signInAsDeveloper"
       >
         <div>
-          <p class="text-sm font-medium">Development sign-in</p>
-          <p class="text-xs text-[var(--text-muted)]">
-            This server has no Google client configured, so it is letting you in with
-            just an address. Use a different one to act as a second person and test
-            sharing. Never enabled in production.
+          <p class="text-sm font-medium">{{ t('Development sign-in') }}</p>
+          <p class="text-xs text-[var(--text-muted)]">{{ t('This server has no Google client configured, so it is letting you in with just an address. Use a different one to act as a second person and test sharing. Never enabled in production.') }}
           </p>
         </div>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Email</span>
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Email') }}</span>
           <input
             v-model="devEmail"
             type="email"
@@ -178,11 +175,11 @@ async function handleCredential(credential?: string): Promise<void> {
         </label>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Name</span>
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Name') }}</span>
           <input
             v-model="devName"
             type="text"
-            placeholder="Alice"
+            :placeholder="t('Alice')"
             class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
             style="border-color: var(--border)"
           />
@@ -192,12 +189,11 @@ async function handleCredential(credential?: string): Promise<void> {
           type="submit"
           class="btn btn-press btn-primary"
           :disabled="isSigningIn || !devEmail"
-        >
-          Continue
+        >{{ t('Continue') }}
         </button>
       </form>
 
-      <p v-if="isSigningIn" class="text-sm text-[var(--text-muted)]">Signing you in</p>
+      <p v-if="isSigningIn" class="text-sm text-[var(--text-muted)]">{{ t('Signing you in') }}</p>
 
       <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
     </div>

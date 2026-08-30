@@ -16,15 +16,6 @@ public class User
     public bool PrefersLightTheme { get; set; }
 
     /// <summary>
-    /// The colour this person would like to be, in the groups they join.
-    ///
-    /// A wish rather than a guarantee: a group where somebody already has it gives
-    /// them the next free one, because two people the same colour in one group
-    /// defeats the whole purpose of having colours.
-    /// </summary>
-    public string? PreferredColorHex { get; set; }
-
-    /// <summary>
     /// The accent colour this person wants the whole application to wear.
     ///
     /// A name from <see cref="Common.AppThemes"/> rather than a colour, because a

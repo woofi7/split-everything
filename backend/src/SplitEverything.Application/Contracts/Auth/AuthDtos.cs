@@ -15,10 +15,10 @@ public sealed record AuthenticatedUser(
     string? AvatarUrl,
     string DefaultCurrency,
     bool PrefersLightTheme,
-    /// <summary>The colour they would like in the groups they join, if any.</summary>
-    string? PreferredColorHex,
     /// <summary>The accent the whole application wears for them, if they said.</summary>
-    string? ThemeName = null);
+    string? ThemeName,
+    /// <summary>Which language they read the app in: en or fr.</summary>
+    string Locale);
 
 public sealed record SignInResult(AuthenticatedUser User, AuthTokens Tokens, bool IsNewUser, IReadOnlyList<Guid> AutoJoinedGroupIds);
 
@@ -28,10 +28,9 @@ public sealed record UpdateProfileRequest(
     string? DisplayName,
     string? DefaultCurrency,
     bool? PrefersLightTheme,
-    string? Locale,
-    // Null leaves it alone; an empty string clears it, matching the other
-    // clearable fields on this API.
-    string? PreferredColorHex = null,
+    // Null leaves these alone; an empty string puts one back to its default,
+    // which is the convention across this API.
+    string? Locale = null,
     string? ThemeName = null);
 
 /// <summary>

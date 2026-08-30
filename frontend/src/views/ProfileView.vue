@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { LOCALES, t } from '@/i18n'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -56,6 +57,14 @@ async function pickAccent(name: string): Promise<void> {
   await auth.setAccent(name)
 }
 
+/** The language it is read in, which is the same kind of setting. */
+const language = computed(() => auth.language)
+
+async function pickLanguage(tag: string): Promise<void> {
+  error.value = null
+  await auth.setLanguage(tag)
+}
+
 async function save(): Promise<void> {
   error.value = null
   message.value = null
@@ -66,9 +75,9 @@ async function save(): Promise<void> {
       displayName: displayName.value,
       defaultCurrency: defaultCurrency.value,
     })
-    message.value = 'Saved.'
+    message.value = t('Saved.')
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not save your profile.'
+    error.value = caught instanceof Error ? caught.message : t('Could not save your profile.')
   } finally {
     isSaving.value = false
   }
@@ -86,7 +95,7 @@ async function exportData(): Promise<void> {
     link.click()
     URL.revokeObjectURL(url)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not export your data.'
+    error.value = caught instanceof Error ? caught.message : t('Could not export your data.')
   }
 }
 
@@ -102,14 +111,14 @@ async function deleteAccount(): Promise<void> {
     await auth.deleteAccount()
     await router.replace({ name: 'sign-in' })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not delete your account.'
+    error.value = caught instanceof Error ? caught.message : t('Could not delete your account.')
   }
 }
 </script>
 
 <template>
   <AppShell
-    title="Profile"
+    :title="t('Profile')"
     :subtitle="auth.user?.email"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
@@ -117,7 +126,7 @@ async function deleteAccount(): Promise<void> {
   >
     <form class="surface-card mb-4 flex flex-col gap-4 p-4" @submit.prevent="save">
       <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Display name</span>
+        <span class="text-sm text-[var(--text-muted)]">{{ t('Display name') }}</span>
         <input
           v-model="displayName"
           type="text"
@@ -128,8 +137,7 @@ async function deleteAccount(): Promise<void> {
       </label>
 
       <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">
-          Your currency, used for totals across groups
+        <span class="text-sm text-[var(--text-muted)]">{{ t('Your currency, used for totals across groups') }}
         </span>
         <select
           v-model="defaultCurrency"
@@ -148,16 +156,41 @@ async function deleteAccount(): Promise<void> {
     </form>
 
     <section class="surface-card mb-4 p-4">
-      <p class="text-sm">App colour</p>
-      <p class="mb-3 text-xs text-[var(--text-muted)]">
-        Applies everywhere, and follows your account onto any device you sign in on.
+      <p class="text-sm">{{ t('App colour') }}</p>
+      <p class="mb-3 text-xs text-[var(--text-muted)]">{{ t('Applies everywhere, and follows your account onto any device you sign in on.') }}
       </p>
 
-      <AccentChoice :value="accent" label="App colour" @pick="pickAccent" />
+      <AccentChoice :value="accent" :label="t('App colour')" @pick="pickAccent" />
+    </section>
+
+    <section class="surface-card mb-4 p-4">
+      <p class="text-sm">{{ t('Language') }}</p>
+      <p class="mb-3 text-xs text-[var(--text-muted)]">
+        {{ t('Applies to the whole app, and follows your account.') }}
+      </p>
+
+      <!--
+        Each language named in itself, which is how somebody looking for it reads,
+        and applied on the tap like the colour: the screen is the confirmation.
+      -->
+      <div class="flex gap-2">
+        <button
+          v-for="choice in LOCALES"
+          :key="choice.tag"
+          type="button"
+          :data-testid="`language-${choice.tag}`"
+          class="btn btn-press flex-1"
+          :class="language === choice.tag ? 'btn-primary' : 'btn-secondary'"
+          :aria-pressed="language === choice.tag"
+          @click="pickLanguage(choice.tag)"
+        >
+          {{ choice.label }}
+        </button>
+      </div>
     </section>
 
     <section class="surface-card mb-4 flex items-center justify-between p-4">
-      <span class="text-sm">Light mode</span>
+      <span class="text-sm">{{ t('Light mode') }}</span>
       <button
         type="button"
         class="btn btn-press btn-secondary min-h-0 rounded-full px-3 py-1 text-sm"
@@ -171,11 +204,9 @@ async function deleteAccount(): Promise<void> {
     </section>
 
     <section class="surface-card mb-4 flex flex-col gap-3 p-4">
-      <RouterLink :to="{ name: 'import' }" class="btn btn-press btn-secondary w-full justify-start">
-        Import a Settle Up export or a statement
+      <RouterLink :to="{ name: 'import' }" class="btn btn-press btn-secondary w-full justify-start">{{ t('Import a Settle Up export or a statement') }}
       </RouterLink>
-      <RouterLink :to="{ name: 'conflicts' }" class="btn btn-press btn-secondary w-full justify-start">
-        Changes needing attention
+      <RouterLink :to="{ name: 'conflicts' }" class="btn btn-press btn-secondary w-full justify-start">{{ t('Changes needing attention') }}
       </RouterLink>
     </section>
 
@@ -184,8 +215,7 @@ async function deleteAccount(): Promise<void> {
         type="button"
         class="btn btn-press btn-secondary w-full justify-start"
         @click="exportData"
-      >
-        Download all my data
+      >{{ t('Download all my data') }}
       </button>
 
       <!-- Named for what it does to this device, and filled, because as a line of
@@ -195,12 +225,9 @@ async function deleteAccount(): Promise<void> {
         data-testid="disconnect"
         class="btn btn-press btn-secondary w-full justify-start"
         @click="signOut"
-      >
-        Disconnect this device
+      >{{ t('Disconnect this device') }}
       </button>
-      <p class="-mt-1 text-xs text-[var(--text-muted)]">
-        Signs you out here and stops this device reconnecting on its own, so the
-        next start asks for an account. Your data stays on the server.
+      <p class="-mt-1 text-xs text-[var(--text-muted)]">{{ t('Signs you out here and stops this device reconnecting on its own, so the next start asks for an account. Your data stays on the server.') }}
       </p>
 
       <button
@@ -208,14 +235,11 @@ async function deleteAccount(): Promise<void> {
         type="button"
         class="btn btn-press btn-danger w-full justify-start"
         @click="confirmingDelete = true"
-      >
-        Delete my account
+      >{{ t('Delete my account') }}
       </button>
 
       <div v-else class="flex flex-col gap-2">
-        <p class="text-sm text-[var(--text-muted)]">
-          Your name stays on past expenses so other people's balances remain correct, but your
-          account and sign-in are removed. This cannot be undone.
+        <p class="text-sm text-[var(--text-muted)]">{{ t("Your name stays on past expenses so other people's balances remain correct, but your account and sign-in are removed. This cannot be undone.") }}
         </p>
         <div class="flex gap-2">
           <button
@@ -223,15 +247,13 @@ async function deleteAccount(): Promise<void> {
             class="btn btn-press btn-secondary flex-1"
             style="border-color: var(--border)"
             @click="confirmingDelete = false"
-          >
-            Keep my account
+          >{{ t('Keep my account') }}
           </button>
           <button
             type="button"
             class="btn btn-press btn-danger flex-1"
             @click="deleteAccount"
-          >
-            Delete it
+          >{{ t('Delete it') }}
           </button>
         </div>
       </div>
@@ -258,8 +280,7 @@ async function deleteAccount(): Promise<void> {
         style="border-color: var(--border)"
         :disabled="isSaving"
         @click="revert"
-      >
-        Cancel
+      >{{ t('Cancel') }}
       </button>
       <button
         type="button"
@@ -268,7 +289,7 @@ async function deleteAccount(): Promise<void> {
         :disabled="isSaving"
         @click="save"
       >
-        {{ isSaving ? 'Saving' : 'Save changes' }}
+        {{ isSaving ? t('Saving') : t('Save changes') }}
       </button>
     </div>
   </AppShell>

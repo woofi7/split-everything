@@ -1,3 +1,4 @@
+import { intlLocale } from '@/i18n'
 /**
  * The time buckets the stats endpoint hands over, and what to call them.
  *
@@ -63,9 +64,9 @@ export function bucketEnd(bucket: string, granularity: Granularity): Date {
 export function formatBucket(bucket: string, granularity: Granularity): string {
   const date = parseBucket(bucket)
 
-  if (granularity === 'month') return date.toLocaleDateString(undefined, { month: 'long' })
+  if (granularity === 'month') return date.toLocaleDateString(intlLocale.value, { month: 'long' })
 
-  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  return date.toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
 }
 
 /**
@@ -78,7 +79,7 @@ export function formatBucketRange(bucket: string, granularity: Granularity): str
   if (granularity !== 'week') return formatBucket(bucket, granularity)
 
   const from = formatBucket(bucket, 'day')
-  const to = bucketEnd(bucket, 'week').toLocaleDateString(undefined, {
+  const to = bucketEnd(bucket, 'week').toLocaleDateString(intlLocale.value, {
     day: 'numeric',
     month: 'short',
   })

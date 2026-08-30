@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Shouldly;
 using SplitEverything.Infrastructure.Persistence;
-using SplitEverything.Infrastructure.Persistence.Seed;
 using SplitEverything.Tests.Support;
 using Testcontainers.PostgreSql;
 

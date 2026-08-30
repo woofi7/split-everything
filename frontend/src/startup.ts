@@ -92,3 +92,14 @@ export const WEDGED_MESSAGE =
 export const BLOCKED_MESSAGE =
   'It is open in another tab running an older version. Close the other tabs, ' +
   'then reload. On a phone, closing them from the tab switcher is enough.'
+
+/**
+ * What a screen that could not render needs the person to do.
+ *
+ * Reloading is genuinely the cure for most of it, and the report has already gone
+ * to the server, so this asks for nothing else. Named rather than blamed: "an
+ * error occurred" tells somebody holding a phone nothing they can act on.
+ */
+export const RENDER_MESSAGE =
+  'Something on this screen could not be drawn. Reload to carry on. The details ' +
+  'have been sent to the server so this can be fixed.'

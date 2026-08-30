@@ -13,3 +13,14 @@ export function googleClientId(): string {
 export function apiBaseUrl(): string {
   return import.meta.env.VITE_API_BASE_URL ?? '/api'
 }
+
+/**
+ * Which build this is.
+ *
+ * Passed in by the image build as the tag it was cut from, so a crash report from
+ * a phone says which version produced it rather than "the app". Unset in dev,
+ * where the answer is always "whatever is on disk".
+ */
+export function appVersion(): string {
+  return import.meta.env.VITE_APP_VERSION ?? 'dev'
+}

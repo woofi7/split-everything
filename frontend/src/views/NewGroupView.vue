@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -49,7 +50,7 @@ async function save(): Promise<void> {
   error.value = null
 
   if (!name.value.trim()) {
-    error.value = 'Give the group a name.'
+    error.value = t('Give the group a name.')
     return
   }
 
@@ -76,7 +77,7 @@ async function save(): Promise<void> {
 
     await router.replace({ name: 'group', params: { groupId: group.id } })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not create the group.'
+    error.value = caught instanceof Error ? caught.message : t('Could not create the group.')
   } finally {
     isSaving.value = false
   }
@@ -84,16 +85,16 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <AppShell title="New group" :back-to="{ name: 'dashboard' }" back-label="Dashboard">
+  <AppShell :title="t('New group')" :back-to="{ name: 'dashboard' }" :back-label="t('Dashboard')">
     <form class="flex flex-col gap-5" @submit.prevent="save">
       <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Name</span>
+        <span class="text-sm text-[var(--text-muted)]">{{ t('Name') }}</span>
         <input
           v-model="name"
           type="text"
           required
           maxlength="120"
-          placeholder="Roommates"
+          :placeholder="t('Roommates')"
           class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
           style="border-color: var(--border)"
         />
@@ -101,7 +102,7 @@ async function save(): Promise<void> {
 
       <div class="grid grid-cols-2 gap-3">
         <label class="flex flex-col gap-1">
-          <span class="text-sm text-[var(--text-muted)]">Currency</span>
+          <span class="text-sm text-[var(--text-muted)]">{{ t('Currency') }}</span>
           <select
             v-model="baseCurrency"
             class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
@@ -112,7 +113,7 @@ async function save(): Promise<void> {
         </label>
 
         <div class="flex flex-col gap-1">
-          <span class="text-sm text-[var(--text-muted)]">Icon</span>
+          <span class="text-sm text-[var(--text-muted)]">{{ t('Icon') }}</span>
           <button
             type="button"
             class="btn btn-press btn-secondary"
@@ -126,27 +127,25 @@ async function save(): Promise<void> {
             >
               <FontAwesomeIcon :icon="icon.definition" class="h-3.5 w-3.5" />
             </span>
-            {{ iconName ? icon.label : 'Choose' }}
+            {{ iconName ? icon.label : t('Choose') }}
           </button>
         </div>
       </div>
 
       <div class="flex flex-col gap-2">
-        <span class="text-sm text-[var(--text-muted)]">
-          People. Search anyone who already has an account, or invite them once
-          the group exists.
+        <span class="text-sm text-[var(--text-muted)]">{{ t('People. Search anyone who already has an account, or invite them once the group exists.') }}
         </span>
 
         <PersonPicker
           :candidates="addable"
-          label="Add someone to this group"
+          :label="t('Add someone to this group')"
           @pick="addPerson"
         />
 
         <ul
           v-if="chosen.length > 0"
           class="flex flex-wrap gap-2"
-          aria-label="People with an account, added so far"
+          :aria-label="t('People with an account, added so far')"
         >
           <li
             v-for="(person, index) in chosen"
@@ -174,14 +173,14 @@ async function save(): Promise<void> {
         class="btn btn-press btn-primary w-full"
         :disabled="isSaving"
       >
-        {{ isSaving ? 'Creating' : 'Create group' }}
+        {{ isSaving ? t('Creating') : t('Create group') }}
       </button>
     </form>
 
     <IconPicker
       v-model="iconName"
       :open="isPickingIcon"
-      title="Group icon"
+      :title="t('Group icon')"
       @close="isPickingIcon = false"
     />
   </AppShell>

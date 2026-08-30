@@ -203,6 +203,63 @@ describe('ProfileView', () => {
     })
   })
 
+  /**
+   * The language the app is read in.
+   *
+   * On the account like the colour, applied on the tap for the same reason: the
+   * screen is the confirmation, and there is nothing left to preview.
+   */
+  describe('the language', () => {
+    it('offers English and French, each named in itself', async () => {
+      const { wrapper } = await mountView(ProfileView)
+
+      expect(wrapper.find('[data-testid="language-en"]').text()).toBe('English')
+      expect(wrapper.find('[data-testid="language-fr"]').text()).toBe('Francais')
+    })
+
+    it('starts on English', async () => {
+      const { wrapper } = await mountView(ProfileView)
+
+      expect(wrapper.find('[data-testid="language-en"]').attributes('aria-pressed')).toBe('true')
+      expect(wrapper.find('[data-testid="language-fr"]').attributes('aria-pressed')).toBe('false')
+    })
+
+    it('reads in French from the tap, and tells the account', async () => {
+      const api = fakeApi({ '/auth/me': () => ({ ...testUser, locale: 'fr' }) })
+      const { wrapper, auth } = await mountView(ProfileView, { api })
+
+      await wrapper.find('[data-testid="language-fr"]').trigger('click')
+      await settle()
+
+      expect(auth.language).toBe('fr')
+      expect(api.patch).toHaveBeenCalledWith(
+        '/auth/me',
+        expect.objectContaining({ locale: 'fr' }),
+      )
+      // Nothing to save: the whole screen has already changed language.
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
+    })
+
+    it('keeps the language when the account cannot be told', async () => {
+      const api = fakeApi()
+      api.patch.mockRejectedValue(new Error('offline'))
+      const { wrapper, auth } = await mountView(ProfileView, { api })
+
+      await wrapper.find('[data-testid="language-fr"]').trigger('click')
+      await settle()
+
+      expect(auth.language).toBe('fr')
+    })
+
+    it('shows the language the account already reads in', async () => {
+      const { wrapper, auth } = await mountView(ProfileView)
+      auth.user = { ...testUser, locale: 'fr' } as never
+      await settle(1)
+
+      expect(wrapper.find('[data-testid="language-fr"]').attributes('aria-pressed')).toBe('true')
+    })
+  })
+
   it('starts in dark mode, as the spec asks', async () => {
     const { wrapper } = await mountView(ProfileView)
 

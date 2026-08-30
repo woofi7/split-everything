@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -45,9 +46,21 @@ const groupId = computed(() => String(route.params.groupId))
  * being quietly rewritten by opening this screen.
  */
 const SPLIT_CHOICES = [
-  { value: 'Equal' as SplitType, label: 'Equally', hint: 'Everyone taking part pays the same.' },
-  { value: 'Shares' as SplitType, label: 'By shares', hint: 'Two shares against one pays twice as much.' },
-  { value: 'Percentage' as SplitType, label: 'By percentage', hint: 'Has to add up to 100.' },
+  {
+    value: 'Equal' as SplitType,
+    label: t('Equally'),
+    hint: t('Everyone taking part pays the same.'),
+  },
+  {
+    value: 'Shares' as SplitType,
+    label: t('By shares'),
+    hint: t('Two shares against one pays twice as much.'),
+  },
+  {
+    value: 'Percentage' as SplitType,
+    label: t('By percentage'),
+    hint: t('Has to add up to 100.'),
+  },
 ]
 
 const splitType = ref<SplitType>('Equal')
@@ -279,7 +292,7 @@ async function confirmMerge(): Promise<void> {
     isMergeOpen.value = false
     await loadAddable()
   } catch (caught) {
-    mergeError.value = caught instanceof Error ? caught.message : 'Could not merge those two.'
+    mergeError.value = caught instanceof Error ? caught.message : t('Could not merge those two.')
   } finally {
     isMerging.value = false
   }
@@ -380,9 +393,9 @@ async function save(): Promise<void> {
     }
     pendingColours.value = {}
 
-    message.value = 'Saved.'
+    message.value = t('Saved.')
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not save the group.'
+    error.value = caught instanceof Error ? caught.message : t('Could not save the group.')
   } finally {
     isSaving.value = false
   }
@@ -411,7 +424,7 @@ async function addPerson(person: AddableUser): Promise<void> {
     await groups.addUserMember(groupId.value, person.id)
     await loadAddable()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not add that person.'
+    error.value = caught instanceof Error ? caught.message : t('Could not add that person.')
   }
 }
 
@@ -420,7 +433,7 @@ async function removeMember(memberId: string): Promise<void> {
   try {
     await groups.removeMember(groupId.value, memberId)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not remove that person.'
+    error.value = caught instanceof Error ? caught.message : t('Could not remove that person.')
   }
 }
 
@@ -441,7 +454,7 @@ async function createInvite(): Promise<void> {
     const png = await useApi().blob(`/groups/invites/${newInvite.value.id}/qr`, { size: 8 })
     qrUrl.value = URL.createObjectURL(png)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not create an invite.'
+    error.value = caught instanceof Error ? caught.message : t('Could not create an invite.')
   }
 }
 
@@ -453,17 +466,17 @@ async function copyInviteLink(): Promise<void> {
   // happened, so say what is going on and leave the link on screen to select.
   if (!navigator.clipboard) {
     message.value = null
-    error.value = 'Copying needs a secure connection. The link above can be selected instead.'
+    error.value = t('Copying needs a secure connection. The link above can be selected instead.')
     return
   }
 
   try {
     await navigator.clipboard.writeText(newInvite.value.url)
     error.value = null
-    message.value = 'Invite link copied.'
+    message.value = t('Invite link copied.')
   } catch {
     message.value = null
-    error.value = 'Could not copy the link. It can be selected above instead.'
+    error.value = t('Could not copy the link. It can be selected above instead.')
   }
 }
 
@@ -473,7 +486,7 @@ async function archive(): Promise<void> {
     await groups.archive(groupId.value)
     await router.replace({ name: 'dashboard' })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not archive the group.'
+    error.value = caught instanceof Error ? caught.message : t('Could not archive the group.')
   }
 }
 
@@ -482,14 +495,14 @@ async function unarchive(): Promise<void> {
   try {
     await groups.unarchive(groupId.value)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not reopen the group.'
+    error.value = caught instanceof Error ? caught.message : t('Could not reopen the group.')
   }
 }
 </script>
 
 <template>
   <AppShell
-    title="Group settings"
+    :title="t('Group settings')"
     :subtitle="group?.name"
     :back-to="{ name: 'group', params: { groupId } }"
     :back-label="group?.name ?? 'Group'"
@@ -497,7 +510,7 @@ async function unarchive(): Promise<void> {
     <form class="surface-card mb-4 flex flex-col gap-3 p-4" @submit.prevent="save">
       <div class="flex items-end gap-3">
         <div class="flex flex-col gap-1">
-          <span class="text-sm text-[var(--text-muted)]">Icon</span>
+          <span class="text-sm text-[var(--text-muted)]">{{ t('Icon') }}</span>
           <button
             type="button"
             class="tap-target flex h-11 w-11 items-center justify-center rounded-lg text-white"
@@ -511,7 +524,7 @@ async function unarchive(): Promise<void> {
         </div>
 
         <label class="flex flex-1 flex-col gap-1">
-          <span class="text-sm text-[var(--text-muted)]">Name</span>
+          <span class="text-sm text-[var(--text-muted)]">{{ t('Name') }}</span>
           <input
             v-model="name"
             type="text"
@@ -533,11 +546,10 @@ async function unarchive(): Promise<void> {
       adding an expense, which meant you could not see what it was.
     -->
     <section class="surface-card mb-4 p-4">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">
-        How a new expense is split
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('How a new expense is split') }}
       </h2>
 
-      <div class="flex flex-col gap-2" role="radiogroup" aria-label="How a new expense is split">
+      <div class="flex flex-col gap-2" role="radiogroup" :aria-label="t('How a new expense is split')">
         <label
           v-for="choice in SPLIT_CHOICES"
           :key="choice.value"
@@ -602,19 +614,21 @@ async function unarchive(): Promise<void> {
       </ul>
 
       <p v-if="splitNeedsValues" class="mt-2 text-xs text-[var(--text-muted)]">
-        Total {{ splitType === 'Percentage' ? splitTotal.toFixed(2) + '%' : splitTotal + ' shares' }}
+        {{ t('Total') }}
+        {{ splitType === 'Percentage'
+          ? `${splitTotal.toFixed(2)}%`
+          : t('{count} shares', { count: splitTotal }) }}
       </p>
 
       <p v-if="splitProblem" class="mt-2 text-xs text-owing" role="alert">{{ splitProblem }}</p>
 
-      <p v-if="!canAdminister" class="mt-3 text-xs text-[var(--text-muted)]">
-        Only an owner or an admin can change this.
+      <p v-if="!canAdminister" class="mt-3 text-xs text-[var(--text-muted)]">{{ t('Only an owner or an admin can change this.') }}
       </p>
     </section>
 
     <section class="surface-card mb-4 p-4">
       <div class="mb-2 flex items-center justify-between gap-2">
-        <h2 class="text-sm font-medium text-[var(--text-muted)]">People</h2>
+        <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('People') }}</h2>
 
         <!--
           One action for the section, in the corner, where an action about the
@@ -626,8 +640,8 @@ async function unarchive(): Promise<void> {
           data-testid="merge-open"
           class="btn btn-press btn-secondary h-11 w-11 shrink-0 rounded-full px-0"
           style="border-color: var(--border)"
-          aria-label="Merge two people"
-          title="Merge two people"
+          :aria-label="t('Merge two people')"
+          :title="t('Merge two people')"
           @click="openMerge"
         >
           <FontAwesomeIcon :icon="faCodeMerge" class="h-4 w-4" />
@@ -647,8 +661,7 @@ async function unarchive(): Promise<void> {
               data-testid="you-tag"
               class="ml-1 rounded-full px-1.5 py-0.5 align-middle text-[0.65rem] font-semibold uppercase tracking-wide"
               style="background: var(--surface-sunken); color: var(--text-muted)"
-            >
-              You
+            >{{ t('You') }}
             </span>
             <!--
               Who can change the group, and the one person no merge or removal can
@@ -660,8 +673,7 @@ async function unarchive(): Promise<void> {
               data-testid="owner-tag"
               class="ml-1 rounded-full px-1.5 py-0.5 align-middle text-[0.65rem] font-semibold uppercase tracking-wide"
               style="background: color-mix(in oklab, var(--color-brand-600) 22%, transparent); color: var(--color-brand-400)"
-            >
-              Owner
+            >{{ t('Owner') }}
             </span>
             <!--
               Only while they are still in the group. Saying someone has not signed
@@ -700,8 +712,7 @@ async function unarchive(): Promise<void> {
               type="button"
               class="text-xs text-[var(--text-muted)] underline"
               @click="removeMember(member.id)"
-            >
-              Remove
+            >{{ t('Remove') }}
             </button>
           </span>
         </li>
@@ -713,9 +724,7 @@ async function unarchive(): Promise<void> {
             :label="'Colour'"
             @pick="(colour) => pickColour(colouring!, colour)"
           />
-          <p class="mt-1 text-xs text-[var(--text-muted)]">
-            Taking a colour someone else has swaps the two, so nobody ends up
-            without one.
+          <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('Taking a colour someone else has swaps the two, so nobody ends up without one.') }}
           </p>
         </li>
       </ul>
@@ -731,22 +740,20 @@ async function unarchive(): Promise<void> {
         class="mb-3 flex flex-col gap-3 rounded-lg border p-3"
         style="border-color: var(--color-owing)"
         role="alertdialog"
-        aria-label="Merge two people"
+        :aria-label="t('Merge two people')"
       >
-        <p class="text-sm text-[var(--text-muted)]">
-          For one person who ended up in this group twice. Everything the first
-          paid, owes and is owed moves to the second, and the first is removed.
+        <p class="text-sm text-[var(--text-muted)]">{{ t('For one person who ended up in this group twice. Everything the first paid, owes and is owed moves to the second, and the first is removed.') }}
         </p>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Merge this person</span>
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Merge this person') }}</span>
           <select
             v-model="mergeSource"
             data-testid="merge-source"
             class="tap-target rounded-lg border bg-[var(--surface)] px-3"
             style="border-color: var(--border)"
           >
-            <option value="" disabled>Choose who goes</option>
+            <option value="" disabled>{{ t('Choose who goes') }}</option>
             <option v-for="person in mergeSources" :key="person.id" :value="person.id">
               {{ labelFor(person) }}
             </option>
@@ -754,14 +761,14 @@ async function unarchive(): Promise<void> {
         </label>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">Into this person</span>
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Into this person') }}</span>
           <select
             v-model="mergeTarget"
             data-testid="merge-target"
             class="tap-target rounded-lg border bg-[var(--surface)] px-3"
             style="border-color: var(--border)"
           >
-            <option value="" disabled>Choose who stays</option>
+            <option value="" disabled>{{ t('Choose who stays') }}</option>
             <option v-for="person in mergeTargets" :key="person.id" :value="person.id">
               {{ labelFor(person) }}
             </option>
@@ -773,8 +780,7 @@ async function unarchive(): Promise<void> {
           and are owed becomes {{ nameOf(mergeTarget) }}'s. This cannot be undone:
           there is no record of which expenses moved.
         </p>
-        <p v-else class="text-xs text-[var(--text-muted)]">
-          Choose both. This cannot be undone.
+        <p v-else class="text-xs text-[var(--text-muted)]">{{ t('Choose both. This cannot be undone.') }}
         </p>
 
         <p v-if="mergeError" class="text-sm text-owing" role="alert">{{ mergeError }}</p>
@@ -785,8 +791,7 @@ async function unarchive(): Promise<void> {
             class="btn btn-press btn-secondary flex-1"
             style="border-color: var(--border)"
             @click="isMergeOpen = false"
-          >
-            Cancel
+          >{{ t('Cancel') }}
           </button>
           <button
             type="button"
@@ -795,29 +800,28 @@ async function unarchive(): Promise<void> {
             :disabled="!isMergeReady || isMerging"
             @click="confirmMerge"
           >
-            {{ isMerging ? 'Merging' : 'Merge for good' }}
+            {{ isMerging ? t('Merging') : t('Merge for good') }}
           </button>
         </div>
       </div>
 
       <PersonPicker
         :candidates="addable"
-        label="Add someone to this group"
+        :label="t('Add someone to this group')"
         @pick="addPerson"
       />
     </section>
 
     <section class="surface-card mb-4 p-4">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">Invite someone</h2>
-      <p class="mb-3 text-xs text-[var(--text-muted)]">
-        They sign in with Google to join, so the link alone gives no access.
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Invite someone') }}</h2>
+      <p class="mb-3 text-xs text-[var(--text-muted)]">{{ t('They sign in with Google to join, so the link alone gives no access.') }}
       </p>
 
       <div class="flex gap-2">
         <input
           v-model="inviteEmail"
           type="email"
-          placeholder="Email, or leave blank for a link"
+          :placeholder="t('Email, or leave blank for a link')"
           class="tap-target flex-1 rounded-lg border bg-[var(--surface)] px-3 text-sm"
           style="border-color: var(--border)"
         />
@@ -825,8 +829,7 @@ async function unarchive(): Promise<void> {
           type="button"
           class="btn btn-press btn-primary"
           @click="createInvite"
-        >
-          Invite
+        >{{ t('Invite') }}
         </button>
       </div>
 
@@ -843,8 +846,7 @@ async function unarchive(): Promise<void> {
           class="btn btn-press btn-secondary"
           style="border-color: var(--border)"
           @click="copyInviteLink"
-        >
-          Copy the invite link
+        >{{ t('Copy the invite link') }}
         </button>
       </div>
     </section>
@@ -855,21 +857,18 @@ async function unarchive(): Promise<void> {
         type="button"
         class="btn btn-press btn-secondary w-full justify-start"
         @click="archive"
-      >
-        Archive this group
+      >{{ t('Archive this group') }}
       </button>
-      <button v-else type="button" class="btn btn-press btn-secondary w-full justify-start" @click="unarchive">
-        Reopen this group
+      <button v-else type="button" class="btn btn-press btn-secondary w-full justify-start" @click="unarchive">{{ t('Reopen this group') }}
       </button>
-      <p class="text-xs text-[var(--text-muted)]">
-        Archiving freezes a group without deleting anything. Balances and history stay readable.
+      <p class="text-xs text-[var(--text-muted)]">{{ t('Archiving freezes a group without deleting anything. Balances and history stay readable.') }}
       </p>
     </section>
 
     <IconPicker
       :open="isPickingIcon"
       :model-value="iconName"
-      title="Group icon"
+      :title="t('Group icon')"
       @update:model-value="chooseIcon"
       @close="isPickingIcon = false"
     />
@@ -898,8 +897,7 @@ async function unarchive(): Promise<void> {
         style="border-color: var(--border)"
         :disabled="isSaving"
         @click="revert"
-      >
-        Cancel
+      >{{ t('Cancel') }}
       </button>
       <button
         type="button"
@@ -908,7 +906,7 @@ async function unarchive(): Promise<void> {
         :disabled="isSaving || splitProblem !== null"
         @click="save"
       >
-        {{ isSaving ? 'Saving' : 'Save changes' }}
+        {{ isSaving ? t('Saving') : t('Save changes') }}
       </button>
     </div>
   </AppShell>

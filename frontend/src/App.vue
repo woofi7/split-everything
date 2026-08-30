@@ -5,8 +5,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
 import { useGroupsStore } from '@/stores/groups'
 import NavigationProgress from '@/components/ui/NavigationProgress.vue'
+import UpdatePrompt from '@/components/ui/UpdatePrompt.vue'
 import { isNavigating } from '@/router'
 import { accentVariables } from '@/domain/themes'
+import { setLocale } from '@/i18n'
 
 const auth = useAuthStore()
 const expenses = useExpensesStore()
@@ -20,6 +22,11 @@ watchEffect(() => {
   const root = document.documentElement
   root.dataset.theme = auth.theme
   root.dataset.accent = auth.accent.name
+
+  // The language too, which also belongs on the element: a screen reader and a
+  // spell checker both read lang, and nothing else in the app would tell them.
+  setLocale(auth.language)
+  root.lang = auth.language
 
   for (const [token, value] of Object.entries(accentVariables(auth.accent))) {
     root.style.setProperty(token, value)
@@ -54,4 +61,7 @@ async function safeSync(): Promise<void> {
 <template>
   <NavigationProgress :active="isNavigating" />
   <RouterView />
+  <!-- A new build waits for a page to be closed, and on a phone that never
+       happens. This asks instead. -->
+  <UpdatePrompt />
 </template>

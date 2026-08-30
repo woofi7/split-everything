@@ -17,7 +17,7 @@ namespace SplitEverything.Tests.Application;
 ///
 /// Derived from the member id before, which meant every screen computed it from
 /// whatever list it happened to have, and they disagreed. Stored, a group can also
-/// change it, and a person can say which colour they would like: a wish rather
+/// change it. It belongs to the group rather than to the person: a wish rather
 /// than a guarantee, because two people the same colour in one group defeats the
 /// point of having colours at all.
 /// </summary>
@@ -53,24 +53,12 @@ public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture
     }
 
     [Fact]
-    public void The_palette_gives_out_a_preferred_colour_that_is_free()
-        => MemberPalette.Assign(Second, [First]).ShouldBe(Second);
+    public void The_palette_gives_out_the_first_free_colour()
+        => MemberPalette.Assign([First]).ShouldBe(Second);
 
     [Fact]
-    public void The_palette_gives_out_the_first_free_colour_when_the_wish_is_taken()
-        => MemberPalette.Assign(First, [First]).ShouldBe(Second);
-
-    [Fact]
-    public void The_palette_ignores_a_colour_it_does_not_know()
-        // Anything else and a group could store a value nothing knows how to draw.
-        => MemberPalette.Assign("#123456", []).ShouldBe(First);
-
-    [Fact]
-    public void The_palette_matches_a_colour_whatever_its_case()
-    {
-        MemberPalette.Assign(Second.ToUpperInvariant(), []).ShouldBe(Second);
-        MemberPalette.Assign(null, [Second.ToUpperInvariant()]).ShouldBe(First);
-    }
+    public void The_palette_matches_a_taken_colour_whatever_its_case()
+        => MemberPalette.Assign([Second.ToUpperInvariant()]).ShouldBe(First);
 
     [Fact]
     public void The_palette_repeats_rather_than_refusing_when_it_runs_out()
@@ -79,9 +67,16 @@ public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture
         // colour at all would be worse than a repeat.
         var everything = MemberPalette.Colors.ToList();
 
-        MemberPalette.Colors.ShouldContain(MemberPalette.Assign(null, everything));
-        // Their own wish, so at least the repeat is the one they asked for.
-        MemberPalette.Assign(Second, everything).ShouldBe(Second);
+        MemberPalette.Colors.ShouldContain(MemberPalette.Assign(everything));
+    }
+
+    [Fact]
+    public void The_palette_knows_its_own_colours()
+    {
+        MemberPalette.IsKnown(First).ShouldBeTrue();
+        MemberPalette.IsKnown(First.ToUpperInvariant()).ShouldBeTrue();
+        MemberPalette.IsKnown("#123456").ShouldBeFalse();
+        MemberPalette.IsKnown(null).ShouldBeFalse();
     }
 
     [Fact]
@@ -97,76 +92,20 @@ public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture
     }
 
     [Fact]
-    public async Task The_owner_gets_the_colour_they_asked_for()
-    {
-        var user = await TestData.SeedUserAsync(Db);
-        await Auth.UpdateProfileAsync(user.Id,
-            new UpdateProfileRequest(null, null, null, null, Second));
-
-        var group = await Groups.CreateAsync(user.Id, new CreateGroupRequest(
-            "Roommates", "CAD", null, null, null, null));
-
-        group.Members.Single().ColorHex.ShouldBe(Second);
-    }
-
-    [Fact]
-    public async Task Someone_joining_gets_the_colour_they_asked_for_when_it_is_free()
+    public async Task Someone_joining_gets_a_colour_nobody_there_has()
     {
         var owner = await TestData.SeedUserAsync(Db);
         var group = await Groups.CreateAsync(owner.Id,
             new CreateGroupRequest("Roommates", "CAD", null, null, null, null));
+        var taken = group.Members.Single().ColorHex;
 
         var joiner = await TestData.SeedUserAsync(Db, "Bob", "bob@example.com", "google-bob");
-        var free = MemberPalette.Colors.First(colour => colour != group.Members.Single().ColorHex);
-        await Auth.UpdateProfileAsync(joiner.Id,
-            new UpdateProfileRequest(null, null, null, null, free));
-
         var added = await Groups.AddUserMemberAsync(owner.Id, group.Id,
             new AddUserMemberRequest(joiner.Id));
 
-        added.ColorHex.ShouldBe(free);
-    }
-
-    [Fact]
-    public async Task Someone_joining_gets_another_colour_when_theirs_is_taken()
-    {
-        var owner = await TestData.SeedUserAsync(Db);
-        await Auth.UpdateProfileAsync(owner.Id,
-            new UpdateProfileRequest(null, null, null, null, First));
-        var group = await Groups.CreateAsync(owner.Id,
-            new CreateGroupRequest("Roommates", "CAD", null, null, null, null));
-
-        var joiner = await TestData.SeedUserAsync(Db, "Bob", "bob@example.com", "google-bob");
-        await Auth.UpdateProfileAsync(joiner.Id,
-            new UpdateProfileRequest(null, null, null, null, First));
-
-        var added = await Groups.AddUserMemberAsync(owner.Id, group.Id,
-            new AddUserMemberRequest(joiner.Id));
-
-        // The wish loses to the group, because two the same defeats the purpose.
-        added.ColorHex.ShouldNotBe(First);
+        // Two people the same colour in one group defeats the point of having them.
         added.ColorHex.ShouldNotBeNull();
-    }
-
-    [Fact]
-    public async Task A_profile_refuses_a_colour_outside_the_palette()
-    {
-        var user = await TestData.SeedUserAsync(Db);
-
-        await Should.ThrowAsync<ValidationException>(() => Auth.UpdateProfileAsync(
-            user.Id, new UpdateProfileRequest(null, null, null, null, "#abcdef")));
-    }
-
-    [Fact]
-    public async Task A_profile_colour_can_be_cleared()
-    {
-        var user = await TestData.SeedUserAsync(Db);
-        await Auth.UpdateProfileAsync(user.Id, new UpdateProfileRequest(null, null, null, null, Second));
-
-        var cleared = await Auth.UpdateProfileAsync(user.Id,
-            new UpdateProfileRequest(null, null, null, null, ""));
-
-        cleared.PreferredColorHex.ShouldBeNull();
+        added.ColorHex.ShouldNotBe(taken);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
@@ -22,28 +23,28 @@ import { RouterLink, useRoute } from 'vue-router'
 const tabs = [
   {
     name: 'dashboard',
-    label: 'Dashboard',
+    label: t('Dashboard'),
     to: { name: 'dashboard' },
     owns: ['dashboard', 'group'],
     icon: 'M4 6h16M4 12h16M4 18h10',
   },
   {
     name: 'activity',
-    label: 'Activity',
+    label: t('Activity'),
     to: { name: 'activity' },
     owns: ['activity'],
     icon: 'M12 8v4l3 2M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0',
   },
   {
     name: 'stats',
-    label: 'Stats',
+    label: t('Stats'),
     to: { name: 'stats' },
     owns: ['stats'],
     icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   },
   {
     name: 'profile',
-    label: 'Profile',
+    label: t('Profile'),
     to: { name: 'profile' },
     owns: ['profile'],
     icon: 'M5 20a7 7 0 0 1 14 0M12 3a4 4 0 1 1 0 8a4 4 0 0 1 0-8',
@@ -70,7 +71,7 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
   <nav
     class="relative z-30 shrink-0 overflow-visible border-t bg-[var(--surface-raised)] pb-[env(safe-area-inset-bottom)]"
     style="border-color: var(--border)"
-    aria-label="Main"
+    :aria-label="t('Main')"
   >
     <ul class="mx-auto grid max-w-2xl grid-cols-5 items-end">
       <li v-for="tab in tabs.slice(0, 2)" :key="tab.name" class="contents">
@@ -100,7 +101,7 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
         <RouterLink
           :to="{ name: 'add-expense' }"
           class="tap-target -mt-8 flex h-16 w-16 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/40 transition-transform active:scale-95"
-          aria-label="Add an expense"
+          :aria-label="t('Add an expense')"
         >
           <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
             <path d="M12 5v14M5 12h14" stroke-linecap="round" />

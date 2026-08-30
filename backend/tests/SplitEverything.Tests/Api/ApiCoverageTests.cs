@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Shouldly;
 using SplitEverything.Application.Contracts.Auth;
+using SplitEverything.Application.Contracts.Diagnostics;
 using SplitEverything.Application.Contracts.Expenses;
 using SplitEverything.Application.Contracts.Groups;
 using SplitEverything.Application.Contracts.Import;
@@ -373,5 +374,35 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
             new CreateGroupRequest(name, "CAD", null, null, null, placeholders), Json);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<GroupDto>(Json))!;
+    }
+
+    [Fact]
+    public async Task A_client_error_is_taken_without_a_session()
+    {
+        var anonymous = Factory.CreateClient();
+
+        var response = await anonymous.PostAsJsonAsync("/api/diagnostics/client-error",
+            new ClientErrorReport(
+                "TypeError: cannot read properties of undefined",
+                "group",
+                "render",
+                "at DashboardView.vue:120",
+                "device-1",
+                "1.2.3"),
+            Json);
+
+        // The errors worth reading most are the ones that happen instead of signing
+        // in, and a client that is already broken must not have to deal with a
+        // response either.
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task An_empty_client_error_is_dropped_rather_than_logged()
+    {
+        var response = await Client.PostAsJsonAsync("/api/diagnostics/client-error",
+            new ClientErrorReport(string.Empty), Json);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 }

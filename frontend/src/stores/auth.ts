@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { ApiError, type ApiClient } from '@/api/client'
 import { resetDatabase, rotateDeviceId } from '@/offline/db'
 import { findAccent, resolveAccent, type AccentTheme } from '@/domain/themes'
+import { resolveLocale, type Locale } from '@/i18n'
 
 export interface AuthenticatedUser {
   id: string
@@ -11,10 +12,10 @@ export interface AuthenticatedUser {
   avatarUrl: string | null
   defaultCurrency: string
   prefersLightTheme: boolean
-  /** The colour they would like in the groups they join, if they have said. */
-  preferredColorHex?: string | null
   /** The accent the whole application wears for them, if they have said. */
   themeName?: string | null
+  /** Which language they read the app in: en or fr. */
+  locale?: string | null
 }
 
 export interface AuthTokens {
@@ -91,6 +92,38 @@ export const useAuthStore = defineStore('auth', () => {
    * session, so it comes back with it.
    */
   const accent = computed<AccentTheme>(() => resolveAccent(user.value?.themeName))
+
+  /**
+   * The language the app is read in.
+   *
+   * From the account, like the accent: somebody who picks a language means it on
+   * every device they sign in on, and it is right on the first paint because the
+   * session is mirrored into storage.
+   */
+  const language = computed<Locale>(() => resolveLocale(user.value?.locale))
+
+  /**
+   * Reads the app in another language.
+   *
+   * Applied here and then sent, like the accent. A screen that has already changed
+   * language has nothing to wait for, and a server that cannot be told leaves the
+   * choice standing rather than snapping back mid-sentence.
+   */
+  async function setLanguage(tag: string): Promise<void> {
+    const next = resolveLocale(tag)
+    if (!user.value) return
+
+    user.value = { ...user.value, locale: next }
+    persist()
+
+    if (!api) return
+
+    try {
+      await updateProfile({ locale: next })
+    } catch {
+      // The language is already on; agreeing with the server is a nicety.
+    }
+  }
 
   function attachApi(client: ApiClient): void {
     api = client
@@ -378,9 +411,9 @@ export const useAuthStore = defineStore('auth', () => {
     displayName?: string
     defaultCurrency?: string
     prefersLightTheme?: boolean
-    // An empty string clears it, as the API reads null as "not supplied".
-    preferredColorHex?: string | null
     themeName?: string
+    // An empty string puts it back to English, as the API reads null as
+    // "not supplied".
     locale?: string
   }): Promise<void> {
     const updated = await requireApi().patch<AuthenticatedUser>('/auth/me', changes)
@@ -482,6 +515,7 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     theme,
     accent,
+    language,
     rememberedAccount,
     resumeSession,
     forgetDevice,
@@ -495,6 +529,7 @@ export const useAuthStore = defineStore('auth', () => {
     updateProfile,
     setTheme,
     setAccent,
+    setLanguage,
     deleteAccount,
   }
 })

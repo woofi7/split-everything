@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, ref } from 'vue'
 import { formatMoney } from '@/domain/money'
 
@@ -130,8 +131,7 @@ const description = computed(() =>
         <slot name="heading" />
       </p>
 
-      <p v-if="wedges.length === 0" class="text-sm text-[var(--text-muted)]">
-        Nothing spent yet.
+      <p v-if="wedges.length === 0" class="text-sm text-[var(--text-muted)]">{{ t('Nothing spent yet.') }}
       </p>
 
       <ul v-else class="flex min-w-0 flex-col gap-1 text-sm">
@@ -174,16 +174,25 @@ const description = computed(() =>
       </ul>
     </div>
 
+    <!--
+      A group rather than an image, because the wedges inside it can be pressed:
+      role="img" tells a screen reader to treat everything inside as one picture
+      and hides them. The name still describes the whole chart, and each wedge
+      carries its own.
+    -->
     <svg
       v-if="wedges.length > 0"
       viewBox="0 0 140 140"
       class="h-32 w-32 shrink-0"
-      role="img"
+      role="group"
       :aria-label="`Spending by group: ${description}`"
     >
       <circle
         v-if="single"
         data-testid="whole"
+        role="button"
+        tabindex="-1"
+        :aria-label="`${single.label}: ${formatMoney(single.amount, props.currency)}, 100%`"
         :cx="CENTRE"
         :cy="CENTRE"
         :r="RADIUS"
@@ -201,6 +210,9 @@ const description = computed(() =>
         v-for="wedge in single ? [] : wedges"
         :key="wedge.id"
         data-testid="wedge"
+        role="button"
+        tabindex="-1"
+        :aria-label="`${wedge.label}: ${formatMoney(wedge.amount, props.currency)}, ${percent(wedge.share)}`"
         :d="wedge.path"
         :fill="wedge.colorHex"
         :opacity="selectedId && selectedId !== wedge.id ? 0.35 : 1"

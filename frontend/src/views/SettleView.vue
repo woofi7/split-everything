@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -56,7 +57,7 @@ async function save(): Promise<void> {
 
     await router.replace({ name: 'group', params: { groupId: groupId.value } })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Could not record the settlement.'
+    error.value = caught instanceof Error ? caught.message : t('Could not record the settlement.')
   } finally {
     isSaving.value = false
   }
@@ -65,13 +66,13 @@ async function save(): Promise<void> {
 
 <template>
   <AppShell
-    title="Settle up"
+    :title="t('Settle up')"
     :subtitle="group?.name"
     :back-to="{ name: 'group', params: { groupId } }"
     :back-label="group?.name ?? 'Group'"
   >
     <section v-if="plan.length > 0" class="surface-card mb-5 p-4">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">Suggested transfers</h2>
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Suggested transfers') }}</h2>
       <ul class="flex flex-col gap-2 text-sm">
         <li
           v-for="transfer in plan"
@@ -86,8 +87,7 @@ async function save(): Promise<void> {
             class="btn btn-press btn-secondary shrink-0 min-h-0 px-2 py-1 text-xs"
             style="border-color: var(--border)"
             @click="usePlan(transfer)"
-          >
-            Use
+          >{{ t('Use') }}
             <MoneyAmount :amount="transfer.amount" :currency="currency" size="sm" />
           </button>
         </li>
@@ -96,7 +96,7 @@ async function save(): Promise<void> {
 
     <form class="flex flex-col gap-5" @submit.prevent="save">
       <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Who paid</span>
+        <span class="text-sm text-[var(--text-muted)]">{{ t('Who paid') }}</span>
         <select
           v-model="fromMemberId"
           class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
@@ -109,7 +109,7 @@ async function save(): Promise<void> {
       </label>
 
       <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Who received it</span>
+        <span class="text-sm text-[var(--text-muted)]">{{ t('Who received it') }}</span>
         <select
           v-model="toMemberId"
           class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
@@ -134,12 +134,12 @@ async function save(): Promise<void> {
       </label>
 
       <label class="flex flex-col gap-1">
-        <span class="text-sm text-[var(--text-muted)]">Note</span>
+        <span class="text-sm text-[var(--text-muted)]">{{ t('Note') }}</span>
         <input
           v-model="note"
           type="text"
           maxlength="1000"
-          placeholder="Etransfer"
+          :placeholder="t('Etransfer')"
           class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
           style="border-color: var(--border)"
         />
@@ -152,7 +152,7 @@ async function save(): Promise<void> {
         class="btn btn-press btn-primary w-full"
         :disabled="isSaving || amount <= 0"
       >
-        {{ isSaving ? 'Recording' : 'Record settlement' }}
+        {{ isSaving ? t('Recording') : t('Record settlement') }}
       </button>
     </form>
   </AppShell>

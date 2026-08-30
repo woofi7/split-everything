@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -72,15 +73,14 @@ function choose(groupId: string): void {
         ref="dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Choose the group the app is on"
+        :aria-label="t('Choose the group the app is on')"
         tabindex="-1"
         class="flex max-h-[85vh] w-full max-w-md flex-col rounded-t-2xl bg-[var(--surface-raised)] outline-none sm:rounded-2xl"
         @keydown.esc.prevent="emit('close')"
       >
         <div class="flex items-baseline justify-between gap-3 border-b p-4" style="border-color: var(--border)">
-          <h2 class="text-base font-semibold">Your groups</h2>
-          <button type="button" class="btn btn-press btn-quiet min-h-0 px-2 py-1 text-xs" @click="emit('close')">
-            Close
+          <h2 class="text-base font-semibold">{{ t('Your groups') }}</h2>
+          <button type="button" class="btn btn-press btn-quiet min-h-0 px-2 py-1 text-xs" @click="emit('close')">{{ t('Close') }}
           </button>
         </div>
 
@@ -119,7 +119,7 @@ function choose(groupId: string): void {
           </li>
 
           <li v-if="archived.length > 0" class="px-3 pt-3 pb-1">
-            <span class="text-xs text-[var(--text-muted)]">Archived</span>
+            <span class="text-xs text-[var(--text-muted)]">{{ t('Archived') }}</span>
           </li>
           <li v-for="group in archived" :key="group.id">
             <button
@@ -139,8 +139,7 @@ function choose(groupId: string): void {
             :to="{ name: 'new-group' }"
             class="btn btn-press btn-primary w-full"
             @click="emit('close')"
-          >
-            New group
+          >{{ t('New group') }}
           </RouterLink>
         </div>
       </div>
