@@ -5,6 +5,7 @@ import SettleUpWizard from '@/components/import/SettleUpWizard.vue'
 import { setApiClient } from '@/api/provider'
 import type { ApiClient } from '@/api/client'
 import { useGroupsStore } from '@/stores/groups'
+import { useAuthStore } from '@/stores/auth'
 import { resetDatabase } from '@/offline/db'
 
 /**
@@ -492,6 +493,66 @@ describe('SettleUpWizard', () => {
     // group, the other has to be made a member as the import runs.
     expect(request.memberUserMapping.Emma).toBe('user-7')
     expect(request.memberNameMapping.Emma).toBeNull()
+  })
+
+  it('offers you, whom the addable list leaves out', async () => {
+    // That endpoint answers "who could I add to this group", which never includes
+    // you. This question is "who is this name in the export", which very often is
+    // you: your own name is in the file.
+    client.get = vi.fn(async () => []) as never
+
+    const auth = useAuthStore()
+    auth.user = {
+      id: 'user-me',
+      email: 'me@example.com',
+      displayName: 'Nicolas',
+      avatarUrl: null,
+      defaultCurrency: 'CAD',
+      prefersLightTheme: false,
+    } as never
+
+    const wrapper = mountWizard()
+    await choose(wrapper)
+
+    const options = wrapper
+      .findAll('[data-testid="name-map"]')[0]
+      .findAll('option')
+      .map((option) => option.text())
+
+    expect(options).toContain('Nicolas (me@example.com) - you')
+  })
+
+  it('says which account is yours, and puts it first', async () => {
+    client.get = vi.fn(async (path: string) =>
+      path.startsWith('/users/addable')
+        ? [
+            { id: 'user-7', displayName: 'Emma', email: 'emma@example.com', avatarUrl: null },
+            { id: 'user-1', displayName: 'Alice', email: 'alice@example.com', avatarUrl: null },
+          ]
+        : []) as never
+
+    const auth = useAuthStore()
+    auth.user = {
+      id: 'user-1',
+      email: 'alice@example.com',
+      displayName: 'Alice',
+      avatarUrl: null,
+      defaultCurrency: 'CAD',
+      prefersLightTheme: false,
+    } as never
+
+    const wrapper = mountWizard()
+    await choose(wrapper)
+
+    const options = wrapper
+      .findAll('[data-testid="name-map"]')[0]
+      .findAll('option')
+      .map((option) => option.text())
+
+    // One of these names is almost always yours, in a list of a dozen accounts
+    // where two are called Alice.
+    expect(options[1]).toBe('Alice (alice@example.com) - you')
+    expect(options[2]).toBe('Emma (emma@example.com)')
   })
 
   it('offers everyone with an account, not only the group members', async () => {

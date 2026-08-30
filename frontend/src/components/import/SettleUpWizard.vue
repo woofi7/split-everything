@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
+import { useAuthStore } from '@/stores/auth'
 import type { AddableUser } from '@/api/types'
 
 /**
@@ -21,6 +22,14 @@ import type { AddableUser } from '@/api/types'
 const emit = defineEmits<{
   imported: [result: { groupId: string; createdExpenses: number; createdSettlements: number }]
   cancel: []
+  /**
+   * Whether this importer has a file in hand.
+   *
+   * The screen offers two ways in, and once one is being used the other is a
+   * second question nobody asked. Reported rather than inferred, because the file
+   * lives in here.
+   */
+  active: [value: boolean]
 }>()
 
 interface Analysis {
@@ -65,6 +74,7 @@ interface CommitResult {
 }
 
 const groups = useGroupsStore()
+const auth = useAuthStore()
 
 const file = ref<File | null>(null)
 const analysis = ref<Analysis | null>(null)
@@ -128,8 +138,38 @@ const members = computed(() => {
  */
 const otherAccounts = computed(() => {
   const taken = new Set(members.value.map((member) => member.userId).filter(Boolean))
-  return accounts.value.filter((person) => !taken.has(person.id))
+  const offered = accounts.value.filter((person) => !taken.has(person.id))
+
+  // Yourself, added here rather than by the server. That list answers "who could
+  // I add to this group", which you are not, and this question is "who is this
+  // name in the export", which you very often are: your own name is in the file.
+  const me = auth.user
+  if (me && !taken.has(me.id) && !offered.some((person) => person.id === me.id)) {
+    offered.unshift({
+      id: me.id,
+      displayName: me.displayName,
+      email: me.email,
+      avatarUrl: me.avatarUrl ?? null,
+    })
+  }
+
+  // Yourself first. One of these names is almost always yours, and this list runs
+  // to a dozen accounts with two Alices and two Nicolases in it.
+  return offered.sort((left, right) =>
+    Number(right.id === auth.user?.id) - Number(left.id === auth.user?.id),
+  )
 })
+
+/**
+ * How an account reads in the list.
+ *
+ * The email is there because two accounts are called Alice and two are called
+ * Nicolas, and the note is there because one of them is the person reading it.
+ */
+function accountLabel(person: { id: string; displayName: string; email: string }): string {
+  const mine = person.id === auth.user?.id ? ' - you' : ''
+  return `${person.displayName} (${person.email})${mine}`
+}
 
 /** Split back into the two shapes the API takes. */
 function memberMappingForRequest(): Record<string, string | null> {
@@ -154,6 +194,7 @@ const toImport = computed(() =>
 )
 
 function reset(): void {
+  emit('active', false)
   file.value = null
   analysis.value = null
   preview.value = null
@@ -178,6 +219,7 @@ async function onFile(event: Event): Promise<void> {
     // The file name is the group name in every export the app produces.
     newGroupName.value = chosen.name.replace(/\.csv$/i, '').trim()
     existingGroupId.value = groups.visibleGroups[0]?.id ?? ''
+    emit('active', true)
     nameMapping.value = Object.fromEntries(result.detectedMemberNames.map((name) => [name, null]))
 
     // Everybody here, so a name from the export can be bound to the real person.
@@ -437,7 +479,7 @@ const dateOf = (value: string | null) =>
                 :key="person.id"
                 :value="`user:${person.id}`"
               >
-                {{ person.displayName }} ({{ person.email }})
+                {{ accountLabel(person) }}
               </option>
             </optgroup>
           </select>
