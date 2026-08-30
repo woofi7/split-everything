@@ -160,6 +160,26 @@ export interface MetaRow {
   value: string
 }
 
+/**
+ * One line of the activity feed, kept so the screen has something to show offline.
+ *
+ * The server composes these sentences - who did what to which expense, in words -
+ * so they cannot be worked out from the local rows the way the stats can. They are
+ * stored as they arrive instead, and the feed reads from here first.
+ */
+export interface LocalActivity {
+  id: number
+  groupId: string | null
+  groupName: string | null
+  kind: string
+  actorMemberId: string | null
+  actorName: string | null
+  subjectType: string | null
+  subjectId: string | null
+  summary: string
+  occurredAt: string
+}
+
 export class SplitEverythingDb extends Dexie {
   groups!: Table<LocalGroup, string>
   expenses!: Table<LocalExpense, string>
@@ -167,6 +187,7 @@ export class SplitEverythingDb extends Dexie {
   comments!: Table<LocalComment, string>
   outbox!: Table<OutboxOperation, string>
   conflicts!: Table<LocalConflict, string>
+  activity!: Table<LocalActivity, number>
   meta!: Table<MetaRow, string>
 
   constructor() {
@@ -193,6 +214,12 @@ export class SplitEverythingDb extends Dexie {
     this.version(2).stores({
       expenses: 'id, groupId, spentAt, [groupId+spentAt], paidByMemberId, pending',
       categories: null,
+    })
+
+    // The activity feed, kept for offline. The server writes these sentences, so
+    // unlike everything else here they cannot be recomputed from local rows.
+    this.version(3).stores({
+      activity: 'id, groupId, occurredAt, [groupId+occurredAt]',
     })
   }
 }
@@ -317,6 +344,7 @@ export async function clearReplica(): Promise<void> {
     db.comments.clear(),
     db.outbox.clear(),
     db.conflicts.clear(),
+    db.activity.clear(),
   ])
 
   // Cursors, but not the device id: asking from zero is the point.
@@ -335,6 +363,7 @@ export async function resetDatabase(): Promise<void> {
     db.comments.clear(),
     db.outbox.clear(),
     db.conflicts.clear(),
+    db.activity.clear(),
     db.meta.clear(),
   ])
 }

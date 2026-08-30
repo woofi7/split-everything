@@ -103,3 +103,15 @@ export const BLOCKED_MESSAGE =
 export const RENDER_MESSAGE =
   'Something on this screen could not be drawn. Reload to carry on. The details ' +
   'have been sent to the server so this can be fixed.'
+
+/**
+ * A screen whose code could not be fetched.
+ *
+ * Almost always a connection that went away before the app had loaded that screen
+ * once. Named plainly, because "navigation failed" tells somebody holding a phone
+ * nothing they can act on.
+ */
+export const SCREEN_MESSAGE =
+  'That screen could not be loaded. It needs a connection the first time it is ' +
+  'opened. Reload once you are back online and it will be available offline after ' +
+  'that.'

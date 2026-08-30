@@ -7,7 +7,9 @@ import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
+import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
+import { computeStats } from '@/domain/localStats'
 import { useExpensesStore } from '@/stores/expenses'
 import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
@@ -50,6 +52,7 @@ interface Dashboard {
   byMember: MemberSpend[]
 }
 
+const auth = useAuthStore()
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
 
@@ -63,6 +66,9 @@ const isOffline = ref(false)
 
 onMounted(async () => {
   await groups.loadAll()
+  // The rows the local answer is computed from. Cheap when they are already in
+  // memory, and the only reason this screen works offline at all.
+  await expenses.hydrate()
 
   // Opens on the group the rest of the app is showing, rather than on a total
   // across groups that nobody asked for.
@@ -92,6 +98,18 @@ async function load(): Promise<void> {
   isLoading.value = true
   // Whatever was being asked about belongs to the chart being replaced.
   forget()
+
+  /*
+   * The replica first, then the server.
+   *
+   * Every number on this screen is arithmetic over rows this device already holds,
+   * so it is worked out here and shown immediately - which is what makes the screen
+   * work offline, and makes it instant online. The server's answer replaces it when
+   * one arrives: it can convert between currencies, which this cannot, and it sees
+   * anything the replica has not pulled yet.
+   */
+  dashboard.value = fromReplica()
+
   try {
     dashboard.value = await useApi().get<Dashboard>('/stats', {
       groupId: groupId.value || undefined,
@@ -99,10 +117,41 @@ async function load(): Promise<void> {
     })
     isOffline.value = false
   } catch {
+    // The local answer stands. Offline is a normal state here, not a failure.
     isOffline.value = true
   } finally {
     isLoading.value = false
   }
+}
+
+/**
+ * The same dashboard, computed from what is stored on this device.
+ *
+ * One group is exact: every amount is already in that group's currency. Across all
+ * groups it adds base-currency amounts together without converting, which is what
+ * the cross-group total on the dashboard has always done; the server's answer
+ * corrects it as soon as there is one.
+ */
+function fromReplica(): Dashboard | null {
+  const scope = groupId.value
+    ? groups.groups.filter((group) => group.id === groupId.value)
+    : groups.groups.filter((group) => !group.isArchived)
+
+  if (scope.length === 0) return null
+
+  const rows = scope.flatMap((group) => expenses.forGroup(group.id))
+  const settled = scope.flatMap((group) => expenses.settlementsForGroup(group.id))
+  const roster = scope.flatMap((group) => group.members)
+  const userId = auth.user?.id
+
+  return computeStats({
+    currency: scope.length === 1 ? scope[0].baseCurrency : (auth.user?.defaultCurrency ?? 'CAD'),
+    granularity: granularity.value,
+    myMemberIds: roster.filter((member) => member.userId === userId).map((member) => member.id),
+    members: roster.map((member) => ({ id: member.id, displayName: member.displayName })),
+    expenses: rows,
+    settlements: settled,
+  })
 }
 
 /**
@@ -468,7 +517,12 @@ const bucketRange = (bucket: string) => formatBucketRange(bucket, granularity.va
     <p v-else-if="isLoading" class="py-12 text-center text-sm text-[var(--text-muted)]">{{ t('Loading stats') }}
     </p>
 
-    <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">{{ t('Stats need a connection. Your groups and expenses still work offline.') }}
+    <!--
+      Not "stats need a connection" any more: they are computed from this device.
+      Nothing to compute means nothing to spend it on yet.
+    -->
+    <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
+      {{ t('Nothing to add up yet. Add an expense and this fills in.') }}
     </p>
   </AppShell>
 </template>

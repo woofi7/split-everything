@@ -36,6 +36,29 @@ export function toBucket(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+/**
+ * The bucket a date belongs to: the day itself, the Monday of its week, or the
+ * first of its month.
+ *
+ * The same rule the server applies, in the same order, so a chart computed here
+ * from the local replica lines up with one computed there rather than drawing the
+ * same spending in different columns.
+ */
+export function bucketOf(when: string | Date, granularity: Granularity): string {
+  const date = when instanceof Date ? new Date(when) : new Date(when)
+
+  if (granularity === 'month') return toBucket(new Date(date.getFullYear(), date.getMonth(), 1))
+
+  if (granularity === 'week') {
+    // Weeks start Monday, which is what a bill-splitting week looks like.
+    const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
+    return toBucket(monday)
+  }
+
+  return toBucket(new Date(date.getFullYear(), date.getMonth(), date.getDate()))
+}
+
 /** The bucket after this one, a day, a week or a month along. */
 export function nextBucket(bucket: string, granularity: Granularity): string {
   const date = parseBucket(bucket)

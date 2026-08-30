@@ -14,6 +14,7 @@ const rejected = ref<OutboxOperation[]>([])
 const waiting = ref<OutboxOperation[]>([])
 const error = ref<string | null>(null)
 const isResetting = ref(false)
+const isSyncing = ref(false)
 const confirmingReset = ref(false)
 
 
@@ -25,6 +26,28 @@ async function load(): Promise<void> {
   // Anything not refused is still on its way, or trying to be. The count in the
   // header said three and this screen showed nothing, which is not an answer.
   waiting.value = await db.outbox.filter((row) => row.status !== 'rejected').toArray()
+}
+
+/**
+ * Drains the queue now, rather than waiting for the app to try again.
+ *
+ * The same sync the app runs on its own when a connection returns. Failing is a
+ * normal outcome - offline is why the queue exists - so it is reported on the
+ * screen rather than thrown, and the list is read back either way: an operation
+ * that went through should disappear from it.
+ */
+async function syncNow(): Promise<void> {
+  error.value = null
+  isSyncing.value = true
+
+  try {
+    await expenses.sync()
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : t('Could not send those changes.')
+  } finally {
+    isSyncing.value = false
+    await load()
+  }
 }
 
 /**
@@ -155,8 +178,27 @@ async function discard(operationId: string): Promise<void> {
     </section>
 
     <section v-if="waiting.length > 0" class="mt-4">
-      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Changes waiting to be sent') }}
-      </h2>
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <h2 class="min-w-0 text-sm font-medium text-[var(--text-muted)]">
+          {{ t('Changes waiting to be sent') }}
+        </h2>
+
+        <!--
+          The queue drains on its own when a connection comes back, but "on its own"
+          is not something a person watching a count of three can see happening.
+          This is the same drain, asked for out loud.
+        -->
+        <button
+          type="button"
+          data-testid="sync-now"
+          class="btn btn-press btn-secondary min-h-0 shrink-0 px-3 py-1.5 text-xs"
+          style="border-color: var(--border)"
+          :disabled="isSyncing"
+          @click="syncNow"
+        >
+          {{ isSyncing ? t('Sending') : t('Send now') }}
+        </button>
+      </div>
 
       <ul class="flex flex-col gap-3">
         <li
