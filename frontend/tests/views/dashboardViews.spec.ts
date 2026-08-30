@@ -11,7 +11,28 @@ vi.mock('vue-router', () => ({
 }))
 
 describe('ActivityView', () => {
-  const feed = (items: unknown[]) => fakeApi({ '/activity': () => ({ items }) })
+  const feed = (items: unknown[]) =>
+    fakeApi({ '/activity': () => ({ items }), '/groups': () => [testGroup()] })
+
+  it('shows the group the rest of the app is on', async () => {
+    const client = feed([])
+    await mountView(ActivityView, { api: client })
+    await settle()
+
+    // All screens follow the one group, so a feed spanning every group would be
+    // the odd one out.
+    expect(client.get).toHaveBeenCalledWith(
+      '/activity',
+      expect.objectContaining({ groupId: GROUP_ID }),
+    )
+  })
+
+  it('names that group, so a short feed is explained', async () => {
+    const { wrapper } = await mountView(ActivityView, { api: feed([]) })
+    await settle()
+
+    expect(textOf(wrapper)).toContain('Roommates')
+  })
 
   it('lists what happened, newest first as the server sent it', async () => {
     const { wrapper } = await mountView(ActivityView, {
@@ -269,7 +290,7 @@ describe('ActivityView opening an expense', () => {
     expect(link).toBeDefined()
   })
 
-  it('leaves an entry with nothing to open as plain text', async () => {
+  it('opens the group for an entry with no expense of its own', async () => {
     const { wrapper } = await mountView(ActivityView, {
       api: fakeApi({
         '/activity': () => ({ items: [entry({ subjectType: 'GroupMember', subjectId: 'm1' })] }),
@@ -278,8 +299,12 @@ describe('ActivityView opening an expense', () => {
     })
     await settle()
 
-    // A card that looks tappable and does nothing is worse than one that does not.
-    expect(wrapper.find('[data-testid="activity-row"]').attributes('data-linked')).toBe('false')
+    // Someone being added has no screen of its own, but the roster does.
+    expect(wrapper.find('[data-testid="activity-row"]').attributes('data-linked')).toBe('true')
+
+    const link = wrapper.findAllComponents(RouterLinkStub)
+      .find((l) => JSON.stringify(l.props().to).includes('"group"'))
+    expect(link).toBeDefined()
   })
 
   it('leaves an entry with no group as plain text', async () => {
