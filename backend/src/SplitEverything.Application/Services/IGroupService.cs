@@ -12,7 +12,6 @@ public interface IGroupService
     Task<GroupDto> ArchiveAsync(Guid userId, Guid groupId, CancellationToken ct = default);
     Task<GroupDto> UnarchiveAsync(Guid userId, Guid groupId, CancellationToken ct = default);
 
-    Task<GroupMemberDto> AddPlaceholderMemberAsync(Guid userId, Guid groupId, AddPlaceholderMemberRequest request, CancellationToken ct = default);
 
     /// <summary>
     /// Adds someone who already has an account. The other way into a group is an

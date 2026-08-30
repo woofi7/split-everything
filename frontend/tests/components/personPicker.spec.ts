@@ -117,33 +117,42 @@ describe('PersonPicker', () => {
     expect((wrapper.find('input[type="search"]').element as HTMLInputElement).value).toBe('')
   })
 
-  it('offers to add a name nobody matches as someone without an account', async () => {
+  it('says nobody matches, and points at the other way in', async () => {
     const wrapper = mountPicker()
 
     await type(wrapper, 'Dave')
 
-    // The person may genuinely not have an account. Refusing outright would be a
-    // dead end, and every CSV import relies on these placeholders.
-    const fallback = wrapper.find('[data-testid="add-placeholder"]')
-    expect(fallback.exists()).toBe(true)
-    expect(fallback.text()).toContain('Dave')
+    // Not an offer to add them anyway: a member with no account behind them could
+    // never open the group, see what they owed, or be told about it.
+    const answer = wrapper.find('[data-testid="no-match"]')
+    expect(answer.exists()).toBe(true)
+    expect(answer.text()).toContain('Dave')
+    expect(answer.text()).toContain('invite link')
   })
 
-  it('emits the typed name when the fallback is used', async () => {
+  it('offers no way to add a name that matches nobody', async () => {
     const wrapper = mountPicker()
     await type(wrapper, 'Dave')
 
-    await wrapper.find('[data-testid="add-placeholder"]').trigger('click')
-
-    expect(wrapper.emitted('addPlaceholder')).toEqual([['Dave']])
+    expect(wrapper.find('[data-testid="add-placeholder"]').exists()).toBe(false)
+    expect(wrapper.emitted('addPlaceholder')).toBeUndefined()
   })
 
-  it('does not offer the fallback while someone matches', async () => {
+  it('adds nobody when Enter is pressed on a name that matches nobody', async () => {
+    const wrapper = mountPicker()
+    await type(wrapper, 'Dave')
+
+    await wrapper.find('input[type="search"]').trigger('keydown', { key: 'Enter' })
+
+    expect(wrapper.emitted('pick')).toBeUndefined()
+  })
+
+  it('says nothing while someone matches', async () => {
     const wrapper = mountPicker()
 
     await type(wrapper, 'ali')
 
-    expect(wrapper.find('[data-testid="add-placeholder"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="no-match"]').exists()).toBe(false)
   })
 
   it('says so when there is nobody else with an account', async () => {
@@ -151,7 +160,7 @@ describe('PersonPicker', () => {
 
     await type(wrapper, 'any')
 
-    expect(wrapper.find('[data-testid="add-placeholder"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="no-match"]').exists()).toBe(true)
   })
 
   it('clears the query on Escape', async () => {
