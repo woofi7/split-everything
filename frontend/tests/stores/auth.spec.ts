@@ -83,19 +83,69 @@ describe('auth store', () => {
     expect(store.accessToken).toBe('access-2')
   })
 
-  it('signs out when the refresh fails', async () => {
-    const api = fakeApi({
+  /**
+   * What ends a session, and what merely fails.
+   *
+   * Only the server can say a refresh token is spent. Treating every failure as
+   * that meant a refresh attempted with no connection signed the app out, which
+   * locked somebody out of data sitting on their own device, and it produced a
+   * storm: cleared session, sign-in screen, another resume, another failure.
+   */
+  const refusing = (status: number) =>
+    fakeApi({
       post: vi.fn(async (path: string) => {
         if (path === '/auth/google') return { user, tokens, isNewUser: false, autoJoinedGroupIds: [] }
-        throw new Error('refresh rejected')
+        throw Object.assign(new Error(`refused with ${status}`), { status })
       }),
     })
+
+  const signedIn = async (api: ReturnType<typeof fakeApi>) => {
     const store = useAuthStore()
     store.attachApi(api as never)
     await store.signInWithGoogle('google-credential')
+    return store
+  }
+
+  it('signs out when the server refuses the refresh token', async () => {
+    const store = await signedIn(refusing(401))
 
     expect(await store.refresh()).toBeNull()
     expect(store.isSignedIn).toBe(false)
+  })
+
+  it('signs out when the server forbids it', async () => {
+    const store = await signedIn(refusing(403))
+
+    expect(await store.refresh()).toBeNull()
+    expect(store.isSignedIn).toBe(false)
+  })
+
+  it('keeps the session when there is no connection', async () => {
+    const api = fakeApi({
+      post: vi.fn(async (path: string) => {
+        if (path === '/auth/google') return { user, tokens, isNewUser: false, autoJoinedGroupIds: [] }
+        throw new TypeError('Failed to fetch')
+      }),
+    })
+    const store = await signedIn(api)
+
+    await expect(store.refresh()).rejects.toThrow()
+    // Still signed in: the data on this device is the whole point of the replica.
+    expect(store.isSignedIn).toBe(true)
+  })
+
+  it('keeps the session when the server is rate limiting it', async () => {
+    const store = await signedIn(refusing(429))
+
+    await expect(store.refresh()).rejects.toThrow()
+    expect(store.isSignedIn).toBe(true)
+  })
+
+  it('keeps the session when the server itself is broken', async () => {
+    const store = await signedIn(refusing(503))
+
+    await expect(store.refresh()).rejects.toThrow()
+    expect(store.isSignedIn).toBe(true)
   })
 
   it('clears everything on sign out', async () => {

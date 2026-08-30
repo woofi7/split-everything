@@ -369,11 +369,34 @@ export const useAuthStore = defineStore('auth', () => {
       tokens.value = next
       persist()
       return next.accessToken
-    } catch {
-      // The chain is gone; anything else would leave the app retrying forever.
-      clear()
-      return null
+    } catch (caught) {
+      /*
+       * Only the server can end a session.
+       *
+       * This used to treat every failure as the chain being gone, which meant a
+       * refresh attempted with no connection - or one the server merely rate
+       * limited - signed the app out. Offline, that locked somebody out of data
+       * sitting on their own device, and it produced a storm: cleared session,
+       * sign-in screen, another resume, another refused refresh.
+       *
+       * A refused token is a 401 or a 403 and nothing else. Anything else is the
+       * request failing rather than the session ending, so the tokens stay and the
+       * caller is told this attempt did not work.
+       */
+      if (isRefusedSession(caught)) {
+        clear()
+        return null
+      }
+
+      throw caught
     }
+  }
+
+  /** Whether the server said the session is over, rather than failing to answer. */
+  function isRefusedSession(error: unknown): boolean {
+    const status = (error as { status?: unknown } | null)?.status
+
+    return status === 401 || status === 403
   }
 
   /**

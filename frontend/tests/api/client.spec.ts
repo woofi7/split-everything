@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiClient, ApiError } from '@/api/client'
+import { ApiClient, ApiError, looksOffline } from '@/api/client'
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -428,5 +428,38 @@ describe('a request that answers in time', () => {
     // per request and aborts a signal nobody is listening to any more.
     expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false)
     vi.useRealTimers()
+  })
+})
+
+/**
+ * What counts as being offline.
+ *
+ * "Offline" on screen should mean the server could not be reached. A server that
+ * answered - refused, rate limited, complained about a payload - is not offline, and
+ * saying so sends somebody looking at their wifi for a problem that is not there.
+ * That is exactly how a rate limit showed up: as an app claiming to be offline on a
+ * phone with four bars.
+ */
+describe('telling unreachable from refused', () => {
+  it('reads a transport failure as offline', () => {
+    expect(looksOffline(new TypeError('Failed to fetch'))).toBe(true)
+    expect(looksOffline(new Error('The request timed out.'))).toBe(true)
+  })
+
+  it('does not read a refusal as offline', () => {
+    for (const status of [400, 401, 403, 404, 409, 422, 429]) {
+      expect(looksOffline(Object.assign(new Error('refused'), { status }))).toBe(false)
+    }
+  })
+
+  it('reads a server that broke as offline, since nothing useful happened', () => {
+    for (const status of [408, 500, 502, 503]) {
+      expect(looksOffline(Object.assign(new Error('broken'), { status }))).toBe(true)
+    }
+  })
+
+  it('reads nothing at all as offline', () => {
+    expect(looksOffline(null)).toBe(true)
+    expect(looksOffline(undefined)).toBe(true)
   })
 })

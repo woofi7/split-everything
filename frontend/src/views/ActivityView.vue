@@ -10,6 +10,7 @@ import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
+import { looksOffline } from '@/api/client'
 import { db } from '@/offline/db'
 import { memberColor } from '@/domain/memberColors'
 
@@ -70,9 +71,10 @@ async function load(): Promise<void> {
     entries.value = page.items
     isOffline.value = false
     await keep(page.items)
-  } catch {
-    // Offline, or refused. The stored feed stands.
-    isOffline.value = true
+  } catch (caught) {
+    // The stored feed stands either way. Refused is not offline: it says the
+    // server answered, which is worth telling apart on screen.
+    isOffline.value = looksOffline(caught)
   } finally {
     isLoading.value = false
   }

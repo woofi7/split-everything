@@ -2,7 +2,7 @@ import { computed, ref, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { memberColors } from '@/domain/memberColors'
 import { db, type LocalGroup, type LocalMember } from '@/offline/db'
-import type { ApiClient } from '@/api/client'
+import { looksOffline, type ApiClient } from '@/api/client'
 import type { AddableUser } from '@/api/types'
 import type { SplitType } from '@/domain/splitting'
 
@@ -174,9 +174,11 @@ export const useGroupsStore = defineStore('groups', () => {
       groups.value = merged
       isOffline.value = false
       settleMainGroup()
-    } catch {
-      // Keep the cached list: an unreachable server is a normal state here.
-      isOffline.value = true
+    } catch (caught) {
+      // Keep the cached list: an unreachable server is a normal state here. A
+      // server that answered and refused is not offline, and saying so sends
+      // somebody looking at their wifi for a problem that is not there.
+      isOffline.value = looksOffline(caught)
     } finally {
       isLoading.value = false
     }
@@ -202,8 +204,8 @@ export const useGroupsStore = defineStore('groups', () => {
       upsert(local)
       isOffline.value = false
       return local
-    } catch {
-      isOffline.value = true
+    } catch (caught) {
+      isOffline.value = looksOffline(caught)
       return db.groups.get(groupId)
     }
   }

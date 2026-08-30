@@ -8,6 +8,7 @@ import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
+import { looksOffline } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
 import { computeStats } from '@/domain/localStats'
@@ -117,9 +118,10 @@ async function load(): Promise<void> {
       granularity: granularity.value,
     })
     isOffline.value = false
-  } catch {
-    // The local answer stands. Offline is a normal state here, not a failure.
-    isOffline.value = true
+  } catch (caught) {
+    // The local answer stands. Offline is a normal state here, not a failure -
+    // and a refusal is not offline, whatever else it is.
+    isOffline.value = looksOffline(caught)
   } finally {
     isLoading.value = false
   }

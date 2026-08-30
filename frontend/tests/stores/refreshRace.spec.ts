@@ -39,9 +39,16 @@ function api(overrides: Record<string, unknown> = {}) {
   return {
     post: vi.fn(async (path: string, body?: unknown) => {
       if (path === '/auth/refresh') {
-        // The server's rule: a token already exchanged is treated as stolen.
+        /*
+         * The server's rule: a token already exchanged is treated as stolen, and
+         * it answers 401. The status matters, because that is what separates the
+         * session being over from the request merely failing: without it a refresh
+         * attempted with no connection would sign the app out.
+         */
         if ((body as { refreshToken?: string })?.refreshToken !== 'refresh-live') {
-          throw new Error('That session was already used. Sign in again.')
+          throw Object.assign(new Error('That session was already used. Sign in again.'), {
+            status: 401,
+          })
         }
         return tokensFor('rotated')
       }

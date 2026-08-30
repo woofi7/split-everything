@@ -49,8 +49,11 @@ export default defineConfig({
     // Only this port is exposed. The API stays on localhost and is reached
     // through the proxy below, from this machine.
     proxy: {
-      '/api': { target: 'http://localhost:5080', changeOrigin: true },
-      '/hubs': { target: 'http://localhost:5080', ws: true, changeOrigin: true },
+      // xfwd passes the caller's address on, so the API's rate limits count a
+      // phone on the network as itself rather than counting every device that
+      // comes through this proxy as one caller.
+      '/api': { target: 'http://localhost:5080', changeOrigin: true, xfwd: true },
+      '/hubs': { target: 'http://localhost:5080', ws: true, changeOrigin: true, xfwd: true },
     },
   },
   build: { sourcemap: true },
