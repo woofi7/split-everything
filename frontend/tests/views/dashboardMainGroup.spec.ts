@@ -268,6 +268,20 @@ describe('DashboardView on the main group', () => {
       expect(expensesHeading).toBeGreaterThan(balances)
     })
 
+    it('stacks the label over the amount', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+      })
+      await settle()
+
+      // Two lines, small over large, in a column rather than side by side.
+      const stack = wrapper.find('[data-testid="balance-line"] > span')
+      expect(stack.classes()).toContain('flex-col')
+      expect(stack.classes()).toContain('justify-center')
+      // At least as tall as the button beside it, so the row reads as one block.
+      expect(stack.classes()).toContain('min-h-11')
+    })
+
     it('puts settling up on the same line as the balance', async () => {
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
