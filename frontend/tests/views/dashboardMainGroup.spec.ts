@@ -88,13 +88,30 @@ describe('DashboardView on the main group', () => {
     expect(text).toContain('40%')
   })
 
-  it('shows the balance for that group', async () => {
+  it('says which of the balances is yours', async () => {
     const { wrapper } = await mountView(DashboardView, {
-      api: fakeApi({ '/groups': () => ({ ...testGroup(), myNetBalance: 42.5 }) }),
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense({ paidByMemberId: ALICE })],
     })
     await settle()
 
-    expect(textOf(wrapper)).toContain('42.50')
+    // The card that stated your own balance is gone, so the list has to say which
+    // of these numbers is yours.
+    const rows = wrapper.findAll('li')
+    const mine = rows.find((row) => row.find('[data-testid="your-balance"]').exists())
+    expect(mine).toBeDefined()
+    expect(mine!.text()).toContain('Alice')
+    expect(mine!.text()).toContain('30.00')
+  })
+
+  it('marks exactly one balance as yours', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense({ paidByMemberId: ALICE })],
+    })
+    await settle()
+
+    expect(wrapper.findAll('[data-testid="your-balance"]')).toHaveLength(1)
   })
 
   it('keeps what is about the group behind one icon', async () => {
@@ -249,7 +266,7 @@ describe('DashboardView on the main group', () => {
    * the design: every one of these sections renders fine in isolation.
    */
   describe('the order of the dashboard', () => {
-    it('puts the pie above the balance, and the balance above the expenses', async () => {
+    it('runs pie, then balances, then expenses', async () => {
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
         expenses: [testExpense({ paidByMemberId: ALICE })],
@@ -258,49 +275,50 @@ describe('DashboardView on the main group', () => {
 
       const html = wrapper.html()
       const pie = html.indexOf('Who paid')
-      const balance = html.indexOf('balance-line')
       const balances = html.indexOf('>Balances<')
       const expensesHeading = html.indexOf('>Expenses<')
 
       expect(pie).toBeGreaterThan(-1)
-      expect(balance).toBeGreaterThan(pie)
-      expect(balances).toBeGreaterThan(balance)
+      expect(balances).toBeGreaterThan(pie)
       expect(expensesHeading).toBeGreaterThan(balances)
     })
 
-    it('stacks the label over the amount', async () => {
+    it('has no card of its own for your balance', async () => {
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
       })
       await settle()
 
-      // Two lines, small over large, in a column rather than side by side.
-      const stack = wrapper.find('[data-testid="balance-line"] > span')
-      expect(stack.classes()).toContain('flex-col')
-      expect(stack.classes()).toContain('justify-center')
-      // At least as tall as the button beside it, so the row reads as one block.
-      expect(stack.classes()).toContain('min-h-11')
+      // One number and one button is not a card; the list below says the same
+      // thing about everybody, including you.
+      expect(wrapper.find('[data-testid="balance-line"]').exists()).toBe(false)
+      expect(textOf(wrapper)).not.toContain('Your balance')
     })
 
-    it('puts settling up on the same line as the balance', async () => {
+    it('puts settling up in the balances card', async () => {
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: [testExpense({ paidByMemberId: ALICE })],
       })
       await settle()
 
-      // The number and the button that answers it belong next to each other.
-      const line = wrapper.find('[data-testid="balance-line"]')
-      expect(line.text()).toContain('Your balance')
-      expect(line.find('[data-testid="settle-up"]').exists()).toBe(true)
+      const card = wrapper
+        .findAll('section')
+        .find((section) => section.text().includes('Balances'))
+
+      expect(card!.find('[data-testid="settle-up"]').exists()).toBe(true)
     })
 
-    it('does not repeat group settings outside the menu', async () => {
+    it('keeps the simplify toggle beside the list it switches', async () => {
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: [testExpense({ paidByMemberId: ALICE })],
       })
       await settle()
 
-      expect(wrapper.find('[data-testid="balance-line"]').text()).not.toContain('Group settings')
+      const html = wrapper.html()
+      // It switches the transfer list, not the balances above it.
+      expect(html.indexOf('toggle-simplify')).toBeGreaterThan(html.indexOf('Settle up in 1 transfer'))
     })
   })
 
