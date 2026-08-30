@@ -219,6 +219,20 @@ describe('ConflictsView', () => {
       expect(textOf(wrapper)).toContain('2 change(s) that have not reached the server')
     })
 
+    it('brings the groups back too, not only the expenses', async () => {
+      const { wrapper, groupsStore } = await mountView(ConflictsView)
+      const loadAll = vi.spyOn(groupsStore, 'loadAll')
+
+      await wrapper.find('[data-testid="reset-replica"]').trigger('click')
+      await settle(1)
+      await wrapper.find('[data-testid="reset-replica-confirm"]').trigger('click')
+      await settle()
+
+      // Groups come from their own endpoint rather than from the sync log, so a
+      // pull alone leaves every expense with no group to hang on.
+      expect(loadAll).toHaveBeenCalled()
+    })
+
     it('reloads once confirmed', async () => {
       const { wrapper, expensesStore } = await mountView(ConflictsView)
       const reset = vi.spyOn(expensesStore, 'resetToServer').mockResolvedValue()

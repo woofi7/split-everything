@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
+import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupMenu from '@/components/groups/GroupMenu.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
@@ -119,6 +120,10 @@ function targetOf(entry: ActivityEntry) {
     :is-offline="isOffline || groups.isOffline"
     :is-syncing="expenses.isSyncing"
   >
+    <template #mark>
+      <GroupMark />
+    </template>
+
     <template #header-action>
       <GroupMenu />
     </template>

@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
+import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupMenu from '@/components/groups/GroupMenu.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SpendPie from '@/components/ui/SpendPie.vue'
@@ -217,6 +218,10 @@ const spentOn = (iso: string) =>
     :is-offline="groups.isOffline"
     :is-syncing="expenses.isSyncing"
   >
+    <template #mark>
+      <GroupMark />
+    </template>
+
     <template #header-action>
       <GroupMenu />
     </template>

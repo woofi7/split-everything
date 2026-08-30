@@ -27,6 +27,34 @@ const api = () => fakeApi({ '/groups': () => testGroup() })
  * these behaviours are asserted where they actually live.
  */
 describe('the group screen', () => {
+  it('marks the corner with the group icon rather than the app icon', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup({ iconName: 'house', colorHex: '#123456' }) }),
+      groups: [testGroup({ iconName: 'house', colorHex: '#123456' })],
+    })
+    await settle()
+
+    // What tells two groups apart at a glance, and the same figure shown beside
+    // the group's name everywhere else.
+    const mark = wrapper.find('[data-testid="group-mark"]')
+    expect(mark.exists()).toBe(true)
+    // jsdom normalises the hex to rgb, so the colour is checked as it lands.
+    expect(mark.attributes('style')).toContain('rgb(18, 52, 86)')
+    expect(wrapper.find('[data-testid="app-icon"]').exists()).toBe(false)
+  })
+
+  it('falls back to the app icon when there is no group', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => [] }),
+      groups: [],
+    })
+    await settle()
+
+    // The corner is never empty, and no caller has to decide.
+    expect(wrapper.find('[data-testid="group-mark"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="app-icon"]').exists()).toBe(true)
+  })
+
   it('names the group first and the screen second', async () => {
     const { wrapper } = await mountView(DashboardView, { api: api() })
 

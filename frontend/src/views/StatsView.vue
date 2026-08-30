@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
+import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupMenu from '@/components/groups/GroupMenu.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useApi } from '@/api/provider'
@@ -170,6 +171,10 @@ const bucketLabel = (bucket: string) =>
     :is-offline="isOffline"
     :is-syncing="expenses.isSyncing"
   >
+    <template #mark>
+      <GroupMark />
+    </template>
+
     <template #header-action>
       <GroupMenu />
     </template>
