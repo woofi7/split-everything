@@ -234,3 +234,18 @@ describe('ExpenseView comments', () => {
     expect(wrapper.find('[data-testid="delete-comment"]').exists()).toBe(false)
   })
 })
+
+describe('ExpenseView card colour', () => {
+  it('carries the same payer colour the list card had', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense({ paidByMemberId: ALICE })],
+    })
+    await settle()
+
+    // Opening an expense should not change whose it appears to be.
+    const style = wrapper.find('[data-testid="expense-card"]').attributes('style') ?? ''
+    expect(style).toContain('color-mix')
+    expect(style).toContain('--surface-raised')
+  })
+})
