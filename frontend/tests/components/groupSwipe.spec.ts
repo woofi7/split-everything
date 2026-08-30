@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { mount } from '@vue/test-utils'
+import { mount, type VueWrapper } from '@vue/test-utils'
 import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { resetDatabase } from '@/offline/db'
@@ -51,7 +51,20 @@ function pageElement(): HTMLElement {
   return page
 }
 
-const mountSwipe = () => mount(GroupSwipe, { global: { stubs: { teleport: true } } })
+/**
+ * Mounted swipes, so every one of them is taken back down again.
+ *
+ * They listen on the window, so one left behind by an earlier test goes on
+ * answering gestures in the next one - and a component left mid-drag cancels
+ * every move it sees, which is exactly what these tests measure.
+ */
+const mounted: VueWrapper[] = []
+
+function mountSwipe(): VueWrapper {
+  const wrapper = mount(GroupSwipe, { global: { stubs: { teleport: true } } })
+  mounted.push(wrapper)
+  return wrapper
+}
 
 interface Point {
   x: number
@@ -65,12 +78,28 @@ interface Point {
  * event. Dispatched on the window, because that is where the component listens,
  * which is the part worth keeping honest.
  */
-function touch(type: string, points: Point[], target: EventTarget = window): void {
+function touch(type: string, points: Point[], target: EventTarget = window): Event {
   const event = new Event(type, { bubbles: true, cancelable: type === 'touchmove' })
   const list = points.map((point) => ({ clientX: point.x, clientY: point.y }))
 
   Object.assign(event, { touches: list, changedTouches: list })
   target.dispatchEvent(event)
+  return event
+}
+
+/**
+ * Whether the swipe took the gesture off the browser.
+ *
+ * The one thing that matters about when the decision is made: a browser told a
+ * move was allowed through starts scrolling and keeps scrolling for the rest of
+ * the gesture, and cancelling a later move does not take that back.
+ */
+function claimed(from: Point, to: Point): boolean {
+  touch('touchstart', [from])
+  const claim = touch('touchmove', [to]).defaultPrevented
+  // Put the finger down again, so nothing is left mid-gesture.
+  touch('touchend', [to])
+  return claim
 }
 
 /** A finger going across, in the stages the browser reports them in. */
@@ -97,6 +126,7 @@ describe('GroupSwipe', () => {
   })
 
   afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount()
     vi.useRealTimers()
     document.querySelectorAll('[data-swipe-page]').forEach((page) => page.remove())
   })
@@ -286,13 +316,49 @@ describe('GroupSwipe', () => {
     const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
     mountSwipe()
 
-    // Given up on rather than merely ignored: a thumb that flicks down the page
-    // and then arcs sideways is still scrolling.
+    // Left to the browser at the first movement, and read whole at the end it is
+    // still a scroll: 200 across against 320 down is nobody's swipe.
     drag({ x: 300, y: 600 }, { x: 295, y: 300 }, { x: 100, y: 280 })
     release({ x: 100, y: 280 })
     await land()
 
     expect(store.mainGroupId).toBe('g1')
+  })
+
+  it('picks up a sweep that started too steeply to claim', async () => {
+    const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
+    mountSwipe()
+
+    /*
+     * A thumb pivots at the base of the hand, so a sweep across the screen arcs,
+     * and the first report of one can be steeper than it is wide. There is no
+     * fighting the browser for it by then - but by the end it is plainly a swipe,
+     * and at that point there is nothing left to fight about.
+     */
+    touch('touchstart', [{ x: 60, y: 500 }])
+    expect(touch('touchmove', [{ x: 70, y: 480 }]).defaultPrevented).toBe(false)
+    touch('touchmove', [{ x: 150, y: 462 }])
+    touch('touchmove', [{ x: 280, y: 450 }])
+    release({ x: 300, y: 448 })
+    await land()
+
+    expect(store.mainGroupId).toBe('g2')
+  })
+
+  it('starts afresh when a gesture was never reported as over', async () => {
+    const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
+    mountSwipe()
+
+    // Left alone as a scroll, and then no touchend: the next swipe still has to
+    // work rather than being refused for the rest of the session.
+    touch('touchstart', [{ x: 200, y: 600 }])
+    touch('touchmove', [{ x: 202, y: 500 }])
+
+    drag({ x: 300, y: 400 }, { x: 250, y: 400 }, { x: 100, y: 400 })
+    release({ x: 100, y: 400 })
+    await land()
+
+    expect(store.mainGroupId).toBe('g2')
   })
 
   it('ignores a tap', async () => {
@@ -404,6 +470,102 @@ describe('GroupSwipe', () => {
 
     // A window listener outlives its component unless it is taken back down.
     expect(store.mainGroupId).toBe('g1')
+  })
+
+  /**
+   * Which of the two gestures this is, decided on the first movement.
+   *
+   * A thumb pivots at the base of the hand, so a sweep across the screen arcs as
+   * it goes. That arc was being scrolled: the page ran up under the finger, and a
+   * phone answers a page running up by hiding its toolbar, which drops everything
+   * fixed to the bottom of the window - the tab bar included.
+   */
+  describe('deciding between a swipe and a scroll', () => {
+    beforeEach(() => {
+      withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
+      pageElement()
+      mountSwipe()
+    })
+
+    it('takes the gesture on the first movement across', () => {
+      expect(claimed({ x: 200, y: 400 }, { x: 214, y: 402 })).toBe(true)
+    })
+
+    it('takes a thumb sweeping right, arc and all', () => {
+      // Left to right with the arc that comes with it: the case that was being
+      // scrolled instead of swiped.
+      expect(claimed({ x: 60, y: 500 }, { x: 80, y: 486 })).toBe(true)
+    })
+
+    it('leaves a movement down the screen to the browser', () => {
+      expect(claimed({ x: 200, y: 400 }, { x: 204, y: 380 })).toBe(false)
+    })
+
+    it('leaves a movement too small to read alone', () => {
+      // Nothing is claimed and nothing is cancelled until there is something to
+      // go on, and a few pixels is not enough to tell the two apart.
+      expect(claimed({ x: 200, y: 400 }, { x: 204, y: 402 })).toBe(false)
+    })
+
+    it('keeps cancelling once it has the gesture', () => {
+      touch('touchstart', [{ x: 200, y: 400 }])
+      touch('touchmove', [{ x: 180, y: 402 }])
+
+      expect(touch('touchmove', [{ x: 120, y: 430 }]).defaultPrevented).toBe(true)
+    })
+
+    it('does not come back to a gesture it left alone', () => {
+      touch('touchstart', [{ x: 200, y: 600 }])
+      touch('touchmove', [{ x: 202, y: 560 }])
+
+      // The browser is already scrolling by now, and it will not stop.
+      expect(touch('touchmove', [{ x: 100, y: 555 }]).defaultPrevented).toBe(false)
+    })
+  })
+
+  /**
+   * Someone who has asked their phone for less motion.
+   */
+  describe('with less motion asked for', () => {
+    let matchMedia: typeof window.matchMedia
+
+    beforeEach(() => {
+      matchMedia = window.matchMedia
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as never
+    })
+
+    afterEach(() => {
+      window.matchMedia = matchMedia
+    })
+
+    it('changes group with nothing sliding about', async () => {
+      const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
+      const page = pageElement()
+      const wrapper = mountSwipe()
+
+      drag({ x: 300, y: 400 }, { x: 200, y: 400 })
+      expect(wrapper.find('[data-testid="swipe-peek"]').exists()).toBe(false)
+      expect(page.style.transform).toBe('')
+
+      release({ x: 100, y: 400 })
+      await land()
+
+      expect(store.mainGroupId).toBe('g2')
+    })
+
+    it('still takes the gesture, so the page cannot scroll under it', () => {
+      withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
+      mountSwipe()
+
+      // The reason to claim it even with nothing to show: otherwise the page runs
+      // about under the finger, which is the thing being fixed.
+      expect(claimed({ x: 300, y: 400 }, { x: 280, y: 402 })).toBe(true)
+    })
   })
 })
 
