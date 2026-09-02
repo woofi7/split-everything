@@ -219,10 +219,15 @@ docker compose pull && docker compose up -d
 to be exact. The images publish their own health endpoints and the compose file
 checks them, so a wedged API is restarted rather than left serving nothing.
 
-Two containers, one hostname: point the reverse proxy at `:8090` for the app and
-send `/api` and `/hubs` to `:8091` for the API (`/hubs` is a WebSocket). One
-hostname means no cross-origin requests, a first-party refresh cookie, and nothing
-to configure in `Cors__AllowedOrigins`.
+Traefik reaches both containers over its own network, `proxy`, which its stack
+creates; nothing is published to the host. Two routers on one hostname: `/api` and
+`/hubs` go to the API at a higher priority, everything else to the app. One hostname
+means no cross-origin requests, a first-party refresh cookie, and nothing to
+configure in `Cors__AllowedOrigins`.
+
+The API reads `X-Forwarded-Proto` and `X-Forwarded-For` from a proxy on a private
+network, which is how the refresh cookie knows to mark itself Secure and how the
+rate limits count one caller as one caller.
 
 Backups run in their own container: a gzipped `pg_dump` on start and then daily,
 pruned to `BACKUP_RETENTION_DAYS`. Restore with `infra/backup/restore.sh`, which
