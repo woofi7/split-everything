@@ -72,16 +72,11 @@ public static class DependencyInjection
         services.AddScoped<IPushSender>(sp => sp.GetRequiredService<FcmPushSender>());
         services.AddScoped<IPushSender>(sp => sp.GetRequiredService<ApnsPushSender>());
 
-        services.AddScoped<IEmailSender>(sp =>
-        {
-            var smtpHost = configuration["Email:SmtpHost"];
-            // Without SMTP configured, invites still work by link and QR; the email
-            // is logged instead of silently vanishing.
-            return string.IsNullOrWhiteSpace(smtpHost)
-                ? new LoggingEmailSender(sp.GetRequiredService<
-                    Microsoft.Extensions.Logging.ILogger<LoggingEmailSender>>())
-                : new SmtpEmailSender(Bind<SmtpOptions>(configuration, SmtpOptions.SectionName));
-        });
+        // No mail is sent from here: an invite is a link and a QR code, and running
+        // an SMTP server for that is more moving parts than the feature is worth.
+        // The body still goes to the log, so it can be copied out of a self-hosted
+        // install rather than vanishing.
+        services.AddScoped<IEmailSender, LoggingEmailSender>();
 
         return services;
     }

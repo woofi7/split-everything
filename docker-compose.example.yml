@@ -50,20 +50,22 @@ services:
       # Empty unless a browser somewhere else has to reach this API: served under
       # one hostname there are no cross-origin requests to allow.
       - Cors__AllowedOrigins__0=${PUBLIC_URL}
+      # Browser notifications. Generate the pair with:
+      #   npx web-push generate-vapid-keys
+      # Blank means the server skips sending them; nothing else changes. The
+      # subject is a contact address, e.g. mailto:you@example.com
       - Push__VapidPublicKey=${VAPID_PUBLIC_KEY}
       - Push__VapidPrivateKey=${VAPID_PRIVATE_KEY}
       - Push__VapidSubject=${VAPID_SUBJECT}
-      - Push__FcmProjectId=${FCM_PROJECT_ID}
-      - Push__FcmServiceAccountJson=${FCM_SERVICE_ACCOUNT_JSON}
-      - Push__ApnsKeyId=${APNS_KEY_ID}
-      - Push__ApnsTeamId=${APNS_TEAM_ID}
-      - Push__ApnsBundleId=${APNS_BUNDLE_ID}
-      - Push__ApnsPrivateKey=${APNS_PRIVATE_KEY}
-      - Email__SmtpHost=${SMTP_HOST}
-      - Email__SmtpPort=${SMTP_PORT}
-      - Email__Username=${SMTP_USERNAME}
-      - Email__Password=${SMTP_PASSWORD}
-      - Email__FromAddress=${SMTP_FROM_ADDRESS}
+      # Native push, for a Capacitor build of the app. Nothing here needs them
+      # until there is an APK or a TestFlight build to send to.
+      #
+      # - Push__FcmProjectId=${FCM_PROJECT_ID}
+      # - Push__FcmServiceAccountJson=${FCM_SERVICE_ACCOUNT_JSON}
+      # - Push__ApnsKeyId=${APNS_KEY_ID}
+      # - Push__ApnsTeamId=${APNS_TEAM_ID}
+      # - Push__ApnsBundleId=${APNS_BUNDLE_ID}
+      # - Push__ApnsPrivateKey=${APNS_PRIVATE_KEY}
       - ReceiptStorage__RootPath=/data/receipts
     volumes:
       - /mnt/user/appdata/split-everything/receipts:/data/receipts
