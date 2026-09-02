@@ -261,17 +261,31 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     await db.Database.MigrateAsync();
 }
 
-// Say so at startup when notifications cannot work. A deployment without a VAPID
-// pair serves an empty public key, every browser fails to subscribe, and the only
-// symptom is a switch in the profile that refuses to stay on - which looked for all
-// the world like the phone refusing permission.
+// Say so at startup when notifications cannot work, and say which value is wrong.
+// A deployment without a VAPID pair serves an empty public key and the only symptom
+// is a switch in the profile that will not stay on; a deployment whose values are in
+// each other's slots is worse, because the browser then fails inside atob and blames
+// itself. Both are settings on this side, so both are named here.
 var push = app.Services.GetRequiredService<PushOptions>();
-if (string.IsNullOrWhiteSpace(push.VapidPublicKey) || string.IsNullOrWhiteSpace(push.VapidPrivateKey))
+var pushProblems = new List<string>();
+
+if (string.IsNullOrWhiteSpace(push.VapidPublicKey)) pushProblems.Add("Push:VapidPublicKey is empty");
+else if (!VapidKey.IsValidPublicKey(push.VapidPublicKey))
+    pushProblems.Add("Push:VapidPublicKey is not a base64url P-256 public key (65 bytes, starts with B)");
+
+if (string.IsNullOrWhiteSpace(push.VapidPrivateKey)) pushProblems.Add("Push:VapidPrivateKey is empty");
+else if (!VapidKey.IsValidPrivateKey(push.VapidPrivateKey))
+    pushProblems.Add("Push:VapidPrivateKey is not a base64url 32-byte key");
+
+if (!VapidKey.IsValidSubject(push.VapidSubject))
+    pushProblems.Add("Push:VapidSubject is not a mailto: or https: contact");
+
+if (pushProblems.Count > 0)
 {
     app.Logger.LogWarning(
-        "Web Push is not configured: Push:VapidPublicKey or Push:VapidPrivateKey is empty. "
-        + "Notifications cannot be turned on until both are set. Generate a pair with "
-        + "node infra/vapid/generate.mjs");
+        "Web Push is not usable: {Problems}. Notifications cannot be turned on until this is fixed. "
+        + "Generate a pair with node infra/vapid/generate.mjs",
+        string.Join("; ", pushProblems));
 }
 
 app.Run();

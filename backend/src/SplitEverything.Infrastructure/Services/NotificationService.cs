@@ -82,7 +82,15 @@ public sealed class NotificationService(
             .Select(p => new PushSubscriptionDto(p.Id, p.Channel, p.Endpoint, p.DeviceId, p.CreatedAt))
             .ToListAsync(ct);
 
-    public VapidPublicKeyDto GetVapidPublicKey() => new(options.VapidPublicKey);
+    /// <summary>
+    /// The public key, or nothing when what is configured is not one.
+    ///
+    /// Serving a malformed value is worse than serving none: the browser gets as far
+    /// as decoding it and fails there, so the message names atob rather than the
+    /// setting. Nothing is an answer the app already knows how to explain.
+    /// </summary>
+    public VapidPublicKeyDto GetVapidPublicKey() =>
+        new(VapidKey.IsValidPublicKey(options.VapidPublicKey) ? options.VapidPublicKey : string.Empty);
 
     private static PushSubscriptionDto Map(Domain.Entities.PushSubscription subscription)
         => new(subscription.Id, subscription.Channel, subscription.Endpoint,

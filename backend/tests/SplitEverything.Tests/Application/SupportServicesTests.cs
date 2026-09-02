@@ -411,8 +411,9 @@ public class NotificationServiceTests(PostgresFixture fixture) : ServiceTestBase
 {
     private static readonly PushOptions Options = new()
     {
-        VapidPublicKey = "BJ_test_public_key",
-        VapidPrivateKey = "test-private-key",
+        // Real key shapes: the service will not serve a public key that is not one.
+        VapidPublicKey = "BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw",
+        VapidPrivateKey = "93k0NC3nAZW-tPWQlgUFPUqTMxIvKKGoFPRPBRFbNBg",
         VapidSubject = "mailto:owner@example.com"
     };
 
@@ -518,7 +519,20 @@ public class NotificationServiceTests(PostgresFixture fixture) : ServiceTestBase
 
     [Fact]
     public void The_vapid_public_key_is_exposed_for_the_browser()
-        => Notifications.GetVapidPublicKey().PublicKey.ShouldBe("BJ_test_public_key");
+        => Notifications.GetVapidPublicKey().PublicKey.ShouldBe(
+            "BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw");
+
+    [Fact]
+    public void A_configured_value_that_is_not_a_key_is_not_served_as_one()
+    {
+        // What a deployment actually did: the contact address in the public key's
+        // slot. Served, it gets as far as the browser and fails inside atob, which
+        // names neither the setting nor the server.
+        var wrong = new NotificationService(
+            Db, new PushOptions { VapidPublicKey = "mailto:someone@example.com" }, Clock);
+
+        wrong.GetVapidPublicKey().PublicKey.ShouldBe(string.Empty);
+    }
 
     [Fact]
     public async Task The_dispatcher_fans_out_to_every_channel_a_user_registered()

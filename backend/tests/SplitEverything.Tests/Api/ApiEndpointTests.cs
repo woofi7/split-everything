@@ -573,7 +573,8 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var key = await anonymous.GetFromJsonAsync<VapidPublicKeyDto>("/api/notifications/vapid-key", Json);
 
-        key!.PublicKey.ShouldBe("test-public-key");
+        key!.PublicKey.ShouldBe(
+            "BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw");
     }
 
     [Fact]
