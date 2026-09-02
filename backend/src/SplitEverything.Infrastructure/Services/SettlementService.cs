@@ -277,8 +277,8 @@ public sealed class SettlementService(
             .Where(e => e.GroupId == groupId && !e.IsDeleted)
             .Select(e => new
             {
-                e.PaidByMemberId,
-                e.AmountInBaseCurrency,
+                Payers = e.Payers.Where(y => !y.IsDeleted)
+                    .Select(y => new { y.MemberId, y.AmountInBaseCurrency }).ToList(),
                 Splits = e.Splits.Where(s => !s.IsDeleted)
                     .Select(s => new { s.MemberId, s.AmountInBaseCurrency }).ToList()
             })
@@ -290,7 +290,7 @@ public sealed class SettlementService(
             .ToListAsync(ct);
 
         var expenses = expenseRows.Select(e => new BalanceExpense(
-            e.PaidByMemberId, e.AmountInBaseCurrency,
+            e.Payers.Select(p => (p.MemberId, p.AmountInBaseCurrency)).ToList(),
             e.Splits.Select(s => (s.MemberId, s.AmountInBaseCurrency)).ToList())).ToList();
 
         return (expenses, settlements);

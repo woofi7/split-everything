@@ -19,7 +19,13 @@ import { useGroupsStore } from '@/stores/groups'
 
 export interface ExpenseDraft {
   groupId: string
+  /** The only payer, or the largest of them when `payers` is given. */
   paidByMemberId: string
+  /**
+   * Who paid, when more than one person did. Their amounts have to add up to
+   * `amount`; leave it out for the ordinary expense one person paid for.
+   */
+  payers?: Array<{ memberId: string; amount: number }>
   description: string
   amount: number
   currency: string
@@ -113,6 +119,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     if (!memberIds.has(draft.paidByMemberId)) {
       throw new Error('The payer must be a member of this group.')
     }
+    const contributions = readPayers(draft, memberIds)
     for (const participant of draft.participantIds) {
       if (!memberIds.has(participant)) {
         throw new Error('Every participant must be a member of this group.')
@@ -127,7 +134,12 @@ export const useExpensesStore = defineStore('expenses', () => {
     const expense: LocalExpense = {
       id: newId(),
       groupId: draft.groupId,
-      paidByMemberId: draft.paidByMemberId,
+      paidByMemberId: mainPayer(contributions),
+      payers: contributions.map((payer) => ({
+        memberId: payer.memberId,
+        amount: payer.amount,
+        amountInBaseCurrency: payer.amount,
+      })),
       description,
       amount: roundMoney(draft.amount, draft.currency),
       currency: draft.currency,
@@ -191,6 +203,18 @@ export const useExpensesStore = defineStore('expenses', () => {
     const participantIds =
       changes.participantIds ?? existing.splits.map((split) => split.memberId)
 
+    const group = await requireGroup(existing.groupId)
+    const roster = new Set(group.members.map((member) => member.id))
+
+    // Who paid, in whichever way the edit said it: a list, a single payer, or
+    // neither - in which case whoever is on the expense stays, apportioned to the
+    // amount if that moved.
+    const contributions = changes.payers
+      ? readPayers({ ...changes, amount, currency: changes.currency ?? existing.currency }, roster)
+      : changes.paidByMemberId
+        ? [{ memberId: changes.paidByMemberId, amount }]
+        : keepPayers(existing, amount, changes.currency ?? existing.currency)
+
     const shares = computeShares({
       groupId: existing.groupId,
       paidByMemberId: changes.paidByMemberId ?? existing.paidByMemberId,
@@ -212,7 +236,12 @@ export const useExpensesStore = defineStore('expenses', () => {
 
     const updated: LocalExpense = {
       ...existing,
-      paidByMemberId: changes.paidByMemberId ?? existing.paidByMemberId,
+      paidByMemberId: mainPayer(contributions),
+      payers: contributions.map((payer) => ({
+        memberId: payer.memberId,
+        amount: payer.amount,
+        amountInBaseCurrency: payer.amount,
+      })),
       description,
       amount: roundMoney(amount, changes.currency ?? existing.currency),
       currency: changes.currency ?? existing.currency,
@@ -386,10 +415,27 @@ export const useExpensesStore = defineStore('expenses', () => {
     return entity
   }
 
+  /**
+   * Who paid an expense, in base currency, whatever shape the stored row is in.
+   *
+   * A row saved by a build that only knew one payer has no payers field, and the
+   * member it names paid the whole amount. Falling back rather than skipping: an
+   * expense with no payer would silently leave the balances.
+   */
+  function payersOf(expense: LocalExpense): Array<{ memberId: string; amount: number }> {
+    if (expense.payers && expense.payers.length > 0) {
+      return expense.payers.map((payer) => ({
+        memberId: payer.memberId,
+        amount: payer.amountInBaseCurrency,
+      }))
+    }
+
+    return [{ memberId: expense.paidByMemberId, amount: expense.amountInBaseCurrency }]
+  }
+
   function balanceFor(groupId: string): MemberBalance[] {
     const groupExpenses = forGroup(groupId).map((expense) => ({
-      payerMemberId: expense.paidByMemberId,
-      amount: expense.amountInBaseCurrency,
+      payers: payersOf(expense),
       splits: expense.splits.map((split) => ({
         memberId: split.memberId,
         amount: split.amountInBaseCurrency,
@@ -404,7 +450,7 @@ export const useExpensesStore = defineStore('expenses', () => {
 
     const memberIds = new Set<string>()
     for (const expense of groupExpenses) {
-      memberIds.add(expense.payerMemberId)
+      for (const payer of expense.payers) memberIds.add(payer.memberId)
       for (const split of expense.splits) memberIds.add(split.memberId)
     }
     for (const settlement of groupSettlements) {
@@ -421,8 +467,7 @@ export const useExpensesStore = defineStore('expenses', () => {
 
   function rawDebts(groupId: string): Transfer[] {
     const groupExpenses = forGroup(groupId).map((expense) => ({
-      payerMemberId: expense.paidByMemberId,
-      amount: expense.amountInBaseCurrency,
+      payers: payersOf(expense),
       splits: expense.splits.map((split) => ({
         memberId: split.memberId,
         amount: split.amountInBaseCurrency,
@@ -723,6 +768,99 @@ function toCommentPayload(entity: LocalComment) {
   }
 }
 
+/**
+ * Who paid, checked against the group and against the total.
+ *
+ * The amounts have to add up to the expense, and a draft where they do not is
+ * refused rather than reconciled: both numbers came off the same screen, so a
+ * disagreement means one of them is not what was typed, and quietly picking a
+ * winner is how a total ends up wrong with nothing on screen to say why.
+ */
+function readPayers(
+  draft: Pick<ExpenseDraft, 'payers' | 'paidByMemberId' | 'amount' | 'currency'>,
+  members: Set<string>,
+): Array<{ memberId: string; amount: number }> {
+  const payers = draft.payers
+  if (!payers || payers.length === 0) {
+    return [{ memberId: draft.paidByMemberId, amount: roundMoney(draft.amount, draft.currency) }]
+  }
+
+  for (const payer of payers) {
+    if (!members.has(payer.memberId)) {
+      throw new Error('Everyone who paid must be a member of this group.')
+    }
+    if (!(payer.amount > 0)) {
+      throw new Error('What each person paid must be greater than zero.')
+    }
+  }
+
+  if (new Set(payers.map((payer) => payer.memberId)).size !== payers.length) {
+    throw new Error('Somebody cannot appear twice among who paid.')
+  }
+
+  const total = roundMoney(
+    payers.reduce((sum, payer) => sum + payer.amount, 0),
+    draft.currency,
+  )
+  if (total !== roundMoney(draft.amount, draft.currency)) {
+    throw new Error('What everyone paid has to add up to the expense.')
+  }
+
+  return payers.map((payer) => ({
+    memberId: payer.memberId,
+    amount: roundMoney(payer.amount, draft.currency),
+  }))
+}
+
+/**
+ * The payers already on an expense, apportioned if the amount has changed.
+ *
+ * An edit that only moves the amount says nothing about who paid, and the old
+ * figures would no longer add up. One payer takes the new amount whole; several
+ * keep their proportions, the rounding going to the largest so the parts still sum.
+ */
+function keepPayers(
+  expense: LocalExpense,
+  amount: number,
+  currency: string,
+): Array<{ memberId: string; amount: number }> {
+  const existing = expense.payers ?? []
+  if (existing.length === 0) return [{ memberId: expense.paidByMemberId, amount }]
+  if (existing.length === 1) return [{ memberId: existing[0].memberId, amount }]
+
+  const previous = existing.reduce((sum, payer) => sum + payer.amount, 0)
+  if (previous <= 0) return [{ memberId: expense.paidByMemberId, amount }]
+  if (roundMoney(previous, currency) === roundMoney(amount, currency)) {
+    return existing.map((payer) => ({ memberId: payer.memberId, amount: payer.amount }))
+  }
+
+  const scaled = existing.map((payer) => ({
+    memberId: payer.memberId,
+    amount: roundMoney((amount * payer.amount) / previous, currency),
+  }))
+
+  const residue = roundMoney(
+    amount - scaled.reduce((sum, payer) => sum + payer.amount, 0),
+    currency,
+  )
+  if (residue !== 0) {
+    const largest = scaled.reduce(
+      (best, payer, index) => (payer.amount > scaled[best].amount ? index : best),
+      0,
+    )
+    scaled[largest] = { ...scaled[largest], amount: scaled[largest].amount + residue }
+  }
+
+  return scaled
+}
+
+/** The payer whose name goes on the expense: the largest, ties by id. */
+function mainPayer(payers: Array<{ memberId: string; amount: number }>): string {
+  return [...payers].sort(
+    (left, right) => right.amount - left.amount || left.memberId.localeCompare(right.memberId),
+  )[0].memberId
+}
+
 function toWirePayload(expense: LocalExpense) {
   return {
     id: expense.id,
@@ -737,6 +875,11 @@ function toWirePayload(expense: LocalExpense) {
     splitType: expense.splitType,
     receiptId: expense.receiptId,
     notes: expense.notes,
+    payers: (expense.payers ?? []).map((payer) => ({
+      memberId: payer.memberId,
+      amount: payer.amount,
+      amountInBaseCurrency: payer.amountInBaseCurrency,
+    })),
     splits: expense.splits.map((split) => ({
       memberId: split.memberId,
       amount: split.amount,

@@ -123,7 +123,7 @@ public sealed class ImportService(
             .ToList();
 
         var unmapped = rows
-            .SelectMany(r => r.ParticipantNames.Append(r.PaidByName ?? string.Empty))
+            .SelectMany(ImportRowNames.PeopleIn)
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(n => Resolve(n, nameMapping, members) is null)
@@ -173,7 +173,7 @@ public sealed class ImportService(
         if (request.CreateMissingMembers)
         {
             var missing = parsed
-                .SelectMany(r => r.ParticipantNames.Append(r.PaidByName ?? string.Empty))
+                .SelectMany(ImportRowNames.PeopleIn)
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(n => Resolve(n, nameMapping, members) is null)
@@ -254,33 +254,27 @@ public sealed class ImportService(
                 ? row.ParticipantMemberIds
                 : [row.PaidByMemberId!.Value];
 
-            // One expense per payer. Settle Up lets several people pay for the same
-            // thing and writes them as a pair of lists; an expense here has a single
-            // payer, so the row becomes one expense each, split in the proportion
-            // the export gave. The group's total and everybody's balance come out
-            // identical - which is the point - and both halves are visible in the
-            // list rather than hidden inside one card.
-            var payerParts = row.Payers is { Count: > 1 }
+            // Who paid, as a list. Settle Up writes a payment several people made
+            // together as a pair of lists - payers "Emma;Nicolas", amount "40;25" -
+            // and an expense here holds exactly that: one row of 65 that two people
+            // put money into, split between whoever it was for.
+            var payers = row.Payers is { Count: > 1 }
                 ? row.Payers
                 : [new ImportPayerShare(row.PaidByName ?? string.Empty, row.PaidByMemberId, row.Amount!.Value)];
 
-            foreach (var part in payerParts)
+            // A transfer is one person paying another down, not money spent. Booked
+            // as an expense it would count once as spending and again as a share
+            // owed, moving both balances the wrong way.
+            //
+            // One per payer here, unlike an expense: a settlement is a movement
+            // between two people, so two people paying somebody down is two of them.
+            if (row.IsSettlement)
             {
-                if (part.MemberId is null) continue;
-
-                // Converted once for the row, then apportioned. The single-payer case
-                // keeps the currency service's own figure rather than recomputing it,
-                // so nothing about an ordinary import changes by a cent.
-                var partInBase = payerParts.Count == 1
-                    ? conversion.Amount
-                    : CurrencyPrecision.Round(part.Amount * conversion.Rate, group.BaseCurrency);
-
-                // A transfer is one person paying another down, not money spent. Booked
-                // as an expense it would count once as spending and again as a share
-                // owed, moving both balances the wrong way.
-                if (row.IsSettlement)
+                foreach (var payer in payers)
                 {
-                    var payee = participants.FirstOrDefault(id => id != part.MemberId.Value);
+                    if (payer.MemberId is null) continue;
+
+                    var payee = participants.FirstOrDefault(id => id != payer.MemberId.Value);
                     if (payee == Guid.Empty)
                     {
                         skipped++;
@@ -291,11 +285,13 @@ public sealed class ImportService(
                     var settlement = new Settlement
                     {
                         GroupId = groupId,
-                        FromMemberId = part.MemberId.Value,
+                        FromMemberId = payer.MemberId.Value,
                         ToMemberId = payee,
-                        Amount = part.Amount,
+                        Amount = payer.Amount,
                         Currency = rowCurrency,
-                        AmountInBaseCurrency = partInBase,
+                        AmountInBaseCurrency = payers.Count == 1
+                            ? conversion.Amount
+                            : CurrencyPrecision.RoundStored(payer.Amount * conversion.Rate, group.BaseCurrency),
                         SettledAt = row.SpentAt!.Value,
                         Note = row.Description,
                         CreatedAt = clock.UtcNow,
@@ -307,72 +303,96 @@ public sealed class ImportService(
                         SyncOperation.Create, deviceId, userId, SettlementService.SettlementPayload(settlement), ct: ct);
 
                     createdSettlements++;
-                    continue;
                 }
 
-                // The export's own per-person amounts, used as weights rather than as
-                // final figures. An export can disagree with itself by a cent, and this
-                // one does: 53.99 split "27;27" adds up to 54.00. Weighting keeps the
-                // ratio the export intended while the shares still sum to the total,
-                // which the rest of the app requires and the sync path enforces. It is
-                // also what makes a shared payment divide correctly: the same weights
-                // against a smaller amount are that payer's share of it.
-                var exact = row.SplitAmounts;
-                var useExact = exact is { Count: > 0 }
-                               && exact.Count == participants.Count
-                               && exact.All(a => a >= 0m)
-                               && exact.Sum() > 0m;
+                continue;
+            }
 
-                var shares = useExact
-                    ? SplitCalculator.Calculate(part.Amount, rowCurrency, SplitType.Shares,
-                        participants.Select((id, index) => new SplitInput(id, exact![index])).ToList())
-                    : SplitCalculator.Calculate(part.Amount, rowCurrency, SplitType.Equal,
-                        participants.Select(id => new SplitInput(id, null)).ToList());
+            // The export's own per-person amounts, used as weights rather than as
+            // final figures. An export can disagree with itself by a cent, and this
+            // one does: 53.99 split "27;27" adds up to 54.00. Weighting keeps the
+            // ratio the export intended while the shares still sum to the total,
+            // which the rest of the app requires and the sync path enforces.
+            var exact = row.SplitAmounts;
+            var useExact = exact is { Count: > 0 }
+                           && exact.Count == participants.Count
+                           && exact.All(a => a >= 0m)
+                           && exact.Sum() > 0m;
 
-                var expense = new Expense
+            var shares = useExact
+                ? SplitCalculator.Calculate(row.Amount!.Value, rowCurrency, SplitType.Shares,
+                    participants.Select((id, index) => new SplitInput(id, exact![index])).ToList())
+                : SplitCalculator.Calculate(row.Amount!.Value, rowCurrency, SplitType.Equal,
+                    participants.Select(id => new SplitInput(id, null)).ToList());
+
+            var known = payers.Where(y => y.MemberId is not null).ToList();
+            if (known.Count == 0)
+            {
+                skipped++;
+                warnings.Add($"Row {row.RowNumber}: nobody who paid is a member of this group.");
+                continue;
+            }
+
+            var expense = new Expense
+            {
+                GroupId = groupId,
+                // The largest contribution is the name on the expense.
+                PaidByMemberId = known
+                    .OrderByDescending(y => y.Amount)
+                    .ThenBy(y => y.MemberId!.Value)
+                    .First().MemberId!.Value,
+                Description = row.Description,
+                Amount = row.Amount!.Value,
+                Currency = rowCurrency,
+                AmountInBaseCurrency = conversion.Amount,
+                ExchangeRate = conversion.Rate,
+                ExchangeRateAsOf = conversion.RateAsOf,
+                SpentAt = row.SpentAt!.Value,
+                SplitType = SplitType.Equal,
+                OriginLineageId = group.LineageId,
+                ImportFingerprint = row.Fingerprint,
+                ImportBatchId = batch.Id,
+                Revision = 1,
+                CreatedAt = clock.UtcNow,
+                UpdatedAt = clock.UtcNow
+            };
+            db.Expenses.Add(expense);
+
+            foreach (var payer in known)
+            {
+                db.ExpensePayers.Add(new ExpensePayer
                 {
+                    ExpenseId = expense.Id,
                     GroupId = groupId,
-                    PaidByMemberId = part.MemberId.Value,
-                    Description = row.Description,
-                    Amount = part.Amount,
-                    Currency = rowCurrency,
-                    AmountInBaseCurrency = partInBase,
-                    ExchangeRate = conversion.Rate,
-                    ExchangeRateAsOf = conversion.RateAsOf,
-                    SpentAt = row.SpentAt!.Value,
-                    SplitType = SplitType.Equal,
-                    OriginLineageId = group.LineageId,
-                    // The row is the unit a duplicate is judged by, so both halves of
-                    // a shared payment carry the row's fingerprint: re-importing the
-                    // file skips the row, not one half of it.
-                    ImportFingerprint = row.Fingerprint,
-                    ImportBatchId = batch.Id,
-                    Revision = 1,
+                    MemberId = payer.MemberId!.Value,
+                    Amount = payer.Amount,
+                    AmountInBaseCurrency = known.Count == 1
+                        ? conversion.Amount
+                        : CurrencyPrecision.RoundStored(payer.Amount * conversion.Rate, group.BaseCurrency),
                     CreatedAt = clock.UtcNow,
                     UpdatedAt = clock.UtcNow
-                };
-                db.Expenses.Add(expense);
-
-                foreach (var share in shares)
-                {
-                    db.ExpenseSplits.Add(new ExpenseSplit
-                    {
-                        ExpenseId = expense.Id,
-                        GroupId = groupId,
-                        MemberId = share.MemberId,
-                        Amount = share.Amount,
-                        AmountInBaseCurrency = CurrencyPrecision.Round(
-                            share.Amount * conversion.Rate, group.BaseCurrency),
-                        CreatedAt = clock.UtcNow,
-                        UpdatedAt = clock.UtcNow
-                    });
-                }
-
-                await writer.RecordAsync(expense, SyncEntityType.Expense, groupId,
-                    SyncOperation.Create, deviceId, userId, ExpenseService.ExpensePayload(expense), ct: ct);
-
-                created++;
+                });
             }
+
+            foreach (var share in shares)
+            {
+                db.ExpenseSplits.Add(new ExpenseSplit
+                {
+                    ExpenseId = expense.Id,
+                    GroupId = groupId,
+                    MemberId = share.MemberId,
+                    Amount = share.Amount,
+                    AmountInBaseCurrency = CurrencyPrecision.RoundStored(
+                        share.Amount * conversion.Rate, group.BaseCurrency),
+                    CreatedAt = clock.UtcNow,
+                    UpdatedAt = clock.UtcNow
+                });
+            }
+
+            await writer.RecordAsync(expense, SyncEntityType.Expense, groupId,
+                SyncOperation.Create, deviceId, userId, ExpenseService.ExpensePayload(expense), ct: ct);
+
+            created++;
         }
 
         batch.ExpenseCount = created;
@@ -520,7 +540,7 @@ public sealed class ImportService(
                     GroupId = row.GroupId,
                     MemberId = share.MemberId,
                     Amount = share.Amount,
-                    AmountInBaseCurrency = CurrencyPrecision.Round(
+                    AmountInBaseCurrency = CurrencyPrecision.RoundStored(
                         share.Amount * conversion.Rate, group.BaseCurrency),
                     InputValue = share.InputValue,
                     CreatedAt = clock.UtcNow,
@@ -957,6 +977,7 @@ public sealed class ImportService(
             throw new ValidationException("That import has already been undone.");
 
         var expenses = await db.Expenses
+            .Include(e => e.Payers)
             .Include(e => e.Splits)
             .Where(e => e.ImportBatchId == batchId && !e.IsDeleted)
             .ToListAsync(ct);

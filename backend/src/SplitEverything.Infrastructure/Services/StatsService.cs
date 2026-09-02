@@ -55,6 +55,10 @@ public sealed class StatsService(
                 e.SpentAt,
                 e.AmountInBaseCurrency,
                 e.PaidByMemberId,
+                // Every payer, not only the name on the expense: an expense two
+                // people paid for credits each of them what they put in.
+                Payers = e.Payers.Where(y => !y.IsDeleted)
+                    .Select(y => new { y.MemberId, y.AmountInBaseCurrency }).ToList(),
                 Splits = e.Splits.Where(s => !s.IsDeleted)
                     .Select(s => new { s.MemberId, s.AmountInBaseCurrency }).ToList()
             })
@@ -84,8 +88,8 @@ public sealed class StatsService(
         var myShare = expenses.Sum(e => Normalise(e.GroupId,
             e.Splits.Where(s => myMemberIds.Contains(s.MemberId)).Sum(s => s.AmountInBaseCurrency)));
         var myPaid = expenses
-            .Where(e => myMemberIds.Contains(e.PaidByMemberId))
-            .Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency));
+            .Sum(e => Normalise(e.GroupId,
+                e.Payers.Where(y => myMemberIds.Contains(y.MemberId)).Sum(y => y.AmountInBaseCurrency)));
 
         var spendOverTime = expenses
             .GroupBy(e => Bucket(e.SpentAt, query.Granularity))
@@ -96,12 +100,16 @@ public sealed class StatsService(
                     g.Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency)), scope.Currency);
 
                 var byMember = g
-                    .GroupBy(e => e.PaidByMemberId)
+                    .SelectMany(e => e.Payers.Select(y => new
+                    {
+                        y.MemberId,
+                        Amount = Normalise(e.GroupId, y.AmountInBaseCurrency)
+                    }))
+                    .GroupBy(y => y.MemberId)
                     .Select(payer => new SpendPointMemberDto(
                         payer.Key,
                         names.GetValueOrDefault(payer.Key, "Someone"),
-                        CurrencyPrecision.Round(
-                            payer.Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency)), scope.Currency)))
+                        CurrencyPrecision.Round(payer.Sum(y => y.Amount), scope.Currency)))
                     .Where(member => member.Amount != 0m)
                     // Largest first, so a stack does not reshuffle its colours from
                     // one bucket to the next.
@@ -128,8 +136,8 @@ public sealed class StatsService(
             .Select(member =>
             {
                 var paid = expenses
-                    .Where(e => e.PaidByMemberId == member.Id)
-                    .Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency));
+                    .Sum(e => Normalise(e.GroupId,
+                        e.Payers.Where(y => y.MemberId == member.Id).Sum(y => y.AmountInBaseCurrency)));
                 var owed = expenses
                     .Sum(e => Normalise(e.GroupId,
                         e.Splits.Where(s => s.MemberId == member.Id).Sum(s => s.AmountInBaseCurrency)));
@@ -151,7 +159,8 @@ public sealed class StatsService(
             .ToList();
 
         var debtTrends = BuildDebtTrends(
-            expenses.Select(e => (e.GroupId, e.SpentAt, e.PaidByMemberId, e.AmountInBaseCurrency,
+            expenses.Select(e => (e.GroupId, e.SpentAt,
+                Payers: e.Payers.Select(y => (y.MemberId, y.AmountInBaseCurrency)).ToList(),
                 Splits: e.Splits.Select(s => (s.MemberId, s.AmountInBaseCurrency)).ToList())).ToList(),
             settlements.Select(s => (s.GroupId, s.SettledAt, s.FromMemberId, s.ToMemberId, s.AmountInBaseCurrency)).ToList(),
             names, query.Granularity, scope.Currency, Normalise);
@@ -214,7 +223,8 @@ public sealed class StatsService(
     /// not "how much moved that week".
     /// </summary>
     private static List<DebtTrendPointDto> BuildDebtTrends(
-        List<(Guid GroupId, DateTimeOffset SpentAt, Guid PayerId, decimal Amount,
+        List<(Guid GroupId, DateTimeOffset SpentAt,
+            List<(Guid MemberId, decimal Amount)> Payers,
             List<(Guid MemberId, decimal Amount)> Splits)> expenses,
         List<(Guid GroupId, DateTimeOffset SettledAt, Guid FromMemberId, Guid ToMemberId, decimal Amount)> settlements,
         Dictionary<Guid, string> names,
@@ -235,7 +245,9 @@ public sealed class StatsService(
         {
             foreach (var expense in expenses.Where(e => Bucket(e.SpentAt, granularity) == bucket))
             {
-                Bump(expense.PayerId, normalise(expense.GroupId, expense.Amount));
+                foreach (var (memberId, amount) in expense.Payers)
+                    Bump(memberId, normalise(expense.GroupId, amount));
+
                 foreach (var (memberId, amount) in expense.Splits)
                     Bump(memberId, -normalise(expense.GroupId, amount));
             }

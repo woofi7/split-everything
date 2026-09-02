@@ -61,6 +61,29 @@ public sealed record CsvPreviewRequest(
 /// </summary>
 public sealed record ImportPayerShare(string Name, Guid? MemberId, decimal Amount);
 
+public static class ImportRowNames
+{
+    /// <summary>
+    /// Every person a row names, one name each.
+    ///
+    /// PaidByName is for reading - "Emma, Nicolas" when two people paid - so it is
+    /// never a name to look somebody up by or create somebody from. This walks the
+    /// payers instead, which are one entry per person.
+    /// </summary>
+    public static IEnumerable<string> PeopleIn(ParsedExpenseRow row)
+    {
+        foreach (var participant in row.ParticipantNames) yield return participant;
+
+        if (row.Payers is { Count: > 0 })
+        {
+            foreach (var payer in row.Payers) yield return payer.Name;
+            yield break;
+        }
+
+        if (row.PaidByName is not null) yield return row.PaidByName;
+    }
+}
+
 public sealed record ParsedExpenseRow(
     int RowNumber,
     DateTimeOffset? SpentAt,

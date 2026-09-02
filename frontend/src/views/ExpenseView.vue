@@ -49,6 +49,32 @@ const colours = computed(() =>
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
+/**
+ * Who paid, when more than one person did.
+ *
+ * Largest first, which is also the order the name on the expense comes from, so
+ * the list reads in the same order as the line above it.
+ */
+const sharedPayers = computed(() =>
+  [...(expense.value?.payers ?? [])].sort((left, right) => right.amount - left.amount),
+)
+
+/**
+ * The line above the breakdown.
+ *
+ * One name for the ordinary case. Two names when two people paid, because "Emma
+ * and Nicolas paid" is shorter than the list underneath and says the same thing;
+ * more than that and the names would run off a phone, so it counts them instead.
+ */
+const paidByLine = computed(() => {
+  const names = sharedPayers.value.map((payer) => memberName(payer.memberId))
+
+  if (names.length <= 1) return t('{name} paid', { name: memberName(expense.value?.paidByMemberId ?? '') })
+  if (names.length === 2) return t('{first} and {second} paid', { first: names[0], second: names[1] })
+
+  return t('{name} and {count} others paid', { name: names[0], count: names.length - 1 })
+})
+
 const SPLIT_LABELS: Record<string, string> = {
   Equal: t('Equally'),
   Percentage: t('By percentage'),
@@ -143,9 +169,38 @@ async function remove(): Promise<void> {
           </span>
         </div>
         <p class="mt-1 text-sm text-[var(--text-muted)]">
-          {{ memberName(expense.paidByMemberId) }} paid on
+          {{ paidByLine }} on
           {{ new Date(expense.spentAt).toLocaleDateString(intlLocale) }}
         </p>
+
+        <!--
+          What each of them put in, when it was not one person. The line above says
+          who paid; this says how the total was made up, which is the part somebody
+          checks when a balance looks wrong.
+        -->
+        <ul
+          v-if="sharedPayers.length > 1"
+          data-testid="payer-breakdown"
+          class="mt-2 flex flex-col gap-1 text-sm"
+        >
+          <li
+            v-for="payer in sharedPayers"
+            :key="payer.memberId"
+            class="flex items-center justify-between gap-2"
+          >
+            <span class="flex min-w-0 items-center gap-2">
+              <span
+                class="h-2 w-2 shrink-0 rounded-full"
+                :style="{ backgroundColor: colourOf(payer.memberId) }"
+                aria-hidden="true"
+              />
+              <span class="truncate">{{ memberName(payer.memberId) }}</span>
+            </span>
+            <span class="shrink-0 tabular-nums">
+              {{ formatMoney(payer.amount, expense.currency) }}
+            </span>
+          </li>
+        </ul>
         <p
           v-if="expense.currency !== groups.groups.find((g) => g.id === groupId)?.baseCurrency"
           class="mt-1 text-xs text-[var(--text-muted)]"

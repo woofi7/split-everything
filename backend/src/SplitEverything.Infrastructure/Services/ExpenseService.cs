@@ -44,7 +44,8 @@ public sealed class ExpenseService(
             throw new ValidationException("An expense amount must be greater than zero.");
 
         var members = await LoadMemberIdsAsync(request.GroupId, ct);
-        ValidateParticipants(request.PaidByMemberId, request.Splits, request.Items, members);
+        var payers = ResolvePayers(request.Payers, request.PaidByMemberId, request.Amount, expenseCurrency, members);
+        ValidateParticipants(MainPayer(payers), request.Splits, request.Items, members);
 
         var shares = ComputeShares(request.Amount, expenseCurrency, request.SplitType, request.Splits, request.Items);
         var conversion = await ConvertAsync(request.Amount, expenseCurrency, group.BaseCurrency, request.SpentAt, ct);
@@ -53,7 +54,7 @@ public sealed class ExpenseService(
         {
             Id = request.ClientId ?? Guid.CreateVersion7(),
             GroupId = request.GroupId,
-            PaidByMemberId = request.PaidByMemberId,
+            PaidByMemberId = MainPayer(payers),
             Description = description,
             Amount = request.Amount,
             Currency = expenseCurrency,
@@ -73,6 +74,7 @@ public sealed class ExpenseService(
         };
         db.Expenses.Add(expense);
 
+        AddPayers(expense, payers, conversion.Rate, group.BaseCurrency);
         AddSplits(expense, shares, conversion.Rate, group.BaseCurrency);
         AddItems(expense, request.Items);
 
@@ -103,7 +105,9 @@ public sealed class ExpenseService(
     public async Task<ExpenseDto> GetAsync(Guid userId, Guid expenseId, CancellationToken ct = default)
     {
         var expense = await db.Expenses
-                          .Include(e => e.Splits.Where(s => !s.IsDeleted))
+                          .Include(e => e.Payers.Where(y => !y.IsDeleted))
+                          .Include(e => e.Payers.Where(y => !y.IsDeleted))
+            .Include(e => e.Splits.Where(s => !s.IsDeleted))
                           .Include(e => e.Items.Where(i => !i.IsDeleted)).ThenInclude(i => i.Shares)
                           .FirstOrDefaultAsync(e => e.Id == expenseId && !e.IsDeleted, ct)
                       ?? throw new NotFoundException($"Expense {expenseId}");
@@ -115,6 +119,7 @@ public sealed class ExpenseService(
     public async Task<Paged<ExpenseDto>> ListAsync(Guid userId, ExpenseQuery query, CancellationToken ct = default)
     {
         IQueryable<Expense> expenses = db.Expenses
+            .Include(e => e.Payers.Where(y => !y.IsDeleted))
             .Include(e => e.Splits.Where(s => !s.IsDeleted))
             .Include(e => e.Items.Where(i => !i.IsDeleted)).ThenInclude(i => i.Shares)
             .Where(e => !e.IsDeleted);
@@ -162,6 +167,7 @@ public sealed class ExpenseService(
         Guid userId, Guid expenseId, UpdateExpenseRequest request, CancellationToken ct = default)
     {
         var expense = await db.Expenses
+                          .Include(e => e.Payers)
                           .Include(e => e.Splits)
                           .Include(e => e.Items).ThenInclude(i => i.Shares)
                           .FirstOrDefaultAsync(e => e.Id == expenseId && !e.IsDeleted, ct)
@@ -216,14 +222,21 @@ public sealed class ExpenseService(
 
         if (request.ReceiptId is not null) expense.ReceiptId = request.ReceiptId;
         if (request.Notes is not null) expense.Notes = request.Notes.Trim();
-        if (request.PaidByMemberId is { } payer)
-        {
-            if (payer != expense.PaidByMemberId) changes.Add("payer");
-            expense.PaidByMemberId = payer;
-        }
 
         var splitType = request.SplitType ?? expense.SplitType;
         var members = await LoadMemberIdsAsync(expense.GroupId, ct);
+
+        // Who paid, in whichever way the caller said it: a list of payers, a single
+        // payer id, or neither - in which case whoever is on the expense already
+        // stays there, apportioned to its amount if that changed.
+        var payers = request.Payers is { Count: > 0 }
+            ? ResolvePayers(request.Payers, null, expense.Amount, expense.Currency, members)
+            : request.PaidByMemberId is { } singlePayer
+                ? ResolvePayers(null, singlePayer, expense.Amount, expense.Currency, members)
+                : KeepPayers(expense, expense.Amount, expense.Currency);
+
+        if (!PayersMatch(expense, payers)) changes.Add("payer");
+        expense.PaidByMemberId = MainPayer(payers);
 
         var splitInputs = request.Splits
                           ?? expense.Splits.Where(s => !s.IsDeleted)
@@ -250,6 +263,7 @@ public sealed class ExpenseService(
         expense.ExchangeRateAsOf = conversion.RateAsOf;
         expense.Revision += 1;
 
+        ReplacePayers(expense, payers, conversion.Rate, group.BaseCurrency);
         ReplaceSplits(expense, shares, conversion.Rate, group.BaseCurrency);
         if (request.Items is not null) ReplaceItems(expense, request.Items);
 
@@ -277,6 +291,7 @@ public sealed class ExpenseService(
     public async Task DeleteAsync(Guid userId, Guid expenseId, CancellationToken ct = default)
     {
         var expense = await db.Expenses
+                          .Include(e => e.Payers)
                           .Include(e => e.Splits)
                           .FirstOrDefaultAsync(e => e.Id == expenseId && !e.IsDeleted, ct)
                       ?? throw new NotFoundException($"Expense {expenseId}");
@@ -450,6 +465,195 @@ public sealed class ExpenseService(
             .Select(m => m.Id)
             .ToListAsync(ct)).ToHashSet();
 
+    /// <summary>
+    /// Who paid, as a list, however the caller chose to say it.
+    ///
+    /// One payer is the ordinary case and says so with an id alone; the amount is
+    /// then the whole expense by definition. Several payers have to add up to the
+    /// expense, and a request where they do not is refused rather than reconciled:
+    /// the two numbers came from the same screen, so a disagreement means one of
+    /// them is not what the person typed, and quietly picking a winner is how a
+    /// total ends up wrong with nothing on screen to say why.
+    /// </summary>
+    private static IReadOnlyList<PayerInputDto> ResolvePayers(
+        IReadOnlyList<PayerInputDto>? payers,
+        Guid? paidByMemberId,
+        decimal amount,
+        string currency,
+        HashSet<Guid> members)
+    {
+        if (payers is null || payers.Count == 0)
+        {
+            if (paidByMemberId is not { } single)
+                throw new ValidationException("An expense needs somebody who paid for it.");
+
+            return [new PayerInputDto(single, amount)];
+        }
+
+        foreach (var payer in payers)
+        {
+            if (!members.Contains(payer.MemberId))
+                throw new ValidationException("Everyone who paid must be a member of this group.");
+
+            if (payer.Amount <= 0m)
+                throw new ValidationException("What each person paid must be greater than zero.");
+        }
+
+        if (payers.Select(p => p.MemberId).Distinct().Count() != payers.Count)
+            throw new ValidationException("Somebody cannot appear twice among who paid.");
+
+        var total = CurrencyPrecision.Round(payers.Sum(p => p.Amount), currency);
+        if (total != CurrencyPrecision.Round(amount, currency))
+        {
+            throw new ValidationException(
+                "What everyone paid has to add up to the expense: "
+                + $"{FormatAmount(total, currency)} against {FormatAmount(amount, currency)}.");
+        }
+
+        return payers;
+    }
+
+    /// <summary>
+    /// The payers already on an expense, apportioned if its amount has changed.
+    ///
+    /// An edit that only moves the amount says nothing about who paid, and the old
+    /// figures would no longer add up to the new total. One payer takes the new
+    /// amount whole; several keep their proportions, with the rounding going to the
+    /// largest so the parts still sum exactly.
+    /// </summary>
+    private static IReadOnlyList<PayerInputDto> KeepPayers(Expense expense, decimal amount, string currency)
+    {
+        var existing = expense.Payers.Where(p => !p.IsDeleted).ToList();
+        if (existing.Count == 0) return [new PayerInputDto(expense.PaidByMemberId, amount)];
+        if (existing.Count == 1) return [new PayerInputDto(existing[0].MemberId, amount)];
+
+        var previous = existing.Sum(p => p.Amount);
+        if (previous <= 0m) return [new PayerInputDto(expense.PaidByMemberId, amount)];
+        if (CurrencyPrecision.Round(previous, currency) == CurrencyPrecision.Round(amount, currency))
+            return existing.Select(p => new PayerInputDto(p.MemberId, p.Amount)).ToList();
+
+        var scaled = existing
+            .Select(p => new PayerInputDto(
+                p.MemberId, CurrencyPrecision.Round(amount * p.Amount / previous, currency)))
+            .ToList();
+
+        var residue = CurrencyPrecision.Round(amount - scaled.Sum(p => p.Amount), currency);
+        if (residue != 0m)
+        {
+            var largest = scaled.IndexOf(scaled.MaxBy(p => p.Amount)!);
+            scaled[largest] = scaled[largest] with { Amount = scaled[largest].Amount + residue };
+        }
+
+        return scaled;
+    }
+
+    /// <summary>
+    /// The payer whose name goes on the expense: the largest, and the lowest id of
+    /// them when two paid the same, so the answer does not depend on ordering.
+    /// </summary>
+    private static Guid MainPayer(IReadOnlyList<PayerInputDto> payers)
+        => payers.OrderByDescending(p => p.Amount).ThenBy(p => p.MemberId).First().MemberId;
+
+    private static bool PayersMatch(Expense expense, IReadOnlyList<PayerInputDto> payers)
+    {
+        var before = expense.Payers.Where(p => !p.IsDeleted)
+            .ToDictionary(p => p.MemberId, p => p.Amount);
+
+        return before.Count == payers.Count
+               && payers.All(p => before.TryGetValue(p.MemberId, out var amount) && amount == p.Amount);
+    }
+
+    private void AddPayers(
+        Expense expense, IReadOnlyList<PayerInputDto> payers, decimal rate, string baseCurrency)
+    {
+        foreach (var payer in payers)
+        {
+            db.ExpensePayers.Add(new ExpensePayer
+            {
+                ExpenseId = expense.Id,
+                GroupId = expense.GroupId,
+                MemberId = payer.MemberId,
+                Amount = payer.Amount,
+                AmountInBaseCurrency = CurrencyPrecision.RoundStored(payer.Amount * rate, baseCurrency),
+                Clock = expense.Clock,
+                CreatedAt = clock.UtcNow,
+                UpdatedAt = clock.UtcNow
+            });
+        }
+
+        RebalancePayerBaseAmounts(expense, payers, baseCurrency);
+    }
+
+    private void ReplacePayers(
+        Expense expense, IReadOnlyList<PayerInputDto> payers, decimal rate, string baseCurrency)
+    {
+        var wanted = payers.ToDictionary(p => p.MemberId);
+
+        foreach (var existing in expense.Payers.ToList())
+        {
+            if (wanted.TryGetValue(existing.MemberId, out var payer))
+            {
+                existing.Amount = payer.Amount;
+                existing.AmountInBaseCurrency = CurrencyPrecision.RoundStored(payer.Amount * rate, baseCurrency);
+                existing.IsDeleted = false;
+                existing.DeletedAt = null;
+                existing.UpdatedAt = clock.UtcNow;
+                wanted.Remove(existing.MemberId);
+            }
+            else
+            {
+                // Kept as a deleted row rather than removed, so a device that has the
+                // old version can tell the payer left rather than never existing.
+                existing.IsDeleted = true;
+                existing.DeletedAt = clock.UtcNow;
+                existing.Amount = 0m;
+                existing.AmountInBaseCurrency = 0m;
+                existing.UpdatedAt = clock.UtcNow;
+            }
+        }
+
+        foreach (var payer in wanted.Values)
+        {
+            db.ExpensePayers.Add(new ExpensePayer
+            {
+                ExpenseId = expense.Id,
+                GroupId = expense.GroupId,
+                MemberId = payer.MemberId,
+                Amount = payer.Amount,
+                AmountInBaseCurrency = CurrencyPrecision.RoundStored(payer.Amount * rate, baseCurrency),
+                Clock = expense.Clock,
+                CreatedAt = clock.UtcNow,
+                UpdatedAt = clock.UtcNow
+            });
+        }
+
+        RebalancePayerBaseAmounts(expense, payers, baseCurrency);
+    }
+
+    /// <summary>
+    /// The converted contributions have to add up to the converted expense, the same
+    /// way the converted shares do: each is rounded on its own, and a rate that is
+    /// not 1 leaves the sum a cent out often enough to matter.
+    /// </summary>
+    private void RebalancePayerBaseAmounts(
+        Expense expense, IReadOnlyList<PayerInputDto> payers, string baseCurrency)
+    {
+        var rows = expense.Payers.Where(p => !p.IsDeleted).ToList();
+        if (rows.Count == 0) return;
+
+        var difference = CurrencyPrecision.RoundStored(
+            expense.AmountInBaseCurrency - rows.Sum(p => p.AmountInBaseCurrency), baseCurrency);
+        if (difference == 0m) return;
+
+        var largest = rows
+            .OrderByDescending(p => p.AmountInBaseCurrency)
+            .ThenBy(p => p.MemberId)
+            .First();
+
+        largest.AmountInBaseCurrency = CurrencyPrecision.RoundStored(
+            largest.AmountInBaseCurrency + difference, baseCurrency);
+    }
+
     private static void ValidateParticipants(
         Guid payerId,
         IReadOnlyList<SplitInputDto>? splits,
@@ -526,7 +730,7 @@ public sealed class ExpenseService(
                 GroupId = expense.GroupId,
                 MemberId = share.MemberId,
                 Amount = share.Amount,
-                AmountInBaseCurrency = CurrencyPrecision.Round(share.Amount * rate, baseCurrency),
+                AmountInBaseCurrency = CurrencyPrecision.RoundStored(share.Amount * rate, baseCurrency),
                 InputValue = share.InputValue,
                 Clock = expense.Clock,
                 CreatedAt = clock.UtcNow,
@@ -546,7 +750,7 @@ public sealed class ExpenseService(
             if (wanted.TryGetValue(split.MemberId, out var share))
             {
                 split.Amount = share.Amount;
-                split.AmountInBaseCurrency = CurrencyPrecision.Round(share.Amount * rate, baseCurrency);
+                split.AmountInBaseCurrency = CurrencyPrecision.RoundStored(share.Amount * rate, baseCurrency);
                 split.InputValue = share.InputValue;
                 split.IsDeleted = false;
                 split.DeletedAt = null;
@@ -570,7 +774,7 @@ public sealed class ExpenseService(
                 GroupId = expense.GroupId,
                 MemberId = share.MemberId,
                 Amount = share.Amount,
-                AmountInBaseCurrency = CurrencyPrecision.Round(share.Amount * rate, baseCurrency),
+                AmountInBaseCurrency = CurrencyPrecision.RoundStored(share.Amount * rate, baseCurrency),
                 InputValue = share.InputValue,
                 Clock = expense.Clock,
                 CreatedAt = clock.UtcNow,
@@ -591,7 +795,7 @@ public sealed class ExpenseService(
         var live = expense.Splits.Where(s => !s.IsDeleted).ToList();
         if (live.Count == 0) return;
 
-        var residue = CurrencyPrecision.Round(
+        var residue = CurrencyPrecision.RoundStored(
             expense.AmountInBaseCurrency - live.Sum(s => s.AmountInBaseCurrency), baseCurrency);
         if (residue == 0m) return;
 
@@ -600,7 +804,7 @@ public sealed class ExpenseService(
             .ThenBy(s => s.MemberId)
             .First();
 
-        target.AmountInBaseCurrency = CurrencyPrecision.Round(
+        target.AmountInBaseCurrency = CurrencyPrecision.RoundStored(
             target.AmountInBaseCurrency + residue, baseCurrency);
     }
 
@@ -693,6 +897,13 @@ public sealed class ExpenseService(
                 .Select(i => new ExpenseItemDto(i.Id, i.Description, i.Amount, i.Quantity,
                     i.SortOrder, i.Shares.Select(s => s.MemberId).ToList()))
                 .ToList(),
+            expense.Payers.Where(y => !y.IsDeleted)
+                .Select(y => new ExpensePayerDto(
+                    y.MemberId, memberNames.GetValueOrDefault(y.MemberId, "Unknown"),
+                    y.Amount, y.AmountInBaseCurrency))
+                .OrderByDescending(y => y.Amount)
+                .ThenBy(y => y.MemberName)
+                .ToList(),
             commentCount,
             expense.Clock.Counters,
             expense.ServerSeq,
@@ -718,6 +929,12 @@ public sealed class ExpenseService(
         expense.SpentAt, SplitType = (int)expense.SplitType,
         expense.ReceiptId, expense.Notes, expense.Revision, expense.IsDeleted,
         expense.OriginGroupId, expense.OriginLineageId,
+        // Who paid rides inside the expense payload rather than syncing as an entity
+        // of its own: it is part of what an expense is, and a device that had one
+        // without the other would compute a balance from half an expense.
+        Payers = expense.Payers.Where(y => !y.IsDeleted)
+            .Select(y => new { y.MemberId, y.Amount, y.AmountInBaseCurrency })
+            .ToList(),
         Splits = expense.Splits.Where(s => !s.IsDeleted)
             .Select(s => new { s.MemberId, s.Amount, s.AmountInBaseCurrency, s.InputValue })
             .ToList(),

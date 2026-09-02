@@ -320,6 +320,7 @@ public sealed class SyncService(
         Guid userId, string deviceId, SyncOperationDto operation, bool force, CancellationToken ct)
     {
         var stored = await db.Expenses
+            .Include(e => e.Payers)
             .Include(e => e.Splits)
             .FirstOrDefaultAsync(e => e.Id == operation.EntityId, ct);
 
@@ -372,6 +373,23 @@ public sealed class SyncService(
         if (Math.Abs(splitsTotal - payload.Amount.Value) > CurrencyPrecision.MinorUnit(currency))
             return Outcome.Reject("The splits do not add up to the expense total.", "InvalidPayload");
 
+        // Several payers, from a client that supports them. Checked as strictly as
+        // the splits are: an expense whose contributions do not add up to it would
+        // put every balance in the group out by the difference.
+        if (payload.Payers.Count > 0)
+        {
+            if (payload.Payers.Any(y => !members.Contains(y.MemberId)))
+                return Outcome.Reject("Somebody who paid is not a member of this group.", "InvalidPayload");
+            if (payload.Payers.Any(y => y.Amount <= 0m))
+                return Outcome.Reject("What each person paid must be greater than zero.", "InvalidPayload");
+            if (payload.Payers.Select(y => y.MemberId).Distinct().Count() != payload.Payers.Count)
+                return Outcome.Reject("Somebody cannot appear twice among who paid.", "InvalidPayload");
+
+            var paidTotal = payload.Payers.Sum(y => y.Amount);
+            if (Math.Abs(paidTotal - payload.Amount.Value) > CurrencyPrecision.MinorUnit(currency))
+                return Outcome.Reject("What everyone paid does not add up to the expense total.", "InvalidPayload");
+        }
+
         var isNew = stored is null;
         stored ??= new Expense
         {
@@ -397,6 +415,7 @@ public sealed class SyncService(
 
         if (isNew) db.Expenses.Add(stored);
 
+        ApplyPayers(stored, payload);
         ApplySplits(stored, payload);
 
         var seq = await writer.RecordAsync(stored, SyncEntityType.Expense, operation.GroupId,
@@ -417,6 +436,73 @@ public sealed class SyncService(
         });
 
         return new Outcome(OutcomeKind.Accepted, seq, stored.Clock);
+    }
+
+    /// <summary>
+    /// Who paid, from an expense that arrived from a device.
+    ///
+    /// A payload with no payers is not an expense nobody paid for: it is one from a
+    /// client that only knows about a single payer, so the member it names becomes
+    /// the only contribution.
+    /// </summary>
+    private void ApplyPayers(Expense expense, SyncPayloads.ExpensePayload payload)
+    {
+        var incoming = payload.Payers.Count > 0
+            ? payload.Payers
+            : [new SyncPayloads.PayerPayload
+            {
+                MemberId = payload.PaidByMemberId,
+                Amount = payload.Amount ?? 0m,
+                AmountInBaseCurrency = payload.AmountInBaseCurrency ?? payload.Amount
+            }];
+
+        var wanted = incoming.ToDictionary(y => y.MemberId);
+
+        foreach (var payer in expense.Payers.ToList())
+        {
+            if (wanted.TryGetValue(payer.MemberId, out var given))
+            {
+                payer.Amount = given.Amount;
+                payer.AmountInBaseCurrency = given.AmountInBaseCurrency ?? given.Amount;
+                payer.IsDeleted = false;
+                payer.DeletedAt = null;
+                payer.UpdatedAt = clock.UtcNow;
+                wanted.Remove(payer.MemberId);
+            }
+            else
+            {
+                payer.IsDeleted = true;
+                payer.DeletedAt = clock.UtcNow;
+                payer.Amount = 0m;
+                payer.AmountInBaseCurrency = 0m;
+                payer.UpdatedAt = clock.UtcNow;
+            }
+        }
+
+        foreach (var given in wanted.Values)
+        {
+            expense.Payers.Add(new ExpensePayer
+            {
+                ExpenseId = expense.Id,
+                GroupId = expense.GroupId,
+                MemberId = given.MemberId,
+                Amount = given.Amount,
+                AmountInBaseCurrency = given.AmountInBaseCurrency ?? given.Amount,
+                Clock = expense.Clock,
+                CreatedAt = clock.UtcNow,
+                UpdatedAt = clock.UtcNow
+            });
+        }
+
+        // The name on the expense is the largest contribution, wherever it came from.
+        var live = expense.Payers.Where(y => !y.IsDeleted).ToList();
+        if (live.Count > 0)
+        {
+            expense.PaidByMemberId = live
+                .OrderByDescending(y => y.Amount)
+                .ThenBy(y => y.MemberId)
+                .First().MemberId;
+        }
     }
 
     private void ApplySplits(Expense expense, SyncPayloads.ExpensePayload payload)

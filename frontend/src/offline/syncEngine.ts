@@ -551,6 +551,23 @@ function toLocalExpense(payload: WirePayload, entry: SyncLogEntry): LocalExpense
     splitType: readSplitType(payload.splitType),
     receiptId: payload.receiptId ?? null,
     notes: payload.notes ?? null,
+    // A payload without payers came from a server that only knows a single one, so
+    // the member it names paid the whole amount. Never left empty: an expense with
+    // no payer contributes nothing to a balance.
+    payers:
+      (payload.payers ?? []).length > 0
+        ? payload.payers.map((payer: WirePayload) => ({
+            memberId: String(payer.memberId),
+            amount: Number(payer.amount ?? 0),
+            amountInBaseCurrency: Number(payer.amountInBaseCurrency ?? payer.amount ?? 0),
+          }))
+        : [
+            {
+              memberId: String(payload.paidByMemberId ?? ''),
+              amount: Number(payload.amount ?? 0),
+              amountInBaseCurrency: Number(payload.amountInBaseCurrency ?? payload.amount ?? 0),
+            },
+          ],
     splits: (payload.splits ?? []).map((split: WirePayload) => ({
       memberId: String(split.memberId),
       amount: Number(split.amount ?? 0),

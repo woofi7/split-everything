@@ -6,8 +6,12 @@ export interface MemberBalance {
 }
 
 export interface BalanceExpense {
-  payerMemberId: string
-  amount: number
+  /**
+   * Who put money in, and how much. A list because an expense can be paid by more
+   * than one person at once, and no single-payer stand-in gets the balances right:
+   * two people paying 40 and 25 of a 65 bill split evenly are 7.50 apart, not 32.50.
+   */
+  payers: Array<{ memberId: string; amount: number }>
   splits: Array<{ memberId: string; amount: number }>
 }
 
@@ -45,7 +49,7 @@ export function netBalances(
     net.set(memberId, (net.get(memberId) ?? 0) + delta)
 
   for (const expense of expenses) {
-    bump(expense.payerMemberId, expense.amount)
+    for (const payer of expense.payers) bump(payer.memberId, payer.amount)
     for (const split of expense.splits) bump(split.memberId, -split.amount)
   }
 
@@ -54,9 +58,35 @@ export function netBalances(
     bump(settlement.toMemberId, -settlement.amount)
   }
 
-  return [...net.entries()]
+  const rounded = [...net.entries()]
     .map(([memberId, value]) => ({ memberId, net: roundMoney(value, currency) }))
     .sort((left, right) => (left.memberId < right.memberId ? -1 : 1))
+
+  /*
+   * Balances have to sum to zero, and rounding each of them to a payable cent can
+   * leave them a cent short of it: shares are worked out finer than the currency,
+   * so a net position can be a fraction of a cent either way.
+   *
+   * The residue goes to the largest balance, as everywhere else. Left in, it is a
+   * cent nobody can pay off - the settle-up plan moves whole cents, so it would
+   * hand somebody a debt of one that survives being paid.
+   */
+  const residue = roundMoney(
+    -rounded.reduce((sum, balance) => sum + balance.net, 0),
+    currency,
+  )
+  if (residue === 0 || rounded.length === 0) return rounded
+
+  let index = 0
+  for (let i = 1; i < rounded.length; i++) {
+    const bigger = Math.abs(rounded[i].net) - Math.abs(rounded[index].net)
+    if (bigger > 1e-9 || (Math.abs(bigger) < 1e-9 && rounded[i].memberId < rounded[index].memberId)) {
+      index = i
+    }
+  }
+
+  rounded[index] = { ...rounded[index], net: roundMoney(rounded[index].net + residue, currency) }
+  return rounded
 }
 
 /**
@@ -140,7 +170,17 @@ export function pairwiseDebts(
   }
 
   for (const expense of expenses) {
-    for (const split of expense.splits) add(split.memberId, expense.payerMemberId, split.amount)
+    const paid = expense.payers.reduce((sum, payer) => sum + payer.amount, 0)
+    if (paid === 0) continue
+
+    for (const split of expense.splits) {
+      // Owed to whoever put the money in, in the proportion each of them did: of a
+      // bill two people covered 40/25, a share is owed 40/65 to one and 25/65 to
+      // the other. Rounded once at the end, so the proportions keep their cents.
+      for (const payer of expense.payers) {
+        add(split.memberId, payer.memberId, (split.amount * payer.amount) / paid)
+      }
+    }
   }
 
   for (const settlement of settlements) {

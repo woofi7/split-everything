@@ -27,6 +27,64 @@ describe('ExpenseView', () => {
     expect(text).toContain('Alice paid on')
   })
 
+  it('names both people when two of them paid', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [
+        testExpense({
+          amount: 65,
+          amountInBaseCurrency: 65,
+          payers: [
+            { memberId: ALICE, amount: 40, amountInBaseCurrency: 40 },
+            { memberId: BOB, amount: 25, amountInBaseCurrency: 25 },
+          ],
+          splits: [
+            { memberId: ALICE, amount: 32.5, amountInBaseCurrency: 32.5, inputValue: null },
+            { memberId: BOB, amount: 32.5, amountInBaseCurrency: 32.5, inputValue: null },
+          ],
+        }),
+      ],
+    })
+
+    // Not "Alice paid": the pans were bought by the two of them.
+    expect(textOf(wrapper)).toContain('Alice and Bob paid on')
+  })
+
+  it('breaks down what each of them put in', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [
+        testExpense({
+          amount: 65,
+          amountInBaseCurrency: 65,
+          payers: [
+            { memberId: ALICE, amount: 40, amountInBaseCurrency: 40 },
+            { memberId: BOB, amount: 25, amountInBaseCurrency: 25 },
+          ],
+          splits: [
+            { memberId: ALICE, amount: 32.5, amountInBaseCurrency: 32.5, inputValue: null },
+            { memberId: BOB, amount: 32.5, amountInBaseCurrency: 32.5, inputValue: null },
+          ],
+        }),
+      ],
+    })
+
+    // What each paid is a different question from what each owes, and the answer to
+    // the second is already on screen below.
+    const breakdown = wrapper.find('[data-testid="payer-breakdown"]').text()
+    expect(breakdown).toContain('40.00')
+    expect(breakdown).toContain('25.00')
+  })
+
+  it('says one name when one person paid', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    expect(wrapper.find('[data-testid="payer-breakdown"]').exists()).toBe(false)
+  })
+
   it('lists the split per member', async () => {
     const { wrapper } = await mountView(ExpenseView, {
       api: api(),

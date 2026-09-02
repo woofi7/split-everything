@@ -68,7 +68,7 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
     }
 
     [Fact]
-    public async Task A_shared_payment_becomes_one_expense_for_each_payer()
+    public async Task A_shared_payment_is_one_expense_that_two_people_paid_into()
     {
         var user = await TestData.SeedUserAsync(Db);
 
@@ -80,17 +80,23 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
             .ToDictionaryAsync(m => m.Id, m => m.DisplayName);
 
         var shared = await context.Expenses
+            .Include(e => e.Payers)
             .Where(e => e.GroupId == result.GroupId && e.Description == "Frying pans")
             .ToListAsync();
 
-        shared.Count.ShouldBe(2);
-        shared.Sum(e => e.Amount).ShouldBe(65m);
-        shared.Select(e => (members[e.PaidByMemberId], e.Amount))
+        // One pair of frying pans, one expense: 65 of them, paid 40 by one person
+        // and 25 by the other.
+        shared.ShouldHaveSingleItem();
+        shared[0].Amount.ShouldBe(65m);
+        shared[0].Payers.Select(y => (members[y.MemberId], y.Amount))
             .ShouldBe([("Emma", 40m), ("Nicolas", 25m)], ignoreOrder: true);
+
+        // Named for the larger contribution, which is what the lists show.
+        members[shared[0].PaidByMemberId].ShouldBe("Emma");
     }
 
     [Fact]
-    public async Task Each_half_is_split_in_the_proportion_the_export_gave()
+    public async Task The_split_is_the_one_the_export_gave_the_whole_row()
     {
         var user = await TestData.SeedUserAsync(Db);
 
@@ -99,15 +105,14 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
         var context = NewContext();
         var shared = await context.Expenses
             .Where(e => e.GroupId == result.GroupId && e.Description == "Frying pans")
-            .Select(e => e.Id).ToListAsync();
+            .Select(e => e.Id).SingleAsync();
 
         var splits = await context.ExpenseSplits
-            .Where(s => shared.Contains(s.ExpenseId)).ToListAsync();
+            .Where(s => s.ExpenseId == shared).ToListAsync();
 
-        // 32.5;32.5 of a 65 row is half each, so 40 splits 20/20 and 25 splits
-        // 12.50/12.50. Every share of every half adds back up to the row.
+        // "32.5;32.5" of a 65 row: half each, and the shares add up to the row.
         splits.Sum(s => s.Amount).ShouldBe(65m);
-        splits.Select(s => s.Amount).ShouldBe([20m, 20m, 12.50m, 12.50m], ignoreOrder: true);
+        splits.Select(s => s.Amount).ShouldBe([32.50m, 32.50m], ignoreOrder: true);
     }
 
     [Fact]
@@ -123,13 +128,14 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
             .ToDictionaryAsync(m => m.DisplayName, m => m.Id);
 
         var expenses = await context.Expenses
+            .Include(e => e.Payers)
             .Where(e => e.GroupId == result.GroupId && e.Description == "Frying pans")
             .ToListAsync();
         var ids = expenses.Select(e => e.Id).ToList();
         var splits = await context.ExpenseSplits.Where(s => ids.Contains(s.ExpenseId)).ToListAsync();
 
         decimal NetOf(Guid memberId) =>
-            expenses.Where(e => e.PaidByMemberId == memberId).Sum(e => e.Amount)
+            expenses.SelectMany(e => e.Payers).Where(y => y.MemberId == memberId).Sum(y => y.Amount)
             - splits.Where(s => s.MemberId == memberId).Sum(s => s.Amount);
 
         // Emma put in 40 and owed 32.50, so she is 7.50 up; Nicolas is 7.50 down.

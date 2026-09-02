@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
 
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<ExpensePayer> ExpensePayers => Set<ExpensePayer>();
     public DbSet<ExpenseSplit> ExpenseSplits => Set<ExpenseSplit>();
     public DbSet<ExpenseItem> ExpenseItems => Set<ExpenseItem>();
     public DbSet<ExpenseItemShare> ExpenseItemShares => Set<ExpenseItemShare>();

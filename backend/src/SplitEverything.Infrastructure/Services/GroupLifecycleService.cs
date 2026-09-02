@@ -118,6 +118,7 @@ public sealed class GroupLifecycleService(
             throw new ValidationException("Choose at least one expense or settlement to split out.");
 
         var expenses = await db.Expenses
+            .Include(e => e.Payers)
             .Include(e => e.Splits)
             .Where(e => request.ExpenseIds.Contains(e.Id))
             .ToListAsync(ct);
@@ -271,7 +272,8 @@ public sealed class GroupLifecycleService(
         Guid userId, TransferExpenseRequest request, CancellationToken ct = default)
     {
         var expense = await db.Expenses
-                          .Include(e => e.Splits)
+                          .Include(e => e.Payers)
+            .Include(e => e.Splits)
                           .Include(e => e.Items)
                           .FirstOrDefaultAsync(e => e.Id == request.ExpenseId && !e.IsDeleted, ct)
                       ?? throw new NotFoundException($"Expense {request.ExpenseId}");
@@ -318,6 +320,15 @@ public sealed class GroupLifecycleService(
         expense.OriginGroupId ??= fromGroupId;
         expense.GroupId = request.TargetGroupId;
         expense.PaidByMemberId = memberMap[expense.PaidByMemberId];
+
+        // Who paid moves with the expense. Left behind, its rows would point at
+        // members of a group this expense is no longer in, and every balance either
+        // side of the move would be wrong.
+        foreach (var payer in expense.Payers)
+        {
+            payer.MemberId = memberMap[payer.MemberId];
+            payer.GroupId = request.TargetGroupId;
+        }
 
         foreach (var split in expense.Splits)
         {
@@ -536,7 +547,7 @@ public sealed class GroupLifecycleService(
         IQueryable<Expense> query, Guid targetGroupId,
         Dictionary<Guid, Guid> memberMap, bool recordOrigin, CancellationToken ct)
     {
-        var expenses = await query.Include(e => e.Splits).Include(e => e.Items).ToListAsync(ct);
+        var expenses = await query.Include(e => e.Payers).Include(e => e.Splits).Include(e => e.Items).ToListAsync(ct);
         if (expenses.Count == 0) return 0;
 
         var expenseIds = expenses.Select(e => e.Id).ToList();
@@ -546,6 +557,12 @@ public sealed class GroupLifecycleService(
             if (recordOrigin) expense.OriginGroupId ??= expense.GroupId;
             expense.GroupId = targetGroupId;
             expense.PaidByMemberId = Remap(memberMap, expense.PaidByMemberId);
+
+            foreach (var payer in expense.Payers)
+            {
+                payer.MemberId = Remap(memberMap, payer.MemberId);
+                payer.GroupId = targetGroupId;
+            }
 
             foreach (var split in expense.Splits)
             {
