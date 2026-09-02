@@ -2,10 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
-    # A release is a version tag, matching the other project on this server: the
-    # images are built and pushed from the tag, and the tag is what the compose
-    # file on the box pins to.
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -40,8 +36,6 @@ jobs:
         working-directory: backend
         run: dotnet build --no-restore -c Release
 
-      # The suite runs against a real Postgres through Testcontainers, which uses
-      # the Docker daemon the runner already provides.
       - name: Test with coverage
         working-directory: backend
         run: |
@@ -87,8 +81,6 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-      # Thresholds live in vitest.config.ts, per layer, so this fails on its own
-      # when coverage of the logic drops.
       - name: Test with coverage
         working-directory: frontend
         run: npm run test:coverage
@@ -106,8 +98,6 @@ jobs:
 
   images:
     name: Build and publish images
-    # On a version tag only, after every gate has passed. The same release model as
-    # the other project on this server: tag, images, then the box pulls them.
     needs: [backend, frontend]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -118,14 +108,11 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Docker Hub, under the same account as everything else on that machine.
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # :latest tracks the highest version tag, and the three semver tags let the
-      # compose file pin as loosely or as tightly as it likes.
       - uses: docker/metadata-action@v5
         id: api-meta
         with:
@@ -164,9 +151,6 @@ jobs:
           push: true
           tags: ${{ steps.web-meta.outputs.tags }}
           labels: ${{ steps.web-meta.outputs.labels }}
-          # Vite inlines these at build time, so they belong to the image rather
-          # than to the runtime environment. The version travels with them, which
-          # is what a crash report from a phone names.
           build-args: |
             APP_VERSION=${{ github.ref_name }}
             VITE_API_BASE_URL=/api
@@ -181,9 +165,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      # Optional, and the one thing here the other project does not do: it pulls
-      # its own images on the box. This skips itself when the secret is unset, so
-      # the release is complete either way.
       - name: Trigger the redeploy webhook
         run: |
           if [ -z "${{ secrets.PORTAINER_WEBHOOK_URL }}" ]; then

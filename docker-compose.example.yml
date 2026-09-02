@@ -35,9 +35,6 @@ services:
       - Auth__GoogleClientId=${GOOGLE_CLIENT_ID}
       - Auth__AppBaseUrl=${PUBLIC_URL}
       - Cors__AllowedOrigins__0=${PUBLIC_URL}
-      # Without these the notification switch in the profile cannot work: the API
-      # serves an empty public key, the browser has nothing to subscribe to, and
-      # the app can only report that the server is not set up for it.
       - Push__VapidPublicKey=${VAPID_PUBLIC_KEY}
       - Push__VapidPrivateKey=${VAPID_PRIVATE_KEY}
       - Push__VapidSubject=${VAPID_SUBJECT}
@@ -48,16 +45,13 @@ services:
       - '8091:8080'
     labels:
       - "traefik.enable=true"
-      # On two networks, so Traefik has to be told which one to dial.
       - "traefik.docker.network=proxy"
       - "traefik.http.routers.split-api.rule=Host(`${PUBLIC_HOST}`) && (PathPrefix(`/api`) || PathPrefix(`/hubs`))"
-      # Higher than the web router: both match the host, so this decides.
       - "traefik.http.routers.split-api.priority=20"
       - "traefik.http.routers.split-api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.split-api.middlewares=secure-headers@file"
       - "traefik.http.services.split-api.loadbalancer.server.port=8080"
     healthcheck:
-      # curl, not wget: this image has no wget.
       test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8080/api/health']
       interval: 30s
       timeout: 5s
@@ -108,14 +102,6 @@ services:
       - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS}
     volumes:
       - /mnt/user/appdata/split-everything/backups:/backups
-    # The script lives here rather than in a mounted file. A bind mount to a path in
-    # the repo needs the repo checked out beside the compose file, and when it is
-    # not there Docker creates an empty directory at that path instead of failing:
-    # sh then has nothing to run, the container exits, and restart: unless-stopped
-    # turns that into a container that restarts for ever.
-    #
-    # Each dump is written to a temporary name and moved into place only on success,
-    # so an interrupted dump never passes for a good backup.
     entrypoint: ['/bin/sh', '-c']
     command:
       - |
