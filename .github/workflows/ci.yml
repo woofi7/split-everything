@@ -224,10 +224,12 @@ jobs:
               --header "Authorization: Bearer $DOCKHAND_TOKEN" \
               "$DOCKHAND_URL/api/jobs/$job")
 
-            phase=$(printf '%s' "$state" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status","unknown"))')
+            # A job that has fallen out of the store answers with an error and no
+            # status, which is worth saying rather than waiting out the timeout.
+            phase=$(printf '%s' "$state" | python3 -c 'import json,sys; a=json.load(sys.stdin); print(a.get("status") or "gone: " + a.get("error","no status"))')
 
             case "$phase" in
-              complete)
+              done|complete|success)
                 printf '%s' "$state" | python3 -c 'import json,sys; [print(line) for line in json.load(sys.stdin).get("lines", [])]'
                 echo "Redeployed ${STACK}."
                 exit 0
@@ -235,6 +237,10 @@ jobs:
               error|failed)
                 printf '%s' "$state" | python3 -c 'import json,sys; [print(line) for line in json.load(sys.stdin).get("lines", [])]' >&2
                 echo "Dockhand could not redeploy ${STACK}." >&2
+                exit 1
+                ;;
+              gone:*)
+                echo "Dockhand lost track of job ${job} - ${phase#gone: }" >&2
                 exit 1
                 ;;
             esac
