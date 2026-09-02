@@ -19,8 +19,7 @@ namespace SplitEverything.Infrastructure.Services;
 /// </summary>
 public sealed class StatsService(
     AppDbContext db,
-    ICurrencyConverter currency,
-    IClock clock) : IStatsService
+    ICurrencyConverter currency) : IStatsService
 {
     private static readonly HashSet<string> Granularities = new(StringComparer.OrdinalIgnoreCase)
     {

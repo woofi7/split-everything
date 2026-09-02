@@ -14,8 +14,7 @@ namespace SplitEverything.Tests.Support;
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
         .WithDatabase("split_everything_test")
         .WithUsername("test")
         .WithPassword("test")

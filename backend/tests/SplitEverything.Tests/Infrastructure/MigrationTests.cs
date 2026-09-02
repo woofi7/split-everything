@@ -16,8 +16,7 @@ namespace SplitEverything.Tests.Infrastructure;
 /// </summary>
 public class MigrationTests : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
         .WithDatabase("split_everything_migrations")
         .WithUsername("test")
         .WithPassword("test")

@@ -47,8 +47,13 @@ public abstract class DatabaseTestBase : IAsyncLifetime
             "push_subscriptions", "devices", "refresh_tokens", "users", "exchange_rates"
         };
 
+        // EF cannot tell a table list from user input, and this one is the constant
+        // above: a parameter cannot carry a table name anyway, so there is nothing
+        // to parameterise here.
+#pragma warning disable EF1002
         await Db.Database.ExecuteSqlRawAsync(
             $"TRUNCATE TABLE {string.Join(", ", tables)} RESTART IDENTITY CASCADE;");
+#pragma warning restore EF1002
     }
 
 }

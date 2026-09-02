@@ -18,7 +18,7 @@ namespace SplitEverything.Tests.Application;
 /// </summary>
 public class SpendOverTimeByMemberTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
-    private StatsService Stats => new(Db, Currency, Clock);
+    private StatsService Stats => new(Db, Currency);
 
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
     {

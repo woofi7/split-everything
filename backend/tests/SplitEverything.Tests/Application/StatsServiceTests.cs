@@ -17,7 +17,7 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
     public override async Task InitializeAsync()
     {
         await base.InitializeAsync();
-        Stats = new StatsService(Db, Currency, Clock);
+        Stats = new StatsService(Db, Currency);
     }
 
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
