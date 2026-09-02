@@ -2,6 +2,7 @@
 import { intlLocale, t } from '@/i18n'
 import { computed, ref } from 'vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
+import Spinner from '@/components/ui/Spinner.vue'
 import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
 import { useAuthStore } from '@/stores/auth'
@@ -211,7 +212,7 @@ async function onFile(event: Event): Promise<void> {
 
   reset()
   file.value = chosen
-  busy.value = 'Reading the export'
+  busy.value = t('Reading the export')
 
   try {
     const result = await useApi().upload<Analysis>('/import/csv/analyze', { file: chosen })
@@ -285,7 +286,7 @@ async function loadPreview(): Promise<void> {
   error.value = null
   if (!validateTarget()) return
 
-  busy.value = 'Reading the rows'
+  busy.value = t('Reading the rows')
 
   try {
     preview.value = await useApi().upload<Preview>('/import/csv/preview', {
@@ -324,7 +325,7 @@ async function commit(): Promise<void> {
   error.value = null
   if (!validateTarget()) return
 
-  busy.value = 'Importing'
+  busy.value = t('Importing {count} rows', { count: toImport.value })
 
   try {
     const result = await useApi().upload<CommitResult>('/import/csv/commit', {
@@ -363,7 +364,20 @@ const dateOf = (value: string | null) =>
     <!-- Outside the steps: a file that cannot be read fails before there is a
          step two to report it in. -->
     <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
-    <p v-if="busy" class="text-sm text-[var(--text-muted)]" aria-live="polite">{{ busy }}</p>
+    <!--
+      What it is doing, with something moving beside it. An import of four hundred
+      rows takes seconds, and a line of static text through those seconds reads as
+      a tap that did not land.
+    -->
+    <p
+      v-if="busy"
+      data-testid="import-busy"
+      class="flex items-center gap-2 text-sm text-[var(--text-muted)]"
+      aria-live="polite"
+    >
+      <Spinner />
+      {{ busy }}
+    </p>
 
     <!-- Step one: the file. -->
     <div v-if="!analysis" class="surface-card p-4">
@@ -609,7 +623,9 @@ const dateOf = (value: string | null) =>
           class="btn btn-press btn-primary flex-1"
           :disabled="busy !== null"
           @click="loadPreview"
-        >{{ t('See the rows') }}
+        >
+          <Spinner v-if="busy !== null" />
+          {{ t('See the rows') }}
         </button>
 
         <button
@@ -620,6 +636,7 @@ const dateOf = (value: string | null) =>
           :disabled="busy !== null || toImport === 0"
           @click="commit"
         >
+          <Spinner v-if="busy !== null" />
           Import {{ toImport }}
         </button>
       </div>

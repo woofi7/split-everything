@@ -67,7 +67,27 @@ export const fr: Record<string, string> = {
   'Suggested transfers': 'Virements suggérés',
   Use: 'Utiliser',
   'Who paid': 'Qui a payé',
+  '{name} paid': '{name} a payé',
+  '{first} and {second} paid': '{first} et {second} ont payé',
+  '{name} and {count} others paid': '{name} et {count} autres ont payé',
+  'Several people paid': 'Plusieurs personnes ont payé',
+  'One person paid': 'Une seule personne a payé',
+  'Add someone who paid': 'Ajouter une personne qui a payé',
+  'Say what each person paid, or go back to a single payer.':
+    "Indiquez ce que chaque personne a payé, ou revenez à un seul payeur.",
+  'Everyone who paid must be a member of this group.':
+    'Toutes les personnes qui ont payé doivent être membres de ce groupe.',
+  'What each person paid must be greater than zero.':
+    'Ce que chaque personne a payé doit être supérieur à zéro.',
+  'Somebody cannot appear twice among who paid.':
+    'Une même personne ne peut pas figurer deux fois parmi les payeurs.',
+  'What everyone paid has to add up to the expense.':
+    "Le total payé doit correspondre au montant de la dépense.",
   'Still to settle': 'Reste à régler',
+  'Nothing spent this month yet.': "Rien de dépensé ce mois-ci pour l'instant.",
+  'Reading the export': "Lecture de l'export",
+  'Reading the rows': 'Lecture des lignes',
+  'Importing {count} rows': 'Importation de {count} lignes',
   'Who received it': "Qui l'a reçu",
   Note: 'Note',
   'Settle up': 'Régler',

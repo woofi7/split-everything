@@ -231,18 +231,40 @@ onUnmounted(() => {
         class="flex h-9 w-9 items-center justify-center rounded-full border shadow-lg"
         style="background: var(--surface-raised); border-color: var(--border)"
       >
+        <!--
+          A ring while it works, an arrow while it is being pulled.
+
+          The arrow used to stay and spin, which read as an arrow pointing every
+          which way rather than as waiting: an arrow means a direction, and a whole
+          turn of one means nothing. Its half turn is the promise ("let go and this
+          syncs"); once it has been let go the question is only whether it is done,
+          which is what a ring going round says.
+        -->
         <svg
+          v-if="isRefreshing"
+          data-testid="pull-spinner"
+          class="pull-spin h-4 w-4 text-brand-400"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.4"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9" class="opacity-25" />
+          <path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round" />
+        </svg>
+
+        <svg
+          v-else
+          data-testid="pull-arrow"
           class="h-4 w-4 text-brand-400"
-          :class="isRefreshing ? 'pull-spin' : ''"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
           stroke-width="2.2"
           aria-hidden="true"
-          :style="isRefreshing ? undefined : { transform: `rotate(${turned}deg)` }"
+          :style="{ transform: `rotate(${turned}deg)` }"
         >
-          <!-- An arrow while it is being pulled, the same shape spinning while it
-               works: one mark that turns into the other rather than two marks. -->
           <path d="M12 5v14M6 13l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </span>

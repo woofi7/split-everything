@@ -89,11 +89,11 @@ describe('PullToRefresh', () => {
 
     pull({ x: 200, y: 100 }, { x: 200, y: 130 })
     await flushPromises()
-    const early = wrapper.find('[data-testid="pull-indicator"] svg').attributes('style')
+    const early = wrapper.find('[data-testid="pull-arrow"]').attributes('style')
 
     touch('touchmove', [{ x: 200, y: 300 }])
     await flushPromises()
-    const enough = wrapper.find('[data-testid="pull-indicator"] svg').attributes('style')
+    const enough = wrapper.find('[data-testid="pull-arrow"]').attributes('style')
 
     // Pointing up is a promise about what release will do, not decoration.
     expect(early).toContain('rotate(')
@@ -124,6 +124,21 @@ describe('PullToRefresh', () => {
     expect(wrapper.emitted('refresh')).toHaveLength(1)
     // Held, so the spinner reads as doing it rather than as done.
     expect(wrapper.find('[data-testid="pull-indicator"]').exists()).toBe(true)
+  })
+
+  it('shows a spinner while it works rather than turning the arrow further', async () => {
+    pageElement()
+    const wrapper = mountPull()
+
+    pull({ x: 200, y: 100 }, { x: 200, y: 260 })
+    release()
+    await flushPromises()
+
+    // An arrow means a direction; a whole turn of one means nothing. Once the pull
+    // has been let go the only question left is whether it is finished, and that is
+    // what a ring going round answers.
+    expect(wrapper.find('[data-testid="pull-spinner"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="pull-arrow"]').exists()).toBe(false)
   })
 
   it('lets go only when the screen says it is finished', async () => {

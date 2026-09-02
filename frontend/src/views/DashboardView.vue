@@ -97,6 +97,24 @@ const memberName = (memberId: string) =>
   group.value?.members.find((member) => member.id === memberId)?.displayName ?? 'Someone'
 
 /**
+ * Who paid, on one line of a card.
+ *
+ * Two names when two people paid: an expense shared between them is not one person's
+ * to be listed under, and the card is the only place a reader would notice. More
+ * than two and the names would push the amount off a phone, so it counts them.
+ */
+function paidByLine(expense: LocalExpense): string {
+  const payers = [...(expense.payers ?? [])].sort((left, right) => right.amount - left.amount)
+
+  if (payers.length <= 1) return t('{name} paid', { name: memberName(expense.paidByMemberId) })
+
+  const names = payers.map((payer) => memberName(payer.memberId))
+  if (names.length === 2) return t('{first} and {second} paid', { first: names[0], second: names[1] })
+
+  return t('{name} and {count} others paid', { name: names[0], count: names.length - 1 })
+}
+
+/**
  * The expenses by the month they were spent in.
  *
  * A dashboard is read from the top and the top is this month; everything before it
@@ -250,28 +268,44 @@ const balances = computed(() => {
 })
 
 /**
- * What is left to split, by whoever still owes it.
+ * This month's spending, by whoever paid it.
  *
- * Not all-time spending, which is a figure that only grows and says nothing about
- * today: a group two years old with everybody square looked exactly as busy as one
- * where nobody has paid anybody back. These are the balances, so every settlement
- * already came off them, and the total in the middle of the chart is the money that
- * still has to move.
+ * The month rather than all time, which is a figure that only grows and says
+ * nothing about now: a group two years old looked exactly as busy as one that
+ * started last week. What is owed is a different question, and the balances below
+ * answer it.
  *
- * The people owed are the same money seen from the other side, so showing both
- * would double it. The debts are the actionable half.
+ * Every payer counts for what they put in, so an expense two people paid for shows
+ * up in both their slices rather than all under whoever's name is on it.
  */
-const stillToSettle = computed(() =>
-  balances.value
-    .filter((member) => member.net < 0)
-    .map((member) => ({
-      id: member.id,
-      label: member.name,
-      amount: -member.net,
-      colorHex: member.colour,
+const monthSpending = computed(() => {
+  const month = expenseMonths.value.find((entry) => entry.key === currentMonth.value)
+  if (!month || !group.value) return []
+
+  const paid = new Map<string, number>()
+  for (const expense of month.expenses) {
+    const payers =
+      expense.payers && expense.payers.length > 0
+        ? expense.payers
+        : [{ memberId: expense.paidByMemberId, amountInBaseCurrency: expense.amountInBaseCurrency }]
+
+    for (const payer of payers) {
+      paid.set(payer.memberId, (paid.get(payer.memberId) ?? 0) + payer.amountInBaseCurrency)
+    }
+  }
+
+  return [...paid]
+    .map(([memberId, amount]) => ({
+      id: memberId,
+      label: memberName(memberId),
+      amount,
+      colorHex: colourOf(memberId),
     }))
-    .sort((left, right) => right.amount - left.amount),
-)
+    .sort((left, right) => right.amount - left.amount)
+})
+
+/** The month the chart is about, which is this one whether or not it has anything in it. */
+const currentMonth = computed(() => bucketOf(new Date(), 'month'))
 
 /**
  * Who should pay whom.
@@ -358,9 +392,9 @@ async function refresh(): Promise<void> {
     <template v-if="group">
       <!-- The shape of the group's spending, first: it is what the screen is for. -->
       <section class="surface-card mb-4 p-4">
-        <SpendPie :slices="stillToSettle" :currency="currency">
-          <template #heading>{{ t('Still to settle') }}</template>
-          <template #empty>{{ t('Everyone is settled up.') }}</template>
+        <SpendPie :slices="monthSpending" :currency="currency">
+          <template #heading>{{ formatMonthHeading(currentMonth) }}</template>
+          <template #empty>{{ t('Nothing spent this month yet.') }}</template>
         </SpendPie>
       </section>
 
@@ -533,7 +567,7 @@ async function refresh(): Promise<void> {
                         </span>
                       </span>
                       <span class="truncate text-xs text-[var(--text-muted)]">
-                        {{ memberName(expense.paidByMemberId) }} paid
+                        {{ paidByLine(expense) }}
                         <span aria-hidden="true">-</span>
                         {{ spentOn(expense.spentAt) }}
                       </span>
