@@ -10,7 +10,6 @@ import {
   settle,
   testExpense,
   testGroup,
-  testSettlement,
   textOf,
 } from '../support/viewHarness'
 
