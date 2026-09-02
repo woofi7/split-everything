@@ -128,6 +128,25 @@ export const testExpense = (overrides: Partial<LocalExpense> = {}): LocalExpense
   ...overrides,
 })
 
+export const testSettlement = (
+  overrides: Partial<LocalSettlement> = {},
+): LocalSettlement => ({
+  id: 'settlement-1',
+  groupId: GROUP_ID,
+  fromMemberId: BOB,
+  toMemberId: ALICE,
+  amount: 30,
+  currency: 'CAD',
+  amountInBaseCurrency: 30,
+  settledAt: '2026-01-06T12:00:00Z',
+  note: null,
+  isDeleted: false,
+  vectorClock: { 'device-a': 1 },
+  serverSeq: 1,
+  pending: false,
+  ...overrides,
+})
+
 export const testConflict = (overrides: Partial<LocalConflict> = {}): LocalConflict => ({
   conflictId: 'conflict-1',
   groupId: GROUP_ID,

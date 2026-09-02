@@ -93,6 +93,23 @@ export function formatBucket(bucket: string, granularity: Granularity): string {
 }
 
 /**
+ * A month as a heading over a list, rather than a label under a bar.
+ *
+ * The year comes along only when it is not the current one. On a chart the axis
+ * says which year it is; a list that runs back two years has nothing else to say
+ * it, and "January" twice over is a list nobody can read.
+ */
+export function formatMonthHeading(bucket: string, today: Date = new Date()): string {
+  const date = parseBucket(bucket)
+  const thisYear = date.getFullYear() === today.getFullYear()
+
+  return date.toLocaleDateString(
+    intlLocale.value,
+    thisYear ? { month: 'long' } : { month: 'long', year: 'numeric' },
+  )
+}
+
+/**
  * What the bucket covers, spelled out for whoever asked about it.
  *
  * A week is a stretch of time rather than a date, and a bar labelled by its Monday

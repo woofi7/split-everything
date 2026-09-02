@@ -4,6 +4,7 @@ import {
   fillBuckets,
   formatBucket,
   formatBucketRange,
+  formatMonthHeading,
   nextBucket,
   parseBucket,
   toBucket,
@@ -72,6 +73,21 @@ describe('time buckets', () => {
     it('leaves a day and a month as they are', () => {
       expect(formatBucketRange('2026-09-01', 'month')).toBe('September')
       expect(formatBucketRange('2026-05-16', 'day')).toBe(formatBucket('2026-05-16', 'day'))
+    })
+  })
+
+  describe('what a month over a list is called', () => {
+    const today = new Date(2026, 8, 1)
+
+    it('leaves this year unsaid', () => {
+      expect(formatMonthHeading('2026-09-01', today)).toBe('September')
+    })
+
+    it('says the year of any other', () => {
+      // Two Januaries in one list, told apart by the only thing that separates
+      // them. A chart has an axis for this; a list has nothing.
+      expect(formatMonthHeading('2025-01-01', today)).toContain('2025')
+      expect(formatMonthHeading('2025-01-01', today)).toContain('January')
     })
   })
 
