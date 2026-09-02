@@ -47,6 +47,14 @@ public static class CsvValueParser
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
 
+        // A cell holding a list is not a number, and must not be turned into one.
+        // Settle Up writes a shared payment as "40;25" - two people paying 40 and
+        // 25 - and stripping the separator the way the cleaning below strips a
+        // currency symbol read that as four thousand and twenty-five. It went into
+        // a real import and put the group's total out by 3,960. The caller asks
+        // ParseAmountList when a list is possible.
+        if (value.AsSpan().IndexOfAny(';', '|') >= 0) return null;
+
         // Strip currency symbols, spaces and non-breaking spaces used as group
         // separators, keeping only digits, separators and a sign.
         var cleaned = new string(value
