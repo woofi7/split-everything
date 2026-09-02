@@ -233,8 +233,11 @@ network, which is how the refresh cookie knows to mark itself Secure and how the
 rate limits count one caller as one caller.
 
 Backups run in their own container: a gzipped `pg_dump` on start and then daily,
-pruned to `BACKUP_RETENTION_DAYS`. Restore with `infra/backup/restore.sh`, which
-asks for the dump explicitly and makes you type the database name.
+pruned to `BACKUP_RETENTION_DAYS`. The script is in the compose file rather than
+mounted from this repo, so the stack needs nothing beside it: a bind mount to a
+missing path gets an empty directory from Docker rather than an error, which turns
+into a container that restarts for ever. Restore with `infra/backup/restore.sh`,
+which asks for the dump explicitly and makes you type the database name.
 
 ## The mobile shells
 
