@@ -31,6 +31,7 @@ services:
       - internal
 
   api:
+    # APP_TAG has no "v" in it: a git tag of v0.1.1 publishes 0.1.1, 0.1, 0, latest.
     image: ${DOCKERHUB_USERNAME}/split-everything-api:${APP_TAG}
     container_name: split-everything-api
     restart: unless-stopped
