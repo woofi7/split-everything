@@ -20,6 +20,18 @@ export type PushChannel = 'WebPush' | 'Apns' | 'Fcm'
  */
 export type PushState = 'unsupported' | 'insecure' | 'denied' | 'off' | 'on'
 
+/**
+ * How turning notifications on ended.
+ *
+ * A boolean could not be honest here. A refused permission, a browser with no push
+ * at all and a server with no keys behind the switch all came back false, so the
+ * app told all three of them that notifications "were not allowed" - and only one
+ * of the three has anything to do with permission. The one that says nothing about
+ * this device is 'unconfigured': the deployment is unfinished, and no amount of
+ * tapping will change it.
+ */
+export type PushOutcome = 'on' | 'denied' | 'unsupported' | 'unconfigured' | 'failed'
+
 export async function pushState(): Promise<PushState> {
   if (Capacitor.isNativePlatform()) {
     const { PushNotifications } = await import('@capacitor/push-notifications')
@@ -44,13 +56,13 @@ export async function pushState(): Promise<PushState> {
   return subscription ? 'on' : 'off'
 }
 
-export async function registerForPush(api: ApiClient, deviceId: string): Promise<boolean> {
+export async function registerForPush(api: ApiClient, deviceId: string): Promise<PushOutcome> {
   return Capacitor.isNativePlatform()
     ? registerNative(api, deviceId)
     : registerWebPush(api, deviceId)
 }
 
-async function registerNative(api: ApiClient, deviceId: string): Promise<boolean> {
+async function registerNative(api: ApiClient, deviceId: string): Promise<PushOutcome> {
   const { PushNotifications } = await import('@capacitor/push-notifications')
 
   const status = await PushNotifications.checkPermissions()
@@ -59,11 +71,11 @@ async function registerNative(api: ApiClient, deviceId: string): Promise<boolean
       ? true
       : (await PushNotifications.requestPermissions()).receive === 'granted'
 
-  if (!granted) return false
+  if (!granted) return 'denied'
 
   const channel: PushChannel = Capacitor.getPlatform() === 'ios' ? 'Apns' : 'Fcm'
 
-  return new Promise<boolean>((resolve) => {
+  return new Promise<PushOutcome>((resolve) => {
     // The token arrives asynchronously from the OS, so registration completes in
     // the listener rather than after the register() call.
     void PushNotifications.addListener('registration', async (token) => {
@@ -75,27 +87,30 @@ async function registerNative(api: ApiClient, deviceId: string): Promise<boolean
           auth: null,
           deviceId,
         })
-        resolve(true)
+        resolve('on')
       } catch {
-        resolve(false)
+        resolve('failed')
       }
     })
 
-    void PushNotifications.addListener('registrationError', () => resolve(false))
+    void PushNotifications.addListener('registrationError', () => resolve('failed'))
     void PushNotifications.register()
   })
 }
 
-async function registerWebPush(api: ApiClient, deviceId: string): Promise<boolean> {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
+async function registerWebPush(api: ApiClient, deviceId: string): Promise<PushOutcome> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported'
 
   const permission = await Notification.requestPermission()
-  if (permission !== 'granted') return false
+  if (permission !== 'granted') return 'denied'
 
   const registration = await navigator.serviceWorker.ready
 
+  // No key means nothing to subscribe to: the server was deployed without its
+  // VAPID pair. Worth its own answer, because the phone in your hand did nothing
+  // wrong and there is nothing it can do about it.
   const { publicKey } = await api.get<{ publicKey: string }>('/notifications/vapid-key')
-  if (!publicKey) return false
+  if (!publicKey) return 'unconfigured'
 
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
@@ -112,7 +127,7 @@ async function registerWebPush(api: ApiClient, deviceId: string): Promise<boolea
     deviceId,
   })
 
-  return true
+  return 'on'
 }
 
 /**
