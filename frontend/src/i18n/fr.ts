@@ -85,6 +85,8 @@ export const fr: Record<string, string> = {
     "Le total payé doit correspondre au montant de la dépense.",
   'Still to settle': 'Reste à régler',
   'Nothing spent this month yet.': "Rien de dépensé ce mois-ci pour l'instant.",
+  'Version {version}': 'Version {version}',
+  'Version {app} (server {server})': 'Version {app} (serveur {server})',
   'Reading the export': "Lecture de l'export",
   'Reading the rows': 'Lecture des lignes',
   'Importing {count} rows': 'Importation de {count} lignes',

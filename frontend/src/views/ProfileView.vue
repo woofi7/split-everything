@@ -6,6 +6,7 @@ import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
 import { useApi } from '@/api/provider'
+import { appVersion } from '@/api/config'
 import { getDeviceId } from '@/offline/db'
 import {
   pushState,
@@ -125,6 +126,25 @@ function whyNotNotifications(outcome: PushOutcome): string {
   }
   return t('Could not turn notifications on. Try again.')
 }
+
+/**
+ * Which build is running, on this device and on the server.
+ *
+ * The app's own version is baked in at build time. The server's is asked for, and
+ * left null when it cannot be reached: offline is not a version mismatch, and a
+ * dash where a number belongs would read like one.
+ */
+const version = appVersion()
+const serverVersion = ref<string | null>(null)
+
+onMounted(async () => {
+  try {
+    const health = await useApi().get<{ version?: string }>('/health')
+    serverVersion.value = health.version ?? null
+  } catch {
+    serverVersion.value = null
+  }
+})
 
 /** Installing it, which the browser either offers or cannot do at all. */
 const installed = ref(isInstalled())
@@ -414,6 +434,20 @@ async function deleteAccount(): Promise<void> {
 
       <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
     </section>
+
+    <!--
+      Which build this is, at the foot of the page where an about line belongs.
+
+      Both halves, because they can differ: the images are built and deployed as a
+      pair but nothing forces them to arrive together, and a new app against an old
+      server is a specific kind of confusing that this makes obvious. When they
+      match, it reads as one version.
+    -->
+    <p data-testid="app-version" class="pb-2 text-center text-xs text-[var(--text-muted)]">
+      {{ serverVersion && serverVersion !== version
+        ? t('Version {app} (server {server})', { app: version, server: serverVersion })
+        : t('Version {version}', { version }) }}
+    </p>
 
     <!--
       One save for the settings on this screen, and one way back. In the corner
