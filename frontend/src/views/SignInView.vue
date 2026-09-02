@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { googleClientId } from '@/api/config'
+import { loadGoogleIdentity } from '@/native/googleIdentity'
 import { useApi } from '@/api/provider'
 
 interface AuthCapabilities {
@@ -46,6 +47,10 @@ onMounted(async () => {
   } catch {
     capabilities.value = null
   }
+
+  // Google's library, which nothing else in the app needs and nothing was fetching.
+  // Bounded inside, so a blocked script leaves this page usable rather than pending.
+  await loadGoogleIdentity()
 
   mountGoogleButton()
 })

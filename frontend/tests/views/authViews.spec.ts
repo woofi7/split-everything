@@ -3,7 +3,7 @@ import { RouterLinkStub } from '@vue/test-utils'
 import SignInView from '@/views/SignInView.vue'
 import JoinView from '@/views/JoinView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
-import { fakeApi, mountView, settle, textOf } from '../support/viewHarness'
+import { fakeApi, mountView, settle, textOf, waitFor } from '../support/viewHarness'
 
 const push = vi.fn()
 const replace = vi.fn()
@@ -213,6 +213,9 @@ describe('SignInView', () => {
 
   it('says so when the Google script did not load', async () => {
     const { wrapper } = await mountView(SignInView, { signedIn: false })
+    // The screen fetches Google's library before it can know, and a script that
+    // cannot be fetched settles a beat later.
+    await waitFor(() => wrapper.find('[role="alert"]').exists())
 
     // Blocked scripts and offline devices are normal; the page must say why
     // there is no button rather than showing nothing.
@@ -436,6 +439,7 @@ describe('SignInView', () => {
     api.get.mockRejectedValue(new Error('offline'))
 
     const { wrapper } = await mountView(SignInView, { api, signedIn: false })
+    await waitFor(() => wrapper.find('[role="alert"]').exists())
 
     expect(wrapper.find('[role="alert"]').text()).toContain('unavailable')
   })
