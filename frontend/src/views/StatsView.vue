@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
 import { computeStats } from '@/domain/localStats'
 import { useExpensesStore } from '@/stores/expenses'
+import { checkForAppUpdate } from '@/native/appUpdate'
 import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
 import {
@@ -318,6 +319,7 @@ const pull = useTemplateRef<{ done: () => void }>('pull')
 
 async function refresh(): Promise<void> {
   try {
+    await checkForAppUpdate()
     await expenses.sync()
   } catch {
     // Offline. The stats below are computed from this device anyway.
