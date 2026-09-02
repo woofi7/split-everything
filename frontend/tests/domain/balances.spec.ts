@@ -7,8 +7,13 @@ const c = 'cccccccc-0000-0000-0000-000000000003'
 const d = 'dddddddd-0000-0000-0000-000000000004'
 
 const expense = (payer: string, amount: number, splits: Array<[string, number]>) => ({
-  payerMemberId: payer,
-  amount,
+  payers: [{ memberId: payer, amount }],
+  splits: splits.map(([memberId, share]) => ({ memberId, amount: share })),
+})
+
+/** An expense several people paid for at once. */
+const sharedExpense = (payers: Array<[string, number]>, splits: Array<[string, number]>) => ({
+  payers: payers.map(([memberId, amount]) => ({ memberId, amount })),
   splits: splits.map(([memberId, share]) => ({ memberId, amount: share })),
 })
 
@@ -169,6 +174,38 @@ describe('simplified debts offline', () => {
 
   it('yields nothing for an empty group', () => {
     expect(simplifyDebts([])).toEqual([])
+  })
+})
+
+describe('expenses several people paid for', () => {
+  it('credits each payer what they put in', () => {
+    // The frying pans: 40 from one, 25 from the other, split evenly down the middle.
+    const balances = netBalances(
+      [a, b],
+      [sharedExpense([[a, 40], [b, 25]], [[a, 32.5], [b, 32.5]])],
+      [],
+    )
+
+    expect(balances.find((balance) => balance.memberId === a)?.net).toBe(7.5)
+    expect(balances.find((balance) => balance.memberId === b)?.net).toBe(-7.5)
+  })
+
+  it('owes a share to each payer in the proportion they paid', () => {
+    const debts = pairwiseDebts([sharedExpense([[a, 60], [b, 40]], [[c, 100]])], [])
+
+    expect(debts.find((debt) => debt.toMemberId === a)?.amount).toBe(60)
+    expect(debts.find((debt) => debt.toMemberId === b)?.amount).toBe(40)
+    expect(debts.every((debt) => debt.fromMemberId === c)).toBe(true)
+  })
+
+  it('still sums to zero', () => {
+    const balances = netBalances(
+      [a, b, c],
+      [sharedExpense([[a, 33.33], [b, 66.67]], [[a, 33.33], [b, 33.33], [c, 33.34]])],
+      [],
+    )
+
+    expect(balances.reduce((sum, balance) => sum + balance.net, 0)).toBe(0)
   })
 })
 

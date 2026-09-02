@@ -37,4 +37,42 @@ public static class CurrencyPrecision
 
     public static decimal Round(decimal amount, string? currency)
         => Math.Round(amount, DecimalsFor(currency), MidpointRounding.ToEven);
+
+    /// <summary>
+    /// The precision a share is worked out and stored at, which is finer than the
+    /// currency people pay in.
+    ///
+    /// A share is not a payment. Half of 66.13 is 33.065, and forcing that to a cent
+    /// hands somebody the extra half-cent every time - always the same somebody,
+    /// because the tie has to break somehow. Over four hundred expenses in one real
+    /// group that came to 71 cents of drift against the app the history was imported
+    /// from, which computes at full precision and rounds only to show a number.
+    ///
+    /// Two extra decimals, because that is what the amount columns hold, and it is
+    /// enough: the worst case left is a hundredth of a cent per expense.
+    ///
+    /// Currencies with no sub-unit are the exception and keep whole units. A third of
+    /// a yen is not a share of anything, and three shares of 3.3333 under a total of
+    /// 10 would read as a whole yen gone missing rather than a rounding choice.
+    /// </summary>
+    public static int StoredDecimalsFor(string? currency)
+    {
+        var decimals = DecimalsFor(currency);
+        return decimals == 0 ? 0 : Math.Min(4, decimals + 2);
+    }
+
+    /// <summary>Smallest amount a share can be worked out in, e.g. 0.0001 for CAD.</summary>
+    public static decimal StoredUnit(string? currency)
+        => StoredDecimalsFor(currency) switch
+        {
+            0 => 1m,
+            1 => 0.1m,
+            2 => 0.01m,
+            3 => 0.001m,
+            4 => 0.0001m,
+            var decimals => (decimal)Math.Pow(10, -decimals)
+        };
+
+    public static decimal RoundStored(decimal amount, string? currency)
+        => Math.Round(amount, StoredDecimalsFor(currency), MidpointRounding.ToEven);
 }

@@ -18,10 +18,13 @@ describe('splitting, offline', () => {
     const shares = calculateSplit(10, 'CAD', 'Equal', members(alice, bob, carol))
 
     expect(shares.reduce((sum, s) => sum + s.amount, 0)).toBe(10)
-    expect(shares.map((s) => s.amount).sort()).toEqual([3.33, 3.33, 3.34])
+
+    // Worked out two decimals finer than the currency shows, so the share is the
+    // real fraction rather than a cent handed to somebody. All three read as 3.33.
+    expect(shares.map((s) => s.amount).sort()).toEqual([3.3333, 3.3333, 3.3334])
   })
 
-  it('gives the leftover cent to the same member the server would', () => {
+  it('gives the leftover unit to the same member the server would', () => {
     // Pinned against the identical backend fixture: largest-remainder rounding with
     // a member-id tie-break, so the leftover goes to the lowest id. If the two
     // sides ever disagree, an expense entered offline would be silently rewritten
@@ -29,9 +32,20 @@ describe('splitting, offline', () => {
     const shares = calculateSplit(10, 'CAD', 'Equal', members(carol, bob, alice))
     const byMember = Object.fromEntries(shares.map((s) => [s.memberId, s.amount]))
 
-    expect(byMember[alice]).toBe(3.34)
-    expect(byMember[bob]).toBe(3.33)
-    expect(byMember[carol]).toBe(3.33)
+    expect(byMember[alice]).toBe(3.3334)
+    expect(byMember[bob]).toBe(3.3333)
+    expect(byMember[carol]).toBe(3.3333)
+  })
+
+  it('splits an odd number of cents evenly', () => {
+    // Half of 66.13 is 33.065. Rounded to a cent, one of the two is handed the
+    // extra half-cent - the same one every time, because the tie-break has to be
+    // deterministic - and across four hundred expenses that drifted 71 cents away
+    // from the app this history came from.
+    const shares = calculateSplit(66.13, 'CAD', 'Equal', members(alice, bob))
+
+    expect(shares.map((s) => s.amount)).toEqual([33.065, 33.065])
+    expect(shares.reduce((sum, s) => sum + s.amount, 0)).toBe(66.13)
   })
 
   it('is independent of the order participants were listed in', () => {
