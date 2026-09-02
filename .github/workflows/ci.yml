@@ -15,14 +15,14 @@ jobs:
     name: Backend tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('backend/Directory.Packages.props') }}
@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
           path: |
@@ -61,9 +61,9 @@ jobs:
     name: Frontend tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -91,72 +91,70 @@ jobs:
 
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-coverage
           path: frontend/coverage/
 
+  # One job per image so the two build at once. They share nothing but the registry
+  # login, and the api's dotnet publish and the web's npm build were taking their
+  # turns for no reason - the slower of the two is now the whole wait rather than
+  # the sum. Each keeps its own buildx cache scope, which it had already.
   images:
-    name: Build and publish images
+    name: Build and publish ${{ matrix.image }}
     needs: [backend, frontend]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      # One image failing does not make the other one worth abandoning: whichever
+      # succeeded is published, and the deploy below is what refuses to run.
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            context: backend
+            extra_args: ''
+          - image: web
+            context: frontend
+            extra_args: |
+              VITE_API_BASE_URL=/api
+              VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v5
-        id: api-meta
+      - uses: docker/metadata-action@v6
+        id: meta
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/split-everything-api
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/split-everything-${{ matrix.image }}
           tags: |
             type=raw,value=latest
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
 
-      - uses: docker/metadata-action@v5
-        id: web-meta
+      - name: Publish the ${{ matrix.image }} image
+        uses: docker/build-push-action@v7
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/split-everything-web
-          tags: |
-            type=raw,value=latest
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-
-      - name: Publish the API image
-        uses: docker/build-push-action@v6
-        with:
-          context: backend
+          context: ${{ matrix.context }}
           push: true
-          tags: ${{ steps.api-meta.outputs.tags }}
-          labels: ${{ steps.api-meta.outputs.labels }}
-          build-args: APP_VERSION=${{ github.ref_name }}
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,scope=api,mode=max
-
-      - name: Publish the web image
-        uses: docker/build-push-action@v6
-        with:
-          context: frontend
-          push: true
-          tags: ${{ steps.web-meta.outputs.tags }}
-          labels: ${{ steps.web-meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Only what each image declares. Handing the api the web's arguments would
+          # build it just the same and warn about every one it did not consume.
           build-args: |
             APP_VERSION=${{ github.ref_name }}
-            VITE_API_BASE_URL=/api
-            VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,scope=web,mode=max
+            ${{ matrix.extra_args }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
   deploy:
     name: Tell the server to pull
