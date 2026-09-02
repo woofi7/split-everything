@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "vue-tsc --noEmit",
+    "typecheck": "vue-tsc -b",
     "cap:sync": "npm run build && cap sync",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

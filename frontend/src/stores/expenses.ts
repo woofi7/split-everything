@@ -185,7 +185,7 @@ export const useExpensesStore = defineStore('expenses', () => {
 
   async function edit(
     expenseId: string,
-    changes: Partial<Pick<ExpenseDraft, 'description' | 'amount' | 'currency' | 'spentAt' | 'splitType' | 'participantIds' | 'splitValues' | 'items' | 'notes' | 'receiptId' | 'paidByMemberId'>>,
+    changes: Partial<Pick<ExpenseDraft, 'description' | 'amount' | 'currency' | 'spentAt' | 'splitType' | 'participantIds' | 'splitValues' | 'items' | 'notes' | 'receiptId' | 'paidByMemberId' | 'payers'>>,
   ): Promise<LocalExpense> {
     const existing = await db.expenses.get(expenseId)
     if (!existing) throw new Error('That expense is not on this device.')
@@ -210,7 +210,15 @@ export const useExpensesStore = defineStore('expenses', () => {
     // neither - in which case whoever is on the expense stays, apportioned to the
     // amount if that moved.
     const contributions = changes.payers
-      ? readPayers({ ...changes, amount, currency: changes.currency ?? existing.currency }, roster)
+      ? readPayers(
+          {
+            payers: changes.payers,
+            paidByMemberId: changes.paidByMemberId ?? existing.paidByMemberId,
+            amount,
+            currency: changes.currency ?? existing.currency,
+          },
+          roster,
+        )
       : changes.paidByMemberId
         ? [{ memberId: changes.paidByMemberId, amount }]
         : keepPayers(existing, amount, changes.currency ?? existing.currency)
