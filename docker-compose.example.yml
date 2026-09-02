@@ -69,6 +69,13 @@ services:
       - ReceiptStorage__RootPath=/data/receipts
     volumes:
       - /mnt/user/appdata/split-everything/receipts:/data/receipts
+      # Where the framework keeps its data protection keys. Nothing in this app
+      # uses them today - the refresh cookie holds an opaque token, not encrypted
+      # state - but the default is a directory inside the container, which means two
+      # warnings on every start and a surprise the day something does use them. A
+      # named volume rather than a path under appdata: the container runs as its own
+      # user, and Docker gets the ownership right on a named volume by itself.
+      - dataprotection:/home/app/.aspnet/DataProtection-Keys
     ports:
       # Behind the proxy: send /api and /hubs here. /hubs is a WebSocket.
       - '8091:8080'
@@ -120,6 +127,9 @@ services:
     entrypoint: ['/bin/sh', '/usr/local/bin/backup.sh']
     networks:
       - internal
+
+volumes:
+  dataprotection:
 
 networks:
   internal:

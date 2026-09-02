@@ -19,6 +19,17 @@ RUN dotnet publish src/SplitEverything.Api/SplitEverything.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+# Kerberos, which Npgsql looks for while it works out how to authenticate.
+#
+# The runtime image does not carry it, so the first command on every start failed
+# with "Cannot load library libgssapi_krb5.so.2" before the connection succeeded on
+# a retry: an alarming pair of lines in the log for something nothing here uses.
+# Postgres authenticates with a password; this is only here so the probe finds what
+# it is looking for.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Receipts live on a mounted volume; the directory has to exist and be writable
 # by the non-root user before the app starts.
 RUN mkdir -p /data/receipts && chown -R app:app /data
