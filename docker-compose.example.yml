@@ -41,6 +41,18 @@ services:
       - ReceiptStorage__RootPath=/data/receipts
     volumes:
       - /mnt/user/appdata/split-everything/receipts:/data/receipts
+      # ASP.NET writes a data protection key ring on start whether anything uses it
+      # or not, and warns on every boot that a key ring inside a container does not
+      # outlive it. Nothing in this app protects anything with it today - the refresh
+      # token is opaque and hashed in the database, the access token is signed with
+      # Auth__JwtSigningKey - so this is here to keep that true if something ever
+      # does, and to stop the warning being noise in the log.
+      #
+      # Both directories must be owned by uid 1654, which is the app user in the
+      # aspnet image. A root-owned bind mount here is a container that cannot write
+      # its own keys, and one under receipts is uploads that fail with a permission
+      # error at the moment somebody attaches a photo.
+      - /mnt/user/appdata/split-everything/dataprotection:/home/app/.aspnet/DataProtection-Keys
     ports:
       - '8091:8080'
     labels:
