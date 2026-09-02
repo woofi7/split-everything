@@ -310,5 +310,26 @@ describe('SpendPie', () => {
       expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('600.00')
       expect(wrapper.find('[data-testid="centre-share"]').text()).toBe('100%')
     })
+
+    it('draws no focus ring around a tapped slice', () => {
+      const wrapper = mountPie()
+
+      /*
+       * Tapping a wedge focuses it, and the ring a browser draws around a focused
+       * SVG path follows its bounding box - for a wedge reaching the centre, a
+       * rectangle over the whole chart. On a phone that was a black and white square
+       * appearing every time somebody asked what a slice was worth.
+       *
+       * The class carries the rule; asserted here because the markup is the only
+       * place it can be lost, and nothing else in a test environment paints.
+       */
+      const marks = [
+        ...wrapper.findAll('[data-testid="wedge"]'),
+        ...wrapper.findAll('[data-testid="whole"]'),
+      ]
+
+      expect(marks.length).toBeGreaterThan(0)
+      expect(marks.every((mark) => mark.classes().includes('wedge'))).toBe(true)
+    })
   })
 })

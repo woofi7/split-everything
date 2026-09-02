@@ -64,6 +64,26 @@ const againstAverage = computed(() => {
       </li>
     </ul>
 
+    <!--
+      What was left out, and how much of the month it was. Said out loud rather than
+      quietly dropped: the total above includes it, and a reader who cannot see why
+      the biggest is smaller than the month would be right to distrust both.
+    -->
+    <p
+      v-if="summary.ignored"
+      data-testid="recap-ignored"
+      class="flex items-baseline justify-between gap-3 text-xs text-[var(--text-muted)]"
+    >
+      <span class="min-w-0 truncate">
+        {{ summary.ignored.count === 1
+          ? t('1 expense left out of the highlights')
+          : t('{count} expenses left out of the highlights', { count: summary.ignored.count }) }}
+      </span>
+      <span class="shrink-0 tabular-nums">
+        {{ formatMoney(summary.ignored.total, currency) }}
+      </span>
+    </p>
+
     <p
       v-if="summary.biggest"
       data-testid="recap-biggest"

@@ -10,6 +10,8 @@ import PersonPicker from '@/components/groups/PersonPicker.vue'
 import ColorChoice from '@/components/ui/ColorChoice.vue'
 import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
+import { useExpensesStore } from '@/stores/expenses'
+import { compileNamePattern } from '@/domain/namePatterns'
 import { useAuthStore } from '@/stores/auth'
 import { useApi } from '@/api/provider'
 import type { AddableUser } from '@/api/types'
@@ -28,6 +30,7 @@ interface InviteDto {
 const route = useRoute()
 const router = useRouter()
 const groups = useGroupsStore()
+const expenses = useExpensesStore()
 const auth = useAuthStore()
 
 const groupId = computed(() => String(route.params.groupId))
@@ -78,6 +81,43 @@ const splitTotal = computed(() =>
   activeMembers.value.reduce((sum, member) => sum + (Number(splitValues.value[member.id]) || 0), 0),
 )
 
+/**
+ * Expense names to leave out of the highlights.
+ *
+ * A household with rent in it has one expense a month that dwarfs everything else,
+ * and "the biggest thing in August" answering "the rent" every time tells nobody
+ * anything. These are the names to skip when picking that out.
+ *
+ * A name matches if it contains what is typed, and a star stands for any run of
+ * characters: "Loyer" catches "Paiement loyer aout", "Loyer*" catches names that
+ * start with it. One per row, so a comma is a comma rather than a separator.
+ */
+const ignoredPatterns = ref<string[]>([])
+
+/**
+ * How many expenses each row currently matches.
+ *
+ * The reassurance that turns a regex box from a guess into a decision: a pattern
+ * that matches nothing is almost certainly a typo, and one that matches everything
+ * is worth noticing before it is saved.
+ */
+const patternMatches = computed(() =>
+  ignoredPatterns.value.map((pattern) => {
+    if (!pattern.trim()) return 0
+
+    const matches = compileNamePattern(pattern)
+    return expenses.forGroup(groupId.value).filter((expense) => matches(expense.description)).length
+  }),
+)
+
+function addPattern(): void {
+  ignoredPatterns.value.push('')
+}
+
+function removePattern(index: number): void {
+  ignoredPatterns.value.splice(index, 1)
+}
+
 /** What is wrong with the numbers as they stand, or null. */
 const splitProblem = computed(() => {
   if (!splitNeedsValues.value) return null
@@ -92,6 +132,7 @@ const splitProblem = computed(() => {
 function readSplitFromGroup(): void {
   const current = group.value
   splitType.value = current?.defaultSplitType ?? 'Equal'
+  ignoredPatterns.value = [...(current?.ignoredNamePatterns ?? [])]
 
   const stored = current?.defaultSplitValues ?? {}
   const seeded: Record<string, number> = {}
@@ -304,6 +345,11 @@ onMounted(async () => {
   name.value = loaded?.name ?? ''
   iconName.value = loaded?.iconName ?? null
   readSplitFromGroup()
+
+  // For the match counts beside the patterns. Reads the local replica, so it costs
+  // nothing over the network and works with no connection at all.
+  await expenses.hydrate()
+
   await loadAddable()
 })
 
@@ -330,6 +376,11 @@ const isDirty = computed(() => {
 
   if (name.value.trim() !== current.name) return true
   if ((iconName.value ?? null) !== (current.iconName ?? null)) return true
+
+  const storedPatterns = current.ignoredNamePatterns ?? []
+  const patterns = ignoredPatterns.value.map((pattern) => pattern.trim()).filter(Boolean)
+  if (patterns.length !== storedPatterns.length) return true
+  if (patterns.some((pattern, index) => pattern !== storedPatterns[index])) return true
 
   const storedType = current.defaultSplitType ?? 'Equal'
   if (splitType.value !== storedType) return true
@@ -383,6 +434,10 @@ async function save(): Promise<void> {
         iconName: iconName.value,
         defaultSplitType: splitType.value,
         defaultSplitValues: splitNeedsValues.value ? splitValues.value : null,
+        // Blank rows are somebody part-way through typing, not a pattern.
+        ignoredNamePatterns: ignoredPatterns.value
+          .map((pattern) => pattern.trim())
+          .filter(Boolean),
       })
     }
 
@@ -621,6 +676,77 @@ async function unarchive(): Promise<void> {
       </p>
 
       <p v-if="splitProblem" class="mt-2 text-xs text-owing" role="alert">{{ splitProblem }}</p>
+
+      <p v-if="!canAdminister" class="mt-3 text-xs text-[var(--text-muted)]">{{ t('Only an owner or an admin can change this.') }}
+      </p>
+    </section>
+
+    <!--
+      Names to keep out of the monthly highlights. Not out of the totals: the month
+      still cost what it cost, and a total that disagrees with the expenses under it
+      is a bug nobody can explain.
+    -->
+    <section class="surface-card mb-4 p-4">
+      <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Leave out of the highlights') }}</h2>
+      <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('The rent is bigger than everything else every month, so calling it the biggest expense says nothing. Names matching these are skipped when picking that out. Totals, balances and who owes whom never change.') }}
+      </p>
+      <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('A name matches if it contains what you type. Use * for anything: Loyer* matches everything starting with Loyer.') }}
+      </p>
+
+      <div class="mt-3 flex flex-col gap-2">
+        <div
+          v-for="(pattern, index) in ignoredPatterns"
+          :key="index"
+          data-testid="pattern-row"
+          class="flex flex-col gap-1"
+        >
+          <div class="flex items-center gap-2">
+            <input
+              v-model="ignoredPatterns[index]"
+              type="text"
+              data-testid="pattern-input"
+              placeholder="Loyer"
+              :disabled="!canAdminister"
+              class="tap-target min-w-0 flex-1 rounded-lg border bg-[var(--surface-raised)] px-3 text-sm"
+              style="border-color: var(--border)"
+            />
+            <button
+              type="button"
+              data-testid="remove-pattern"
+              class="tap-target shrink-0 px-2 text-sm text-[var(--text-muted)]"
+              :disabled="!canAdminister"
+              :aria-label="t('Remove')"
+              @click="removePattern(index)"
+            >
+              <span aria-hidden="true">x</span>
+            </button>
+          </div>
+
+          <!--
+            What it matches right now, which is what turns a pattern from a guess
+            into a decision: nothing matched is almost always a typo.
+          -->
+          <p
+            v-if="pattern.trim()"
+            data-testid="pattern-matches"
+            class="text-xs text-[var(--text-muted)]"
+          >
+            {{ patternMatches[index] === 1
+              ? t('Matches 1 expense here')
+              : t('Matches {count} expenses here', { count: patternMatches[index] }) }}
+          </p>
+        </div>
+
+        <button
+          v-if="canAdminister && ignoredPatterns.length < 10"
+          type="button"
+          data-testid="add-pattern"
+          class="btn btn-press btn-secondary min-h-0 self-start px-3 py-1.5 text-xs"
+          style="border-color: var(--border)"
+          @click="addPattern"
+        >{{ t('Add a name to skip') }}
+        </button>
+      </div>
 
       <p v-if="!canAdminister" class="mt-3 text-xs text-[var(--text-muted)]">{{ t('Only an owner or an admin can change this.') }}
       </p>

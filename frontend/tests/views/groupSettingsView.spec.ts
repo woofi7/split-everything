@@ -9,6 +9,7 @@ import {
   fakeApi,
   mountView,
   settle,
+  testExpense,
   testGroup,
   textOf,
 } from '../support/viewHarness'
@@ -989,6 +990,105 @@ describe('GroupSettingsView', () => {
    * It is what the expense cards, the balances and the charts all draw with, so
    * seeing it and changing it belongs where the group is described.
    */
+  describe('names to leave out of the highlights', () => {
+    it('shows the patterns the group already has', async () => {
+      const shared = testGroup()
+      shared.ignoredNamePatterns = ['Loyer', '^Hydro']
+
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: fakeApi({ '/groups': () => shared }),
+        groups: [shared],
+      })
+      await settle()
+
+      const values = wrapper
+        .findAll('[data-testid="pattern-input"]')
+        .map((input) => (input.element as HTMLInputElement).value)
+
+      expect(values).toEqual(['Loyer', '^Hydro'])
+    })
+
+    it('says how many expenses a pattern matches', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: api(),
+        expenses: [
+          testExpense({ id: 'e1', description: 'Loyer aout' }),
+          testExpense({ id: 'e2', description: 'Loyer juillet' }),
+          testExpense({ id: 'e3', description: 'Groceries' }),
+        ],
+      })
+      await settle()
+
+      await wrapper.find('[data-testid="add-pattern"]').trigger('click')
+      await settle()
+      await wrapper.find('[data-testid="pattern-input"]').setValue('Loyer')
+      await settle()
+
+      // A pattern that matches nothing is almost always a typo, and seeing the
+      // count is what turns this box from a guess into a decision.
+      expect(wrapper.find('[data-testid="pattern-matches"]').text()).toContain('2 expenses')
+    })
+
+    it('counts a star as anything, which is what people type', async () => {
+      const { wrapper } = await mountView(GroupSettingsView, {
+        api: api(),
+        expenses: [
+          testExpense({ id: 'e1', description: 'Loyer aout' }),
+          testExpense({ id: 'e2', description: 'Paiement loyer' }),
+          testExpense({ id: 'e3', description: 'Groceries' }),
+        ],
+      })
+      await settle()
+
+      await wrapper.find('[data-testid="add-pattern"]').trigger('click')
+      await settle()
+      await wrapper.find('[data-testid="pattern-input"]').setValue('Loyer*')
+      await settle()
+
+      // Only the one that starts with it: "Paiement loyer" does not.
+      expect(wrapper.find('[data-testid="pattern-matches"]').text()).toContain('1 expense')
+    })
+
+    it('saves the patterns with the rest of the settings', async () => {
+      const patch = vi.fn(async () => testGroup())
+      const client = api()
+      client.patch = patch
+
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      await settle()
+
+      await wrapper.find('[data-testid="add-pattern"]').trigger('click')
+      await settle()
+      await wrapper.find('[data-testid="pattern-input"]').setValue('Loyer')
+      await settle()
+
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
+      await settle(2)
+
+      expect(patch).toHaveBeenCalledWith(
+        expect.stringContaining('/groups/'),
+        expect.objectContaining({ ignoredNamePatterns: ['Loyer'] }),
+      )
+    })
+
+    it('does not save a row somebody left blank', async () => {
+      const patch = vi.fn(async () => testGroup())
+      const client = api()
+      client.patch = patch
+
+      const { wrapper } = await mountView(GroupSettingsView, { api: client })
+      await settle()
+
+      await wrapper.find('[data-testid="add-pattern"]').trigger('click')
+      await settle()
+
+      // An empty row is somebody who has not typed yet, not a pattern that matches
+      // everything - which is what saving it as "" would come to.
+      expect(wrapper.find('[data-testid="save-settings"]').exists()).toBe(false)
+      expect(patch).not.toHaveBeenCalled()
+    })
+  })
+
   describe('a member colour', () => {
     /** A group whose colours the server has stored. */
     function coloured() {

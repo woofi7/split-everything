@@ -147,6 +147,86 @@ describe('summarising a month', () => {
     expect(summaries[0].versusAverage).toBe(0)
   })
 
+  describe('names the group asked to leave out', () => {
+    const withRent = [
+      spend('2026-08-01', 1500, 'Loyer aout'),
+      spend('2026-08-01', 167, 'Groceries at Metro'),
+      spend('2026-08-01', 90, 'Dinner out'),
+    ]
+
+    it('picks the biggest of what is left', () => {
+      const [august] = summariseMonths(withRent, 'CAD', inSeptember, ['Loyer'])
+
+      // Rent every month is larger than everything else put together, and answering
+      // "what was the biggest thing in August" with it says nothing.
+      expect(august.biggest).toEqual({ description: 'Groceries at Metro', amount: 167 })
+    })
+
+    it('leaves the total alone', () => {
+      const [august] = summariseMonths(withRent, 'CAD', inSeptember, ['Loyer'])
+
+      // A display rule has no business changing what the month cost: this total has
+      // to match the expenses listed under it.
+      expect(august.total).toBe(1757)
+    })
+
+    it('says what was left out rather than dropping it quietly', () => {
+      const [august] = summariseMonths(withRent, 'CAD', inSeptember, ['Loyer'])
+
+      expect(august.ignored).toEqual({ total: 1500, count: 1 })
+    })
+
+    it('matches whatever the case', () => {
+      const [august] = summariseMonths(
+        [spend('2026-08-01', 1500, 'LOYER'), spend('2026-08-01', 20, 'Coffee')],
+        'CAD',
+        inSeptember,
+        ['loyer'],
+      )
+
+      expect(august.biggest?.description).toBe('Coffee')
+    })
+
+    it('takes a star for anything, which is what people type', () => {
+      const [august] = summariseMonths(
+        [
+          spend('2026-08-01', 1500, 'Loyer aout'),
+          spend('2026-08-01', 1200, 'Hydro Quebec'),
+          spend('2026-08-01', 40, 'Pizza'),
+        ],
+        'CAD',
+        inSeptember,
+        ['Loyer*', 'Hydro*'],
+      )
+
+      expect(august.biggest?.description).toBe('Pizza')
+      expect(august.ignored).toEqual({ total: 2700, count: 2 })
+    })
+
+    it('reads punctuation as itself rather than as a pattern', () => {
+      const [august] = summariseMonths(
+        [spend('2026-08-01', 900, 'Rent (flat)'), spend('2026-08-01', 30, 'Coffee')],
+        'CAD',
+        inSeptember,
+        ['Rent (flat)'],
+      )
+
+      expect(august.biggest?.description).toBe('Coffee')
+    })
+
+    it('has no biggest when everything in the month was left out', () => {
+      const [august] = summariseMonths(
+        [spend('2026-08-01', 1500, 'Loyer')],
+        'CAD',
+        inSeptember,
+        ['Loyer'],
+      )
+
+      expect(august.biggest).toBeNull()
+      expect(august.total).toBe(1500)
+    })
+  })
+
   it('reads newest first, which is the order the screen wants', () => {
     const summaries = summariseMonths(
       [spend('2026-05-01', 10), spend('2026-08-01', 10), spend('2026-06-01', 10)],

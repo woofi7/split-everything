@@ -86,6 +86,16 @@ export const fr: Record<string, string> = {
   'Still to settle': 'Reste à régler',
   'Nothing spent this month yet.': "Rien de dépensé ce mois-ci pour l'instant.",
   'Biggest: {description}': 'Plus grosse dépense : {description}',
+  '1 expense left out of the highlights': 'Une dépense exclue du résumé',
+  'Leave out of the highlights': 'Exclure du résumé',
+  'The rent is bigger than everything else every month, so calling it the biggest expense says nothing. Names matching these are skipped when picking that out. Totals, balances and who owes whom never change.':
+    "Le loyer est plus gros que tout le reste chaque mois : l'appeler la plus grosse dépense n'apprend rien. Les noms correspondants sont ignorés au moment de la choisir. Les totaux, les soldes et qui doit quoi ne changent jamais.",
+  'Add a name to skip': 'Ajouter un nom à ignorer',
+  'A name matches if it contains what you type. Use * for anything: Loyer* matches everything starting with Loyer.':
+    "Un nom correspond s'il contient ce que vous saisissez. Utilisez * pour n'importe quelle suite de caractères : Loyer* correspond à tout ce qui commence par Loyer.",
+  'Matches 1 expense here': 'Correspond à une dépense ici',
+  'Matches {count} expenses here': 'Correspond à {count} dépenses ici',
+  '{count} expenses left out of the highlights': '{count} dépenses exclues du résumé',
   '{amount} more than {month}': '{amount} de plus qu\'en {month}',
   '{amount} less than {month}': '{amount} de moins qu\'en {month}',
   '{amount} above the usual month': '{amount} au-dessus d\'un mois habituel',

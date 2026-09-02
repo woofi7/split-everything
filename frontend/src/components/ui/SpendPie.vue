@@ -203,7 +203,7 @@ const description = computed(() =>
         :cy="CENTRE"
         :r="RADIUS"
         :fill="single.colorHex"
-        class="cursor-pointer"
+        class="wedge cursor-pointer"
         @mouseenter="select(single.id)"
         @mouseleave="clear"
         @click="toggle(single.id)"
@@ -222,7 +222,7 @@ const description = computed(() =>
         :d="wedge.path"
         :fill="wedge.colorHex"
         :opacity="selectedId && selectedId !== wedge.id ? 0.35 : 1"
-        class="cursor-pointer transition-opacity"
+        class="wedge cursor-pointer transition-opacity"
         @mouseenter="select(wedge.id)"
         @mouseleave="clear"
         @click="toggle(wedge.id)"
@@ -269,3 +269,26 @@ const description = computed(() =>
     </svg>
   </div>
 </template>
+
+<style scoped>
+/*
+ * A tap on a wedge must not draw a focus ring.
+ *
+ * Tapping one focuses it, and the ring a browser draws for a focused SVG path goes
+ * around its bounding box - which for a wedge reaching the centre is a rectangle
+ * over the whole chart. On a phone that is a five-pixel black and white square
+ * around the pie, appearing every time somebody asks what a slice is worth.
+ *
+ * Nothing is lost by removing it: these carry tabindex="-1" and are not reachable
+ * by keyboard. The legend buttons beside the chart do the same job, are properly
+ * focusable, and keep their own visible ring.
+ */
+.wedge:focus {
+  outline: none;
+}
+
+.wedge {
+  /* The grey flash mobile browsers paint over a tapped element, on the same box. */
+  -webkit-tap-highlight-color: transparent;
+}
+</style>

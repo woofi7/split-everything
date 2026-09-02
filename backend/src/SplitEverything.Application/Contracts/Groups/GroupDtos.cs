@@ -16,7 +16,10 @@ public sealed record UpdateGroupRequest(
     // the current default alone; DefaultSplitValues is only read when a type is
     // given, and an empty map clears the values.
     SplitType? DefaultSplitType = null,
-    IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null);
+    IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null,
+    // Names to leave out of the highlights, as regular expressions. Null leaves them
+    // as they are; an empty list is the explicit clear.
+    IReadOnlyList<string>? IgnoredNamePatterns = null);
 
 public sealed record GroupMemberDto(
     Guid Id,
@@ -50,7 +53,8 @@ public sealed record GroupDto(
     decimal TotalSpend,
     int ExpenseCount,
     SplitType DefaultSplitType = SplitType.Equal,
-    IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null);
+    IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null,
+    IReadOnlyList<string>? IgnoredNamePatterns = null);
 
 public sealed record GroupSummaryDto(
     Guid Id, string Name, string BaseCurrency, string? IconName, string ColorHex,
