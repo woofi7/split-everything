@@ -628,7 +628,7 @@ async function unarchive(): Promise<void> {
           v-if="themeName"
           type="button"
           data-testid="clear-group-colour"
-          class="self-start text-xs text-brand-400"
+          class="self-start text-xs text-accent"
           @click="themeName = ''"
         >{{ t('No colour of its own') }}
         </button>
@@ -842,7 +842,7 @@ async function unarchive(): Promise<void> {
               v-if="member.role === 'Owner'"
               data-testid="owner-tag"
               class="ml-1 rounded-full px-1.5 py-0.5 align-middle text-[0.65rem] font-semibold uppercase tracking-wide"
-              style="background: color-mix(in oklab, var(--color-brand-600) 22%, transparent); color: var(--color-brand-400)"
+              style="background: color-mix(in oklab, var(--accent-text) 18%, transparent); color: var(--accent-text)"
             >{{ t('Owner') }}
             </span>
             <!--

@@ -243,7 +243,7 @@ onUnmounted(() => {
         <svg
           v-if="isRefreshing"
           data-testid="pull-spinner"
-          class="pull-spin h-4 w-4 text-brand-400"
+          class="pull-spin h-4 w-4 text-accent"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -257,7 +257,7 @@ onUnmounted(() => {
         <svg
           v-else
           data-testid="pull-arrow"
-          class="h-4 w-4 text-brand-400"
+          class="h-4 w-4 text-accent"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

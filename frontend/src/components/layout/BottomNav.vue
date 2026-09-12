@@ -79,7 +79,7 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
           :to="tab.to"
           :data-tab="tab.name"
           class="nav-tab tap-target flex flex-col items-center gap-1 py-2 text-xs text-[var(--text-muted)]"
-          :class="isActive(tab) ? 'nav-tab-active text-brand-400' : ''"
+          :class="isActive(tab) ? 'nav-tab-active text-accent' : ''"
         >
           <span data-testid="tab-icon" class="nav-tab-icon">
             <svg
@@ -114,7 +114,7 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
           :to="tab.to"
           :data-tab="tab.name"
           class="nav-tab tap-target flex flex-col items-center gap-1 py-2 text-xs text-[var(--text-muted)]"
-          :class="isActive(tab) ? 'nav-tab-active text-brand-400' : ''"
+          :class="isActive(tab) ? 'nav-tab-active text-accent' : ''"
         >
           <span data-testid="tab-icon" class="nav-tab-icon">
             <svg

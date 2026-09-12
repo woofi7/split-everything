@@ -76,7 +76,7 @@ onUnmounted(() => clearTimeout(timer))
   background: linear-gradient(
     90deg,
     transparent,
-    var(--color-brand-400),
+    var(--accent-text),
     var(--color-brand-600),
     transparent
   );
@@ -96,7 +96,7 @@ onUnmounted(() => clearTimeout(timer))
   .nav-progress-bar {
     width: 100%;
     animation: none;
-    background: var(--color-brand-600);
+    background: var(--accent-text);
     opacity: 0.7;
   }
 }

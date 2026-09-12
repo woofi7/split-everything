@@ -22,8 +22,11 @@ export default defineConfig({
         name: 'Split Everything',
         short_name: 'Split',
         description: 'Shared expenses, settled properly.',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        // The default accent's page colour, so the splash screen is not a different
+        // app from the one that opens. Baked at build time, so it cannot follow the
+        // accent the way the document's own theme-color does.
+        theme_color: '#1b006f',
+        background_color: '#1b006f',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

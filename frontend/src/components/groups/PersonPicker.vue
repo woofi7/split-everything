@@ -145,13 +145,13 @@ function emailSegments(result: { item: AddableUser; indices: number[]; fieldInde
       >
         <span class="truncate text-sm">
           <template v-for="(part, i) in nameSegments(result)" :key="i">
-            <mark v-if="part.matched" class="bg-transparent font-semibold text-brand-400">{{ part.text }}</mark>
+            <mark v-if="part.matched" class="bg-transparent font-semibold text-accent">{{ part.text }}</mark>
             <template v-else>{{ part.text }}</template>
           </template>
         </span>
         <span class="truncate text-xs text-[var(--text-muted)]">
           <template v-for="(part, i) in emailSegments(result)" :key="i">
-            <mark v-if="part.matched" class="bg-transparent font-semibold text-brand-400">{{ part.text }}</mark>
+            <mark v-if="part.matched" class="bg-transparent font-semibold text-accent">{{ part.text }}</mark>
             <template v-else>{{ part.text }}</template>
           </template>
         </span>

@@ -12,7 +12,7 @@ withDefaults(defineProps<{ size?: 'sm' | 'md' }>(), { size: 'sm' })
 <template>
   <svg
     data-testid="spinner"
-    class="spin shrink-0 text-brand-400"
+    class="spin shrink-0 text-accent"
     :class="size === 'md' ? 'h-5 w-5' : 'h-4 w-4'"
     viewBox="0 0 24 24"
     fill="none"

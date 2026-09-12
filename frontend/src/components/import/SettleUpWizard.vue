@@ -573,7 +573,7 @@ const dateOf = (value: string | null) =>
                   {{ dateOf(row.spentAt) }}
                 </p>
 
-                <p v-if="row.isSettlement" class="text-xs text-brand-400">{{ t('Settlement, not an expense') }}
+                <p v-if="row.isSettlement" class="text-xs text-accent">{{ t('Settlement, not an expense') }}
                 </p>
                 <p v-if="row.isDuplicate" class="text-xs text-[var(--text-muted)]">{{ t('Already recorded') }}
                 </p>
@@ -594,7 +594,7 @@ const dateOf = (value: string | null) =>
                   type="button"
                   data-testid="toggle-row"
                   class="btn btn-press btn-secondary min-h-0 px-2 py-1 text-xs"
-                  :class="skipped.has(row.rowNumber) ? 'border-brand-500 text-brand-400' : ''"
+                  :class="skipped.has(row.rowNumber) ? 'border-brand-500 text-accent' : ''"
                   :style="skipped.has(row.rowNumber) ? undefined : 'border-color: var(--border)'"
                   :aria-pressed="skipped.has(row.rowNumber)"
                   @click="toggleRow(row.rowNumber)"

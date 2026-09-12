@@ -652,7 +652,7 @@ async function save(): Promise<void> {
               v-if="!isEditing && !isToday"
               type="button"
               data-testid="use-today"
-              class="text-brand-400"
+              class="text-accent"
               @click="useToday"
             >{{ t('Today') }}
             </button>
@@ -727,7 +727,7 @@ async function save(): Promise<void> {
           <button
             type="button"
             data-testid="single-payer"
-            class="text-xs text-brand-400"
+            class="text-xs text-accent"
             @click="stopSharing"
           >{{ t('One person paid') }}
           </button>
@@ -786,7 +786,7 @@ async function save(): Promise<void> {
         v-else-if="members.length > 1"
         type="button"
         data-testid="share-payment"
-        class="self-start text-xs text-brand-400"
+        class="self-start text-xs text-accent"
         @click="sharePayment"
       >{{ t('Several people paid') }}
       </button>

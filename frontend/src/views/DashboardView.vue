@@ -492,7 +492,7 @@ async function refresh(): Promise<void> {
             <button
               type="button"
               data-testid="toggle-simplify"
-              class="btn btn-press btn-quiet min-h-0 shrink-0 px-2 py-1 text-xs text-brand-400"
+              class="btn btn-press btn-quiet min-h-0 shrink-0 px-2 py-1 text-xs text-accent"
               @click="showSimplified = !showSimplified"
             >
               {{ showSimplified ? t('Show who owes whom') : t('Simplify') }}
@@ -603,7 +603,7 @@ async function refresh(): Promise<void> {
                         <span class="truncate font-medium">{{ expense.description }}</span>
                         <span
                           v-if="expense.pending"
-                          class="shrink-0 rounded-full bg-brand-600/20 px-1.5 py-0.5 text-[10px] text-brand-400"
+                          class="shrink-0 rounded-full bg-brand-600/20 px-1.5 py-0.5 text-[10px] text-accent"
                           :title="t('Saved on this device, waiting to sync')"
                         >{{ t('Waiting') }}
                         </span>
