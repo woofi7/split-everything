@@ -505,7 +505,19 @@ public sealed class GroupLifecycleService(
         Expense expense, Guid fromGroupId, Guid targetGroupId,
         IReadOnlyDictionary<Guid, Guid>? explicitMapping, CancellationToken ct)
     {
+        // Everyone the expense names, not only who it is split between: a second
+        // person who put money in need not be one of the people it is split
+        // between, and neither need somebody named on a line of an itemised bill.
+        // Left out, the move ended in a 500 the moment it went to rewrite their
+        // rows and found nobody to rewrite them to.
+        var itemMemberIds = await db.ExpenseItemShares
+            .Where(s => expense.Items.Select(i => i.Id).Contains(s.ExpenseItemId))
+            .Select(s => s.MemberId)
+            .ToListAsync(ct);
+
         var involved = expense.Splits.Select(s => s.MemberId)
+            .Concat(expense.Payers.Select(p => p.MemberId))
+            .Concat(itemMemberIds)
             .Append(expense.PaidByMemberId)
             .Distinct()
             .ToList();

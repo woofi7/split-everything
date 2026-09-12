@@ -4,6 +4,7 @@ import {
   DEFAULT_ACCENT,
   accentVariables,
   findAccent,
+  groupColor,
   resolveAccent,
 } from '@/domain/themes'
 
@@ -78,6 +79,35 @@ describe('the accent themes', () => {
     // storage: better the default than every button losing its colour.
     expect(resolveAccent('chartreuse').name).toBe('indigo')
     expect(resolveAccent(undefined).name).toBe('indigo')
+  })
+
+  /**
+   * The colour that stands for a group, which is one answer used in three places:
+   * the mark in the corner, the picker, and the settings screen.
+   */
+  describe('the colour of a group', () => {
+    it('is the accent the group wears, where it has one', () => {
+      expect(groupColor({ themeName: 'teal', colorHex: '#4f46e5' })).toBe(
+        findAccent('teal')!.shades[2],
+      )
+    })
+
+    it('is the colour stored on the group, where it does not', () => {
+      expect(groupColor({ themeName: null, colorHex: '#f97316' })).toBe('#f97316')
+    })
+
+    it('falls back to the default rather than leaving a mark with no colour', () => {
+      expect(groupColor({ themeName: null, colorHex: '' })).toBe(
+        findAccent(DEFAULT_ACCENT)!.shades[2],
+      )
+      expect(groupColor(undefined)).toBe(findAccent(DEFAULT_ACCENT)!.shades[2])
+    })
+
+    it('ignores a name this client does not have', () => {
+      // An older client meeting a newer server's name. The group's stored colour
+      // is still a colour, so the mark keeps it.
+      expect(groupColor({ themeName: 'chartreuse', colorHex: '#f97316' })).toBe('#f97316')
+    })
   })
 
   it('states the theme as the tokens the stylesheet reads', () => {

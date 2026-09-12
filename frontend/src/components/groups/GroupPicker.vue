@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { resolveIcon } from '@/domain/icons'
+import { groupColor } from '@/domain/themes'
 import { useGroupsStore } from '@/stores/groups'
 
 /**
@@ -96,7 +97,7 @@ function choose(groupId: string): void {
             >
               <span
                 class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white"
-                :style="{ backgroundColor: group.colorHex }"
+                :style="{ backgroundColor: groupColor(group) }"
                 aria-hidden="true"
               >
                 <FontAwesomeIcon :icon="resolveIcon(group.iconName).definition" class="h-4 w-4" />

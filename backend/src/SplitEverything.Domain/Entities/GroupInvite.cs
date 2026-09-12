@@ -30,7 +30,14 @@ public class GroupInvite
 
     public DateTimeOffset? RevokedAt { get; set; }
 
-    public bool IsRedeemable => RevokedAt is null
-        && UseCount < MaxUses
-        && ExpiresAt > DateTimeOffset.UtcNow;
+    /// <summary>
+    /// Whether this invite can still be used, as of a given moment.
+    ///
+    /// The moment is handed in rather than read off the wall clock here: every
+    /// other time in this app comes from the injected clock, and an entity that
+    /// quietly disagrees with it is an invite that is live to the service that
+    /// wrote it and expired to the one that reads it.
+    /// </summary>
+    public bool IsRedeemableAt(DateTimeOffset now)
+        => RevokedAt is null && UseCount < MaxUses && ExpiresAt > now;
 }

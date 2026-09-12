@@ -437,6 +437,15 @@ export class SyncEngine {
       return
     }
 
+    // An expense that has left this group is recorded in the group it left as a
+    // marker: the entity id, and where it went. There is no expense in that
+    // payload, so reading it as one would replace the row with a blank expense of
+    // zero in the group it is no longer in.
+    if (isTransferMarker(entry, payload)) {
+      await this.applyTransferMarker(entry, String(payload.movedTo))
+      return
+    }
+
     switch (entry.entityType) {
       case 'Expense':
         await db.expenses.put(toLocalExpense(payload, entry))
@@ -448,6 +457,31 @@ export class SyncEngine {
         await db.comments.put(toLocalComment(payload, entry))
         break
     }
+  }
+
+  /**
+   * An expense leaving a group this device follows.
+   *
+   * The group it went to writes its own entry, carrying the whole expense, and the
+   * two arrive in one pull in whichever order the groups are read. Applied after
+   * that one, the row is already in its new group and there is nothing to do;
+   * applied before it, the row is dropped here and put back a moment later by the
+   * other entry.
+   *
+   * Dropped rather than tombstoned: the expense is not deleted, it is somewhere
+   * else, and for a device whose owner is not in that other group somewhere else
+   * is out of sight. A tombstone would say it had been deleted, which is a
+   * different thing and would be wrong in the group that now holds it.
+   */
+  private async applyTransferMarker(entry: SyncLogEntry, movedTo: string): Promise<void> {
+    const local = await db.expenses.get(entry.entityId)
+    if (!local || local.groupId === movedTo) return
+
+    await db.expenses.delete(entry.entityId)
+
+    // The comments went with it. Left behind they would hang off an expense this
+    // device no longer has, in a group that no longer holds either.
+    await db.comments.where('expenseId').equals(entry.entityId).delete()
   }
 
   private async applyDelete(entry: SyncLogEntry): Promise<void> {
@@ -536,6 +570,22 @@ function readSplitType(value: unknown): SplitType {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type WirePayload = Record<string, any>
+
+/**
+ * Whether an entry is the note a group keeps of an expense that left it.
+ *
+ * The group that received the expense records the whole thing; the group it came
+ * from records only where it went, under the same operation. The payload is what
+ * tells them apart, because that is the difference: one carries an expense and
+ * the other carries a forwarding address.
+ */
+function isTransferMarker(entry: SyncLogEntry, payload: WirePayload): boolean {
+  return (
+    entry.operation === 'Transfer' &&
+    entry.entityType === 'Expense' &&
+    typeof payload.movedTo === 'string'
+  )
+}
 
 function toLocalExpense(payload: WirePayload, entry: SyncLogEntry): LocalExpense {
   return {

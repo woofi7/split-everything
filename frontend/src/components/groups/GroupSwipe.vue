@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { readSwipe } from '@/domain/swipe'
 import { resolveIcon } from '@/domain/icons'
+import { groupColor } from '@/domain/themes'
 import type { LocalGroup } from '@/offline/db'
 import { useGroupsStore } from '@/stores/groups'
 
@@ -464,7 +465,7 @@ onUnmounted(() => {
         <div class="flex min-w-0 items-start gap-3">
           <span
             class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white"
-            :style="{ backgroundColor: peek.group.colorHex || '#4f46e5' }"
+            :style="{ backgroundColor: groupColor(peek.group) }"
           >
             <FontAwesomeIcon
               :icon="resolveIcon(peek.group.iconName).definition"

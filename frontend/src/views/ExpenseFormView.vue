@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 import { calculateSplit, splitValuesFor, type SplitType } from '@/domain/splitting'
 import { formatMoney, parseAmountInput, roundMoney } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
+import { lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpenseDate'
 
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
@@ -38,7 +39,27 @@ const isEditing = computed(() => editingId.value !== null)
 const groupId = ref(String(route.params.groupId ?? route.query.groupId ?? ''))
 const description = ref('')
 const amountInput = ref('')
-const spentAt = ref(new Date().toISOString().slice(0, 10))
+
+/**
+ * The date used last, when adding. Editing is prefilled from the expense itself a
+ * moment later, and the remembered date would only flash on screen first.
+ */
+const spentAt = ref(isEditing.value ? today() : (lastExpenseDate() ?? today()))
+
+/**
+ * Whether the date on screen is today's.
+ *
+ * Watched rather than assumed, because the form can open on a date carried over
+ * from the last expense: a form that quietly starts on last Saturday is a wrong
+ * date nobody looks at twice, so when it is not today the field says so and
+ * offers the one tap back.
+ */
+const isToday = computed(() => spentAt.value === today())
+
+function useToday(): void {
+  spentAt.value = today()
+}
+
 const splitType = ref<SplitType>('Equal')
 const paidByMemberId = ref('')
 
@@ -290,6 +311,151 @@ const canSetDefault = computed(() => {
   )
 })
 
+/**
+ * Moving this expense to another group.
+ *
+ * A real move rather than a change of group on the form: the expense takes its
+ * revisions, its comments and its place in both groups' history with it, and the
+ * server does the lot in one go. Offered only when editing, because an expense
+ * that has not been saved yet has nothing to carry and the group dropdown above
+ * already says where it is going.
+ */
+const isMoveOpen = ref(false)
+const moveTargetId = ref('')
+/** Source member id to the person in the other group they are, where it is asked. */
+const moveMapping = ref<Record<string, string>>({})
+const isMoving = ref(false)
+/** Kept apart from the form's error, so a refusal here is not reported up there. */
+const moveError = ref<string | null>(null)
+
+const editing = computed(() =>
+  expenses.expenses.find((candidate) => candidate.id === editingId.value),
+)
+
+/**
+ * The groups this one could go to.
+ *
+ * Same currency, because balances either side of the move are kept in the group's
+ * own money and the server refuses the rest; not archived, because an archived
+ * group takes no new writes.
+ */
+const moveTargets = computed(() =>
+  groups.visibleGroups.filter(
+    (candidate) =>
+      candidate.id !== groupId.value &&
+      !candidate.isArchived &&
+      candidate.baseCurrency === currency.value,
+  ),
+)
+
+const moveTarget = computed(() =>
+  groups.groups.find((candidate) => candidate.id === moveTargetId.value),
+)
+
+/** Everyone the expense names: who paid, who put money in, and who it is between. */
+const involvedMemberIds = computed(() => {
+  const expense = editing.value
+  if (!expense) return []
+
+  return [
+    ...new Set([
+      expense.paidByMemberId,
+      ...(expense.payers ?? []).map((payer) => payer.memberId),
+      ...expense.splits.map((split) => split.memberId),
+      ...expense.items.flatMap((item) => item.memberIds),
+    ]),
+  ].filter(Boolean)
+})
+
+const targetMembers = computed(() =>
+  groups.membersOf(moveTargetId.value).filter((member) => member.status === 'Active'),
+)
+
+/**
+ * The person in the other group this one already is, if the two groups agree.
+ *
+ * The same rule the server applies, so the form asks about exactly the people it
+ * is going to be asked about: the same account, or failing that the same name.
+ * Somebody with an account is never matched by name - two groups can hold two
+ * different people called Alex, and handing one of them the other's debts is the
+ * one mistake this must not make.
+ */
+function matchInTarget(memberId: string) {
+  const source = groups.membersOf(groupId.value).find((member) => member.id === memberId)
+  if (!source) return undefined
+
+  return source.userId
+    ? targetMembers.value.find((member) => member.userId === source.userId)
+    : targetMembers.value.find(
+        (member) => member.displayName.toLowerCase() === source.displayName.toLowerCase(),
+      )
+}
+
+/** Who has to be pointed at somebody by hand before the move can go ahead. */
+const unmatchedMembers = computed(() =>
+  moveTargetId.value
+    ? involvedMemberIds.value
+        .filter((memberId) => !matchInTarget(memberId))
+        .map((memberId) => ({
+          id: memberId,
+          name:
+            members.value.find((member) => member.id === memberId)?.displayName ??
+            groups.membersOf(groupId.value).find((member) => member.id === memberId)?.displayName ??
+            t('Someone'),
+        }))
+    : [],
+)
+
+const isMoveReady = computed(
+  () =>
+    moveTargetId.value !== '' &&
+    targetMembers.value.length > 0 &&
+    unmatchedMembers.value.every((person) => moveMapping.value[person.id]),
+)
+
+/**
+ * Reads who is in the group being moved to.
+ *
+ * The list of groups carries a count and no roster, so without this the form would
+ * have nobody to match anyone against and would ask about every person in the
+ * expense.
+ */
+async function chooseMoveTarget(nextGroupId: string): Promise<void> {
+  moveTargetId.value = nextGroupId
+  moveMapping.value = {}
+  moveError.value = null
+
+  if (!nextGroupId) return
+
+  await groups.refresh(nextGroupId)
+
+  if (targetMembers.value.length === 0) {
+    moveError.value = t('Could not read who is in that group. Moving an expense needs a connection.')
+  }
+}
+
+async function move(): Promise<void> {
+  if (!isMoveReady.value || !editingId.value) return
+
+  moveError.value = null
+  isMoving.value = true
+
+  try {
+    await expenses.transfer(editingId.value, moveTargetId.value, { ...moveMapping.value })
+
+    // To the expense where it now lives, which is the only place the move is
+    // visible and the only group the old link would no longer find it in.
+    await router.replace({
+      name: 'expense',
+      params: { groupId: moveTargetId.value, expenseId: editingId.value },
+    })
+  } catch (caught) {
+    moveError.value = caught instanceof Error ? caught.message : t('Could not move the expense.')
+  } finally {
+    isMoving.value = false
+  }
+}
+
 const backTarget = computed(() =>
   isEditing.value && groupId.value
     ? { name: 'expense', params: { groupId: groupId.value, expenseId: editingId.value } }
@@ -410,6 +576,10 @@ async function save(): Promise<void> {
     } else {
       await expenses.add({ groupId: group.value.id, ...fields })
 
+      // After it saved, so a refused expense does not move where the next one
+      // starts. Adding only: an edit is about one expense from whenever it was.
+      rememberExpenseDate(spentAt.value)
+
       // Queued locally, so this returns straight away whether online or not.
       await router.replace({ name: 'group', params: { groupId: group.value.id } })
     }
@@ -472,7 +642,21 @@ async function save(): Promise<void> {
         </label>
 
         <label class="flex shrink-0 flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">{{ t('Date') }}</span>
+          <span class="flex items-baseline justify-between gap-2 text-xs text-[var(--text-muted)]">
+            {{ t('Date') }}
+            <!--
+              Only when it is carrying a date over, which is the only time it is
+              not obvious what the field holds.
+            -->
+            <button
+              v-if="!isEditing && !isToday"
+              type="button"
+              data-testid="use-today"
+              class="text-brand-400"
+              @click="useToday"
+            >{{ t('Today') }}
+            </button>
+          </span>
           <input
             v-model="spentAt"
             type="date"
@@ -498,8 +682,9 @@ async function save(): Promise<void> {
       <div class="grid gap-3" :class="isEditing ? 'grid-cols-1' : 'grid-cols-2'">
         <!--
           Only when adding. Moving an existing expense between groups has to carry
-          its history, comments and audit trail with it, which is the transfer
-          feature; a dropdown here would look like it did that and would not.
+          its history, comments and audit trail with it, which is the move at the
+          foot of this screen; a dropdown here would look like it did that and
+          would not.
         -->
         <label v-if="!isEditing" class="flex min-w-0 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Group') }}</span>
@@ -704,5 +889,106 @@ async function save(): Promise<void> {
         {{ isSaving ? t('Saving') : isEditing ? t('Save changes') : t('Save expense') }}
       </button>
     </form>
+
+    <!--
+      Below the form, and outside it.
+
+      Moving is not one of the six questions the form asks: it is a thing done to
+      an expense that already exists, the way archiving is a thing done to a group.
+      Inside the form it would be a second submit button beside the first, and the
+      one that moved the expense somewhere else would be the one people pressed by
+      accident.
+    -->
+    <section v-if="isEditing" class="surface-card mt-4 p-4">
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Move to another group') }}</h2>
+
+      <p v-if="moveTargets.length === 0" class="text-xs text-[var(--text-muted)]">{{ t('There is no other group in {currency} to move this to.', { currency }) }}
+      </p>
+
+      <template v-else-if="!isMoveOpen">
+        <p class="mb-3 text-xs text-[var(--text-muted)]">{{ t('It goes with its history, its comments and who paid. Anything typed above and not saved stays behind.') }}
+        </p>
+
+        <button
+          type="button"
+          data-testid="move-open"
+          class="btn btn-press btn-secondary w-full"
+          style="border-color: var(--border)"
+          @click="isMoveOpen = true"
+        >{{ t('Move to another group') }}
+        </button>
+      </template>
+
+      <div v-else class="flex flex-col gap-3" data-testid="move-panel">
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Which group') }}</span>
+          <select
+            :value="moveTargetId"
+            data-testid="move-target"
+            class="tap-target rounded-lg border bg-[var(--surface)] px-3 text-sm"
+            style="border-color: var(--border)"
+            @change="chooseMoveTarget(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="" disabled>{{ t('Choose a group') }}</option>
+            <option v-for="option in moveTargets" :key="option.id" :value="option.id">
+              {{ option.name }}
+            </option>
+          </select>
+        </label>
+
+        <!--
+          Only the people the two groups could not work out between them. Somebody
+          in both under the same account, or under the same name, is not worth
+          asking about; anyone else has to be named, because putting a debt on the
+          wrong person is not something the group would notice.
+        -->
+        <div v-if="unmatchedMembers.length > 0" class="flex flex-col gap-2">
+          <p class="text-xs text-[var(--text-muted)]">{{ t('These people are not in {group}. Say who they are there.', { group: moveTarget?.name ?? '' }) }}
+          </p>
+
+          <label
+            v-for="person in unmatchedMembers"
+            :key="person.id"
+            class="flex items-center gap-2"
+            data-testid="move-mapping"
+          >
+            <span class="min-w-0 flex-1 truncate text-sm">{{ person.name }}</span>
+            <select
+              v-model="moveMapping[person.id]"
+              :data-testid="`move-mapping-${person.id}`"
+              class="tap-target min-w-0 flex-1 rounded-lg border bg-[var(--surface)] px-2 text-sm"
+              style="border-color: var(--border)"
+              :aria-label="`Who ${person.name} is in ${moveTarget?.name ?? 'the other group'}`"
+            >
+              <option value="">{{ t('Choose someone') }}</option>
+              <option v-for="member in targetMembers" :key="member.id" :value="member.id">
+                {{ member.displayName }}
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <p v-if="moveError" class="text-sm text-owing" role="alert">{{ moveError }}</p>
+
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="btn btn-press btn-secondary flex-1"
+            style="border-color: var(--border)"
+            @click="isMoveOpen = false"
+          >{{ t('Cancel') }}
+          </button>
+          <button
+            type="button"
+            data-testid="move-confirm"
+            class="btn btn-press btn-primary flex-1"
+            :disabled="!isMoveReady || isMoving"
+            @click="move"
+          >
+            {{ isMoving ? t('Moving') : t('Move it') }}
+          </button>
+        </div>
+      </div>
+    </section>
   </AppShell>
 </template>

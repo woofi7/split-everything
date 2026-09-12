@@ -217,6 +217,121 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         renamed.IconName.ShouldBe("house");
     }
 
+    /*
+     * A group's colour.
+     *
+     * Set on the group rather than on a person, so everyone in it sees the same
+     * one, and worn by the whole app while that group is the one being looked at.
+     * Which is why null has to keep meaning "none": a group that has never been
+     * given a colour must not overrule the colour somebody chose for their account.
+     */
+    [Fact]
+    public async Task A_group_starts_with_no_colour_of_its_own()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+
+        var group = await Groups.CreateAsync(user.Id, Request());
+
+        group.ThemeName.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_group_can_be_created_wearing_a_colour()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+
+        var group = await Groups.CreateAsync(user.Id,
+            new CreateGroupRequest("Ski trip", "CAD", null, null, null, null, "teal"));
+
+        group.ThemeName.ShouldBe("teal");
+    }
+
+    [Fact]
+    public async Task A_colour_can_be_set_and_changed()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+
+        var teal = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, null, null, null, ThemeName: "teal"));
+        teal.ThemeName.ShouldBe("teal");
+
+        var amber = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, null, null, null, ThemeName: "amber"));
+        amber.ThemeName.ShouldBe("amber");
+    }
+
+    [Fact]
+    public async Task A_colour_is_stored_the_one_way_it_is_spelt()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+
+        // Or two spellings of the same colour would be two colours, and the client
+        // would recognise only one of them.
+        var updated = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, null, null, null, ThemeName: " TEAL "));
+
+        updated.ThemeName.ShouldBe("teal");
+    }
+
+    [Fact]
+    public async Task A_colour_can_be_removed_with_an_empty_string()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+        await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, null, null, null, ThemeName: "teal"));
+
+        var cleared = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, null, null, null, ThemeName: string.Empty));
+
+        // Back to each person's own account colour, which is what none means.
+        cleared.ThemeName.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Omitting_the_colour_leaves_it_alone()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+        await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, null, null, null, ThemeName: "teal"));
+
+        var renamed = await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest("Renamed", null, null, null, null));
+
+        renamed.ThemeName.ShouldBe("teal");
+    }
+
+    [Fact]
+    public async Task A_colour_this_app_does_not_have_is_refused()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+
+        // The client turns the name into shades, so a name it does not know would
+        // leave the group with no colour at all and nothing to say why.
+        await Should.ThrowAsync<ValidationException>(() => Groups.UpdateAsync(
+            user.Id, group.Id,
+            new UpdateGroupRequest(null, null, null, null, null, ThemeName: "chartreuse")));
+    }
+
+    [Fact]
+    public async Task The_colour_reaches_the_other_devices_through_the_list()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id, Request());
+        await Groups.UpdateAsync(user.Id, group.Id,
+            new UpdateGroupRequest(null, null, null, null, null, ThemeName: "rose"));
+
+        var listed = await Groups.ListAsync(user.Id);
+
+        // The list is what every device reads on launch, and the colour has to be
+        // on it or the app opens in the wrong one and corrects itself later.
+        listed.ShouldHaveSingleItem().ThemeName.ShouldBe("rose");
+    }
+
     [Fact]
     public async Task A_description_can_be_removed_the_same_way()
     {

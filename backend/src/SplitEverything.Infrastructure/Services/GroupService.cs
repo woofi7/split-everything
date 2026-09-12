@@ -33,6 +33,7 @@ public sealed class GroupService(
             BaseCurrency = currency,
             IconName = Clearable(request.IconName ?? string.Empty, "Icon name", 48),
             ColorHex = string.IsNullOrWhiteSpace(request.ColorHex) ? "#4f46e5" : request.ColorHex.Trim(),
+            ThemeName = ReadTheme(request.ThemeName),
             CreatedByUserId = userId,
             CreatedAt = clock.UtcNow,
             UpdatedAt = clock.UtcNow
@@ -126,7 +127,8 @@ public sealed class GroupService(
             totals?.Count ?? 0,
             group.DefaultSplitType,
             ReadDefaultSplitValues(group.DefaultSplitValuesJson),
-            ReadIgnoredNamePatterns(group.IgnoredNamePatternsJson));
+            ReadIgnoredNamePatterns(group.IgnoredNamePatternsJson),
+            group.ThemeName);
     }
 
     /// <summary>
@@ -182,6 +184,7 @@ public sealed class GroupService(
                 m.Group.BaseCurrency,
                 m.Group.IconName,
                 m.Group.ColorHex,
+                m.Group.ThemeName,
                 m.Group.IsArchived,
                 MemberCount = m.Group.Members.Count(x => !x.IsDeleted && x.Status == MembershipStatus.Active),
                 LastActivityAt = db.ActivityLog
@@ -204,7 +207,7 @@ public sealed class GroupService(
             summaries.Add(new GroupSummaryDto(
                 row.GroupId, row.Name, row.BaseCurrency, row.IconName, row.ColorHex,
                 row.IsArchived, balances.GetValueOrDefault(row.MemberId),
-                row.MemberCount, row.LastActivityAt));
+                row.MemberCount, row.LastActivityAt, row.ThemeName));
         }
 
         return summaries
@@ -232,6 +235,10 @@ public sealed class GroupService(
             group.IconName = Clearable(request.IconName, "Icon name", 48);
         if (request.ColorHex is not null)
             group.ColorHex = Clearable(request.ColorHex, "Colour", 9) ?? "#4f46e5";
+        // An empty string clears it, which puts the group back to wearing whatever
+        // colour each person chose for their own account.
+        if (request.ThemeName is not null)
+            group.ThemeName = ReadTheme(request.ThemeName);
         if (request.BaseCurrency is not null)
             group.BaseCurrency = GroupAccess.NormalizeCurrency(request.BaseCurrency, "Base currency");
 
@@ -338,6 +345,25 @@ public sealed class GroupService(
             throw new ValidationException($"{field} must be at most {maxLength} characters.");
 
         return trimmed;
+    }
+
+    /// <summary>
+    /// The accent a group is to wear, or null for none.
+    ///
+    /// Refused rather than stored when it is not a theme this app has: the client
+    /// turns the name into shades, so a name it does not know would leave the group
+    /// with no colour at all and nothing to say why. Empty clears it, the same
+    /// convention as the text fields above.
+    /// </summary>
+    private static string? ReadTheme(string? name)
+    {
+        var wanted = name?.Trim() ?? string.Empty;
+        if (wanted.Length == 0) return null;
+
+        if (!AppThemes.IsKnown(wanted))
+            throw new ValidationException($"{wanted} is not a colour this app has.");
+
+        return AppThemes.Normalize(wanted);
     }
 
     public Task<GroupDto> ArchiveAsync(Guid userId, Guid groupId, CancellationToken ct = default)
@@ -888,7 +914,7 @@ public sealed class GroupService(
     internal static object GroupPayload(Group group) => new
     {
         group.Id, group.Name, group.Description, group.BaseCurrency,
-        group.IconName, group.ColorHex, group.IsArchived, group.LineageId,
+        group.IconName, group.ColorHex, group.ThemeName, group.IsArchived, group.LineageId,
         // In the payload so another device learns the group's default split from
         // the delta pull rather than only on a full read.
         DefaultSplitType = (int)group.DefaultSplitType,

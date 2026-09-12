@@ -13,6 +13,7 @@ import { netBalances, simplifyDebts, pairwiseDebts, type MemberBalance, type Tra
 import { roundMoney } from '@/domain/money'
 import { clearReplica } from '@/offline/db'
 import type { SyncEngine } from '@/offline/syncEngine'
+import { ApiError, looksOffline, type ApiClient } from '@/api/client'
 import { newId } from '@/domain/ids'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
@@ -70,14 +71,31 @@ export const useExpensesStore = defineStore('expenses', () => {
   const rejectedCount = ref(0)
   const isSyncing = ref(false)
   let engine: SyncEngine | null = null
+  let api: ApiClient | null = null
 
   function attachSync(syncEngine: SyncEngine): void {
     engine = syncEngine
   }
 
+  /**
+   * The client for the one thing here that is not a queued local write.
+   *
+   * Moving an expense between groups rewrites both groups' logs at once, which no
+   * outbox operation can describe, so it is asked for directly and needs a
+   * connection.
+   */
+  function attachApi(client: ApiClient): void {
+    api = client
+  }
+
   function requireSync(): SyncEngine {
     if (!engine) throw new Error('The expenses store has no sync engine attached.')
     return engine
+  }
+
+  function requireApi(): ApiClient {
+    if (!api) throw new Error('The expenses store has no API client attached.')
+    return api
   }
 
   async function hydrate(): Promise<void> {
@@ -285,6 +303,70 @@ export const useExpensesStore = defineStore('expenses', () => {
     syncSoon()
 
     return (await db.expenses.get(updated.id))!
+  }
+
+  /**
+   * Moves an expense into another group, carrying its history.
+   *
+   * The one write here that is not queued: the server rewrites the expense, its
+   * revisions, its comments and both groups' logs together, and half of that
+   * applied locally would be a replica that disagrees with itself. So it needs a
+   * connection, and the result comes back through an ordinary sync rather than
+   * being patched in here - the row this device ends up with is the one the server
+   * wrote, member ids and all.
+   *
+   * Refused while anything is still waiting to be sent for this expense, because
+   * the queued change names the group it was written in: sent after the move, the
+   * server would be asked to update an expense that is no longer where the change
+   * says it is.
+   */
+  async function transfer(
+    expenseId: string,
+    targetGroupId: string,
+    memberMapping?: Record<string, string>,
+  ): Promise<void> {
+    const existing = await db.expenses.get(expenseId)
+    if (!existing) throw new Error('That expense is not on this device.')
+    if (existing.groupId === targetGroupId) throw new Error('That expense is already in this group.')
+
+    const queued = await db.outbox
+      .where('entityId')
+      .equals(expenseId)
+      .filter((operation) => operation.status === 'pending' || operation.status === 'inflight')
+      .count()
+
+    if (queued > 0 || existing.pending) {
+      throw new Error('This expense has changes that have not been sent yet. Try again once it has synced.')
+    }
+
+    // Asked for before the request rather than inside it, so a store with nothing
+    // attached says so instead of being reported as a connection problem.
+    const client = requireApi()
+
+    try {
+      await client.post(`/expenses/${expenseId}/transfer`, {
+        targetGroupId,
+        // Only the people the two groups could not match up on their own, so an
+        // empty map is sent as nothing at all.
+        memberMapping:
+          memberMapping && Object.keys(memberMapping).length > 0 ? memberMapping : undefined,
+      })
+    } catch (caught) {
+      // Worth saying plainly, because this is the one write here that cannot be
+      // queued: everything else in this store is already saved by the time anyone
+      // reads an error, and this is not.
+      if ((caught instanceof ApiError && caught.isOffline) || looksOffline(caught)) {
+        throw new Error('Moving an expense between groups needs a connection.', {
+          cause: caught,
+        })
+      }
+      throw caught
+    }
+
+    // Both logs moved, so this is what brings the expense across on this device,
+    // and the balances either side of the move belong to the groups.
+    await sync()
+    await useGroupsStore().loadAll()
   }
 
   async function remove(expenseId: string): Promise<void> {
@@ -701,6 +783,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     isSyncing,
     unsyncedExpenses,
     attachSync,
+    attachApi,
     hydrate,
     reconcile,
     discardRejected,
@@ -712,6 +795,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     add,
     edit,
     remove,
+    transfer,
     comment,
     removeComment,
     settle,

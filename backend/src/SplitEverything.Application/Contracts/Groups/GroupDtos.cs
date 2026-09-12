@@ -8,7 +8,9 @@ public sealed record CreateGroupRequest(
     string? Description,
     string? IconName,
     string? ColorHex,
-    IReadOnlyList<string>? PlaceholderMemberNames);
+    IReadOnlyList<string>? PlaceholderMemberNames,
+    /// <summary>The accent the app wears for this group, by name, or null for none.</summary>
+    string? ThemeName = null);
 
 public sealed record UpdateGroupRequest(
     string? Name, string? Description, string? IconName, string? ColorHex, string? BaseCurrency,
@@ -19,7 +21,10 @@ public sealed record UpdateGroupRequest(
     IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null,
     // Names to leave out of the highlights, as regular expressions. Null leaves them
     // as they are; an empty list is the explicit clear.
-    IReadOnlyList<string>? IgnoredNamePatterns = null);
+    IReadOnlyList<string>? IgnoredNamePatterns = null,
+    // The accent the app wears for this group. Null leaves it alone and an empty
+    // string is the explicit clear, the same convention as the text fields.
+    string? ThemeName = null);
 
 public sealed record GroupMemberDto(
     Guid Id,
@@ -54,11 +59,13 @@ public sealed record GroupDto(
     int ExpenseCount,
     SplitType DefaultSplitType = SplitType.Equal,
     IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null,
-    IReadOnlyList<string>? IgnoredNamePatterns = null);
+    IReadOnlyList<string>? IgnoredNamePatterns = null,
+    string? ThemeName = null);
 
 public sealed record GroupSummaryDto(
     Guid Id, string Name, string BaseCurrency, string? IconName, string ColorHex,
-    bool IsArchived, decimal MyNetBalance, int MemberCount, DateTimeOffset? LastActivityAt);
+    bool IsArchived, decimal MyNetBalance, int MemberCount, DateTimeOffset? LastActivityAt,
+    string? ThemeName = null);
 
 
 /// <summary>Adds someone who already has an account, rather than a placeholder.</summary>

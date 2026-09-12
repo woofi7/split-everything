@@ -629,6 +629,36 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
     }
 
     [Fact]
+    public async Task A_transfer_carries_somebody_who_paid_without_being_split_with()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var (from, fromMe, fromBob) = await MakeGroupAsync(user.Id, "Wrong group", "Bob");
+        var (to, toMe, toBob) = await MakeGroupAsync(user.Id, "Right group", "Bob");
+
+        // Bob put in twenty of it and is not one of the people it is split
+        // between: two cards at the till, for something only one of them had. He
+        // was left out of the people the move looked up, and rewriting his row
+        // then failed with nobody to rewrite it to.
+        var expense = await Expenses.CreateAsync(user.Id, new CreateExpenseRequest(
+            from.Id, fromMe, "Two cards", 60m, "CAD", TestData.Jan1, SplitType.Equal,
+            [new SplitInputDto(fromMe, null)], null, null, null, null, null, null,
+            [new PayerInputDto(fromMe, 40m), new PayerInputDto(fromBob, 20m)]));
+
+        await Lifecycle.TransferExpenseAsync(user.Id, new TransferExpenseRequest(
+            expense.Id, to.Id, new Dictionary<Guid, Guid> { [fromMe] = toMe, [fromBob] = toBob }));
+
+        var payers = await NewContext().ExpensePayers
+            .Where(p => p.ExpenseId == expense.Id)
+            .ToListAsync();
+
+        payers.Count.ShouldBe(2);
+        payers.Select(p => p.MemberId).ShouldBe([toMe, toBob], ignoreOrder: true);
+        // And the rows point at the group they are now in, or every balance on
+        // either side of the move would be wrong.
+        payers.ShouldAllBe(p => p.GroupId == to.Id);
+    }
+
+    [Fact]
     public async Task Transferring_into_a_group_you_are_not_in_is_forbidden()
     {
         var owner = await TestData.SeedUserAsync(Db, "Alice");

@@ -125,7 +125,7 @@ public sealed class InviteService(
             m.GroupId == invite.GroupId && !m.IsDeleted && m.Status == MembershipStatus.Active, ct);
 
         return new InvitePreviewDto(group.Id, group.Name, group.IconName,
-            invitedBy ?? "Someone", memberCount, invite.IsRedeemable && !group.IsArchived);
+            invitedBy ?? "Someone", memberCount, invite.IsRedeemableAt(clock.UtcNow) && !group.IsArchived);
     }
 
     public async Task<RedeemInviteResult> RedeemAsync(
@@ -173,7 +173,7 @@ public sealed class InviteService(
             return new RedeemInviteResult(invite.GroupId, existing.Id, AlreadyMember: true);
         }
 
-        if (!invite.IsRedeemable)
+        if (!invite.IsRedeemableAt(clock.UtcNow))
             throw new ValidationException("This invite is no longer valid.");
 
         var deviceId = GroupService.DeviceFor(userId);

@@ -411,6 +411,134 @@ describe('offline sync engine', () => {
     expect(await getCursor(groupId)).toBe(5)
   })
 
+  /**
+   * An expense that moved to another group.
+   *
+   * Two entries, one in each group's log: the group it went to records the whole
+   * expense, and the group it left records only where it went. The second used to
+   * be read as an expense of nothing at all, which blanked the row every time the
+   * old group's log happened to be read last.
+   */
+  it('drops an expense from a group it has left', async () => {
+    await seedExpense('expense-1', false)
+    const api = fakeApi({
+      pull: vi.fn(async () => ({
+        entries: [
+          {
+            serverSeq: 7,
+            groupId,
+            entityType: 'Expense',
+            entityId: 'expense-1',
+            operation: 'Transfer',
+            deviceId: 'device-b',
+            payloadJson: JSON.stringify({ movedTo: 'group-2', id: 'expense-1' }),
+            vectorClock: { 'device-b': 2 },
+            lineageId: 'lineage-1',
+            sourceGroupId: null,
+            counterpartGroupId: 'group-2',
+            createdAt: '2026-02-01T12:00:00Z',
+          },
+        ],
+        groupCursors: { [groupId]: 7 },
+        snapshots: [],
+        hasMore: false,
+      })),
+    })
+
+    await new SyncEngine(api, () => true).pull()
+
+    // Gone rather than blanked, and gone rather than tombstoned: it is not
+    // deleted, it is in another group, and whoever is in that group still has it.
+    expect(await db.expenses.get('expense-1')).toBeUndefined()
+  })
+
+  it('leaves an expense alone when it has already arrived in its new group', async () => {
+    await seedExpense('expense-1', false)
+    await db.expenses.update('expense-1', { groupId: 'group-2' })
+
+    const api = fakeApi({
+      pull: vi.fn(async () => ({
+        entries: [
+          {
+            serverSeq: 7,
+            groupId,
+            entityType: 'Expense',
+            entityId: 'expense-1',
+            operation: 'Transfer',
+            deviceId: 'device-b',
+            payloadJson: JSON.stringify({ movedTo: 'group-2', id: 'expense-1' }),
+            vectorClock: { 'device-b': 2 },
+            lineageId: 'lineage-1',
+            sourceGroupId: null,
+            counterpartGroupId: 'group-2',
+            createdAt: '2026-02-01T12:00:00Z',
+          },
+        ],
+        groupCursors: { [groupId]: 7 },
+        snapshots: [],
+        hasMore: false,
+      })),
+    })
+
+    // The two entries arrive in one pull, in whichever order the groups are read,
+    // so the note from the old group can land after the expense has already been
+    // written into the new one.
+    await new SyncEngine(api, () => true).pull()
+
+    expect((await db.expenses.get('expense-1'))?.groupId).toBe('group-2')
+  })
+
+  it('applies the expense the group it moved to recorded', async () => {
+    await seedExpense('expense-1', false)
+
+    const api = fakeApi({
+      pull: vi.fn(async () => ({
+        entries: [
+          {
+            serverSeq: 3,
+            groupId: 'group-2',
+            entityType: 'Expense',
+            entityId: 'expense-1',
+            operation: 'Transfer',
+            deviceId: 'device-b',
+            payloadJson: JSON.stringify({
+              id: 'expense-1',
+              groupId: 'group-2',
+              paidByMemberId: 'member-2',
+              description: 'Dinner',
+              amount: 40,
+              currency: 'CAD',
+              amountInBaseCurrency: 40,
+              exchangeRate: 1,
+              spentAt: '2026-01-01T12:00:00Z',
+              splitType: 1,
+              splits: [{ memberId: 'member-2', amount: 40, amountInBaseCurrency: 40 }],
+              items: [],
+              revision: 2,
+              isDeleted: false,
+            }),
+            vectorClock: { 'device-b': 2 },
+            lineageId: 'lineage-1',
+            sourceGroupId: groupId,
+            counterpartGroupId: null,
+            createdAt: '2026-02-01T12:00:00Z',
+          },
+        ],
+        groupCursors: { 'group-2': 3 },
+        snapshots: [],
+        hasMore: false,
+      })),
+    })
+
+    await new SyncEngine(api, () => true).pull()
+
+    // Carrying the member ids of the group it landed in, which is why the whole
+    // expense is rewritten rather than only its group.
+    const stored = await db.expenses.get('expense-1')
+    expect(stored?.groupId).toBe('group-2')
+    expect(stored?.splits[0].memberId).toBe('member-2')
+  })
+
   it('applies a pulled delete as a tombstone', async () => {
     await seedExpense('expense-1', false)
     const api = fakeApi({

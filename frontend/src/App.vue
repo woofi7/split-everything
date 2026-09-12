@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watchEffect } from 'vue'
+import { computed, onMounted, watchEffect } from 'vue'
 import { RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useExpensesStore } from '@/stores/expenses'
@@ -7,12 +7,24 @@ import { useGroupsStore } from '@/stores/groups'
 import NavigationProgress from '@/components/ui/NavigationProgress.vue'
 import UpdatePrompt from '@/components/ui/UpdatePrompt.vue'
 import { isNavigating } from '@/router'
-import { accentVariables } from '@/domain/themes'
+import { accentVariables, findAccent } from '@/domain/themes'
 import { setLocale } from '@/i18n'
 
 const auth = useAuthStore()
 const expenses = useExpensesStore()
 const groups = useGroupsStore()
+
+/**
+ * The accent the app is wearing.
+ *
+ * The group's, where the group the app is on has one: a colour set on a group is
+ * set for everyone in it, and it is worn by the whole screen - the background and
+ * every card - rather than shown as a dot beside the name, so the group you are
+ * looking at is obvious before a word of it is read. Otherwise the account
+ * setting, which is what a person chose for themselves and the only thing left to
+ * follow on a screen that is about no group at all.
+ */
+const accent = computed(() => findAccent(groups.mainGroup?.themeName) ?? auth.accent)
 
 // The theme is an attribute on the root element, so CSS tokens swap without any
 // component knowing which theme is active. The accent is the same idea by another
@@ -21,14 +33,14 @@ const groups = useGroupsStore()
 watchEffect(() => {
   const root = document.documentElement
   root.dataset.theme = auth.theme
-  root.dataset.accent = auth.accent.name
+  root.dataset.accent = accent.value.name
 
   // The language too, which also belongs on the element: a screen reader and a
   // spell checker both read lang, and nothing else in the app would tell them.
   setLocale(auth.language)
   root.lang = auth.language
 
-  for (const [token, value] of Object.entries(accentVariables(auth.accent))) {
+  for (const [token, value] of Object.entries(accentVariables(accent.value))) {
     root.style.setProperty(token, value)
   }
 })

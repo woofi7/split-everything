@@ -15,6 +15,23 @@ public class Group : SyncableEntity
     public string ColorHex { get; set; } = "#4f46e5";
 
     /// <summary>
+    /// The accent this group wears, as a name from <see cref="Common.AppThemes"/>,
+    /// or null to leave each member's own choice alone.
+    ///
+    /// A group's colour rather than a person's: it comes from the group, so
+    /// everyone in it sees the same one, and the app takes it on while that group
+    /// is the one being looked at - the background and every card, not a dot beside
+    /// the name. Which is why null has to mean something: a group with no colour of
+    /// its own must not quietly overrule the colour somebody chose for their
+    /// account.
+    ///
+    /// A name rather than a hex, for the same reason the account setting is one:
+    /// the client turns one name into the three shades a theme needs, and a stored
+    /// colour would pin the other two down forever.
+    /// </summary>
+    public string? ThemeName { get; set; }
+
+    /// <summary>
     /// How a new expense in this group is split unless someone says otherwise.
     ///
     /// A group setting rather than a device preference: how a household divides

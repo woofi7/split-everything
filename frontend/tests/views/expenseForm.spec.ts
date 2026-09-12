@@ -7,6 +7,7 @@ import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { SyncEngine } from '@/offline/syncEngine'
+import { today } from '@/domain/lastExpenseDate'
 import { textOf, waitFor } from '../support/viewHarness'
 
 const groupId = 'group-1'
@@ -661,10 +662,13 @@ describe('ExpenseFormView fits one screen', () => {
     expect(textOf(wrapper)).not.toContain('Category')
   })
 
-  it('does not offer to move an expense between groups while editing', async () => {
+  it('does not change which group an expense is in with a dropdown while editing', async () => {
     routeParams = { groupId, expenseId: 'expense-1' }
     const { wrapper } = await mountView()
 
+    // Moving an existing expense is a move, with its history and comments, and it
+    // has its own panel at the foot of the screen. A dropdown here would look like
+    // it did that and would not.
     expect(wrapper.find('[data-testid="group"]').exists()).toBe(false)
   })
 
@@ -940,5 +944,348 @@ describe('ExpenseFormView group default split', () => {
     // A group setting is not worth losing someone's expense over.
     expect(expenses.forGroup(groupId)).toHaveLength(1)
     expect(textOf(wrapper)).toContain('group default could not be changed')
+  })
+})
+
+/**
+ * Where a new expense starts.
+ *
+ * Today is right for the one being typed at the till and wrong for the six
+ * receipts from last weekend, which is the case that had people opening the date
+ * field and picking the same day over and over.
+ */
+describe('ExpenseFormView remembering the date', () => {
+  beforeEach(() => {
+    routeParams = {}
+    localStorage.clear()
+    push.mockClear()
+    replace.mockClear()
+  })
+
+  const dateField = (wrapper: Awaited<ReturnType<typeof mountView>>['wrapper']) =>
+    wrapper.find('input[type="date"]')
+
+  it('starts on today when nothing has been added on this device', async () => {
+    const { wrapper } = await mountView()
+
+    expect((dateField(wrapper).element as HTMLInputElement).value).toBe(today())
+  })
+
+  it('starts on the date the last expense used', async () => {
+    localStorage.setItem('split-everything.last-expense-date', '2026-03-14')
+
+    const { wrapper } = await mountView()
+
+    expect((dateField(wrapper).element as HTMLInputElement).value).toBe('2026-03-14')
+  })
+
+  it('says so, and offers one tap back to today', async () => {
+    localStorage.setItem('split-everything.last-expense-date', '2026-03-14')
+    const { wrapper } = await mountView()
+
+    const back = wrapper.find('[data-testid="use-today"]')
+    expect(back.exists()).toBe(true)
+
+    await back.trigger('click')
+    await settle()
+
+    expect((dateField(wrapper).element as HTMLInputElement).value).toBe(today())
+    // Gone once it is today again: it has nothing left to say.
+    expect(wrapper.find('[data-testid="use-today"]').exists()).toBe(false)
+  })
+
+  it('remembers the date an expense was added on', async () => {
+    const { wrapper } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Groceries')
+    await wrapper.find('input[inputmode="decimal"]').setValue('60')
+    await dateField(wrapper).setValue('2026-02-02')
+    await settle()
+
+    await wrapper.find('form').trigger('submit')
+
+    // Remembered after the expense is saved, so a refused one does not move where
+    // the next one starts. Waited for rather than counted in turns: the save
+    // crosses several IndexedDB transactions.
+    await waitFor(
+      () => localStorage.getItem('split-everything.last-expense-date') === '2026-02-02',
+    )
+  })
+
+  it('leaves it alone when an old expense is edited', async () => {
+    localStorage.setItem('split-everything.last-expense-date', '2026-03-14')
+
+    setActivePinia(createPinia())
+    await resetDatabase()
+    await db.groups.put(group)
+    await db.expenses.put({
+      id: 'expense-1',
+      groupId,
+      paidByMemberId: alice,
+      description: 'Rent',
+      amount: 100,
+      currency: 'CAD',
+      amountInBaseCurrency: 100,
+      exchangeRate: 1,
+      spentAt: '2025-11-01T12:00:00.000Z',
+      splitType: 'Equal' as const,
+      receiptId: null,
+      notes: null,
+      splits: [
+        { memberId: alice, amount: 50, amountInBaseCurrency: 50, inputValue: null },
+        { memberId: bob, amount: 50, amountInBaseCurrency: 50, inputValue: null },
+      ],
+      items: [],
+      revision: 1,
+      isDeleted: false,
+      vectorClock: {},
+      serverSeq: 1,
+      pending: false,
+    })
+    routeParams = { groupId, expenseId: 'expense-1' }
+
+    const auth = useAuthStore()
+    auth.user = { id: 'user-1', displayName: 'Alice', defaultCurrency: 'CAD' } as never
+
+    const groups = useGroupsStore()
+    groups.attachApi({
+      get: vi.fn(async (path: string) =>
+        path === '/groups' ? [{ ...group, memberCount: 2, lastActivityAt: null }] : group,
+      ),
+      post: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
+    } as never)
+    useExpensesStore().attachSync(new SyncEngine(fakeSyncApi(), () => false))
+
+    const wrapper = mount(ExpenseFormView, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+    await settle()
+
+    // The expense's own date, not the one carried over, and no offer of today
+    // either: this one is from November and that is not a mistake.
+    expect((wrapper.find('input[type="date"]').element as HTMLInputElement).value).toBe(
+      '2025-11-01',
+    )
+    expect(wrapper.find('[data-testid="use-today"]').exists()).toBe(false)
+
+    await wrapper.find('form').trigger('submit')
+
+    // Saved, and only then asked what it remembered: the answer here is that
+    // nothing moved, which is only worth asserting once the save has finished.
+    await waitFor(() => replace.mock.calls.length > 0)
+    expect(localStorage.getItem('split-everything.last-expense-date')).toBe('2026-03-14')
+  })
+})
+
+/**
+ * Moving an expense into another group.
+ *
+ * The thing people reach for when an expense went into the household group and
+ * belonged to the trip. It is a move rather than a retyping: the expense takes its
+ * history and its comments with it, so the form hands the whole job to the server
+ * and only has to ask the two questions the server cannot answer on its own -
+ * which group, and who these people are over there.
+ */
+describe('ExpenseFormView moving an expense to another group', () => {
+  const otherGroupId = 'group-2'
+  const carol = 'member-carol'
+
+  const otherGroup = {
+    ...group,
+    id: otherGroupId,
+    name: 'Ski trip',
+    lineageId: 'lineage-2',
+    members: [
+      {
+        id: 'member-alice-trip',
+        userId: 'user-1',
+        displayName: 'Alice',
+        avatarUrl: null,
+        role: 'Owner',
+        status: 'Active',
+        isPlaceholder: false,
+        netBalance: 0,
+      },
+      {
+        id: carol,
+        userId: null,
+        displayName: 'Carol',
+        avatarUrl: null,
+        role: 'Member',
+        status: 'Active',
+        isPlaceholder: true,
+        netBalance: 0,
+      },
+    ],
+  }
+
+  const existing = {
+    id: 'expense-1',
+    groupId,
+    paidByMemberId: alice,
+    description: 'Lift pass',
+    amount: 60,
+    currency: 'CAD',
+    amountInBaseCurrency: 60,
+    exchangeRate: 1,
+    spentAt: '2026-03-14T12:00:00.000Z',
+    splitType: 'Equal' as const,
+    receiptId: null,
+    notes: null,
+    splits: [
+      { memberId: alice, amount: 30, amountInBaseCurrency: 30, inputValue: null },
+      { memberId: bob, amount: 30, amountInBaseCurrency: 30, inputValue: null },
+    ],
+    items: [],
+    revision: 1,
+    isDeleted: false,
+    vectorClock: {},
+    serverSeq: 1,
+    pending: false,
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    push.mockClear()
+    replace.mockClear()
+    routeParams = { groupId, expenseId: 'expense-1' }
+  })
+
+  /** The other groups this device knows about, as the settings say. */
+  async function mountMove(others: Array<Record<string, unknown>> = [otherGroup]) {
+    setActivePinia(createPinia())
+    await resetDatabase()
+    await db.groups.put(group)
+    for (const other of others) await db.groups.put(other as never)
+    await db.expenses.put(existing)
+
+    const auth = useAuthStore()
+    auth.user = { id: 'user-1', displayName: 'Alice', defaultCurrency: 'CAD' } as never
+
+    const known = [group, ...others]
+    const groups = useGroupsStore()
+    groups.attachApi({
+      get: vi.fn(async (path: string) =>
+        path === '/groups'
+          ? known.map((one) => ({ ...one, memberCount: 2, lastActivityAt: null }))
+          : known.find((one) => path.endsWith(one.id as string)),
+      ),
+      post: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
+    } as never)
+
+    const post = vi.fn(async () => ({}))
+    const expenses = useExpensesStore()
+    expenses.attachSync(new SyncEngine(fakeSyncApi(), () => false))
+    expenses.attachApi({ post } as never)
+
+    const wrapper = mount(ExpenseFormView, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+    await settle()
+
+    return { wrapper, expenses, post }
+  }
+
+  it('offers the move only once the expense exists', async () => {
+    routeParams = {}
+    const { wrapper } = await mountView()
+
+    // Adding already asks which group, in the form. There is nothing to move.
+    expect(wrapper.find('[data-testid="move-open"]').exists()).toBe(false)
+  })
+
+  it('offers to move an expense being edited', async () => {
+    const { wrapper } = await mountMove()
+
+    expect(wrapper.find('[data-testid="move-open"]').exists()).toBe(true)
+  })
+
+  it('lists the groups it could go to', async () => {
+    const { wrapper } = await mountMove()
+
+    await wrapper.find('[data-testid="move-open"]').trigger('click')
+    await settle()
+
+    const options = wrapper.findAll('[data-testid="move-target"] option')
+    expect(options.map((option) => option.text())).toEqual(['Choose a group', 'Ski trip'])
+  })
+
+  it('leaves out a group kept in another currency', async () => {
+    // The server refuses it, because balances either side of the move are kept in
+    // the group's own money, and a list that offers it is a list that lies.
+    const { wrapper } = await mountMove([{ ...otherGroup, baseCurrency: 'EUR' }])
+
+    expect(wrapper.text()).toContain('no other group in CAD')
+    expect(wrapper.find('[data-testid="move-open"]').exists()).toBe(false)
+  })
+
+  it('asks who the people it cannot match are in the other group', async () => {
+    const { wrapper } = await mountMove()
+
+    await wrapper.find('[data-testid="move-open"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-testid="move-target"]').setValue(otherGroupId)
+    await settle()
+
+    // Alice is in both under the same account, so nothing is asked about her. Bob
+    // is not in the trip at all, and putting his half on the wrong person is the
+    // one mistake this must not make quietly.
+    const rows = wrapper.findAll('[data-testid="move-mapping"]')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('Bob')
+
+    expect(wrapper.find('[data-testid="move-confirm"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('moves the expense once every person is accounted for', async () => {
+    const { wrapper, post } = await mountMove()
+
+    await wrapper.find('[data-testid="move-open"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-testid="move-target"]').setValue(otherGroupId)
+    await settle()
+    await wrapper.find(`[data-testid="move-mapping-${bob}"]`).setValue(carol)
+    await settle()
+
+    await wrapper.find('[data-testid="move-confirm"]').trigger('click')
+    await settle()
+
+    expect(post).toHaveBeenCalledWith('/expenses/expense-1/transfer', {
+      targetGroupId: otherGroupId,
+      memberMapping: { [bob]: carol },
+    })
+
+    // To the expense where it now lives: the link it came from no longer finds it.
+    await waitFor(() =>
+      replace.mock.calls.some(
+        ([to]) =>
+          to.name === 'expense' &&
+          to.params.groupId === otherGroupId &&
+          to.params.expenseId === 'expense-1',
+      ),
+    )
+  })
+
+  it('says what went wrong rather than looking like it worked', async () => {
+    const { wrapper, expenses } = await mountMove()
+    vi.spyOn(expenses, 'transfer').mockRejectedValue(
+      new Error('Both groups must share a base currency.'),
+    )
+
+    await wrapper.find('[data-testid="move-open"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-testid="move-target"]').setValue(otherGroupId)
+    await settle()
+    await wrapper.find(`[data-testid="move-mapping-${bob}"]`).setValue(carol)
+    await settle()
+    await wrapper.find('[data-testid="move-confirm"]').trigger('click')
+    await settle()
+
+    expect(wrapper.text()).toContain('Both groups must share a base currency.')
+    expect(replace).not.toHaveBeenCalled()
   })
 })
