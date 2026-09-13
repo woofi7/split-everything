@@ -46,7 +46,10 @@ public sealed class ApiTestFactory(string connectionString) : WebApplicationFact
         ["Push__VapidPublicKey"] = "BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw",
         // Deliberately on, to prove the startup guard forces it off outside
         // Development. The factory runs as "Testing".
-        ["Auth__AllowDevelopmentSignIn"] = "true"
+        ["Auth__AllowDevelopmentSignIn"] = "true",
+        // Somebody runs this server, so the administration endpoints have a caller
+        // to admit and everybody else has one to be refused against.
+        ["Admin__Emails__0"] = "admin@example.com"
     };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
