@@ -3,10 +3,12 @@ import { intlLocale, t } from '@/i18n'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
+import AddKindSwitch from '@/components/expenses/AddKindSwitch.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
+import { notify, report } from '@/ui/toasts'
 import { calculateSplit, splitValuesFor, type SplitType } from '@/domain/splitting'
 import { formatMoney, parseAmountInput, roundMoney } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
@@ -87,7 +89,6 @@ const paidByMemberId = ref('')
 const payers = ref<Array<{ memberId: string; amount: string }>>([])
 const participantIds = ref<string[]>([])
 const splitValues = ref<Record<string, number>>({})
-const error = ref<string | null>(null)
 const isSaving = ref(false)
 const makeDefault = ref(false)
 
@@ -121,7 +122,7 @@ onMounted(async () => {
 function prefillFromExpense(): void {
   const existing = expenses.expenses.find((candidate) => candidate.id === editingId.value)
   if (!existing) {
-    error.value = t('That expense is not on this device.')
+    notify(t('That expense is not on this device.'), 'error')
     return
   }
 
@@ -338,7 +339,6 @@ const moveTargetId = ref('')
 const moveMapping = ref<Record<string, string>>({})
 const isMoving = ref(false)
 /** Kept apart from the form's error, so a refusal here is not reported up there. */
-const moveError = ref<string | null>(null)
 
 const editing = computed(() =>
   expenses.expenses.find((candidate) => candidate.id === editingId.value),
@@ -435,21 +435,19 @@ const isMoveReady = computed(
 async function chooseMoveTarget(nextGroupId: string): Promise<void> {
   moveTargetId.value = nextGroupId
   moveMapping.value = {}
-  moveError.value = null
 
   if (!nextGroupId) return
 
   await groups.refresh(nextGroupId)
 
   if (targetMembers.value.length === 0) {
-    moveError.value = t('Could not read who is in that group. Moving an expense needs a connection.')
+    notify(t('Could not read who is in that group. Moving an expense needs a connection.'), 'error')
   }
 }
 
 async function move(): Promise<void> {
   if (!isMoveReady.value || !editingId.value) return
 
-  moveError.value = null
   isMoving.value = true
 
   try {
@@ -462,7 +460,7 @@ async function move(): Promise<void> {
       params: { groupId: moveTargetId.value, expenseId: editingId.value },
     })
   } catch (caught) {
-    moveError.value = caught instanceof Error ? caught.message : t('Could not move the expense.')
+    report(caught, t('Could not move the expense.'))
   } finally {
     isMoving.value = false
   }
@@ -525,10 +523,9 @@ function toggleParticipant(memberId: string): void {
 }
 
 async function save(): Promise<void> {
-  error.value = null
 
   if (!group.value) {
-    error.value = t('Pick a group first.')
+    notify(t('Pick a group first.'), 'error')
     return
   }
 
@@ -544,7 +541,7 @@ async function save(): Promise<void> {
     }))
 
   if (isShared.value && contributions.length < 2) {
-    error.value = t('Say what each person paid, or go back to a single payer.')
+    notify(t('Say what each person paid, or go back to a single payer.'), 'error')
     isSaving.value = false
     return
   }
@@ -572,7 +569,7 @@ async function save(): Promise<void> {
       )
     } catch {
       // Worth saying, but not worth refusing to save the expense over.
-      error.value = t('Saved, but the group default could not be changed.')
+      notify(t('Saved, but the group default could not be changed.'), 'error')
     }
   }
 
@@ -605,7 +602,7 @@ async function save(): Promise<void> {
       })
     }
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not save the expense.')
+    report(caught, t('Could not save the expense.'))
   } finally {
     isSaving.value = false
   }
@@ -618,6 +615,12 @@ async function save(): Promise<void> {
     :back-to="backTarget"
     :back-label="isEditing ? 'Expense' : 'Dashboard'"
   >
+    <!--
+      Which of the two things the plus button records. Only when adding: editing
+      an expense is not a choice between two kinds of thing.
+    -->
+    <AddKindSwitch v-if="!isEditing" current="expense" />
+
     <!--
       Built to fit one screen without scrolling.
       
@@ -901,7 +904,6 @@ async function save(): Promise<void> {
       <p v-if="previewProblem" class="text-xs text-[var(--text-muted)]" aria-live="polite">
         {{ previewProblem }}
       </p>
-      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
 
       <p class="text-center text-[11px] text-[var(--text-muted)]">{{ t('Saved on this device straight away, and synced when you are back online.') }}
       </p>
@@ -994,7 +996,6 @@ async function save(): Promise<void> {
           </label>
         </div>
 
-        <p v-if="moveError" class="text-sm text-owing" role="alert">{{ moveError }}</p>
 
         <div class="flex gap-2">
           <button

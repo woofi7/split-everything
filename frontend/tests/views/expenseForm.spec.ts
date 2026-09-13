@@ -8,6 +8,7 @@ import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { SyncEngine } from '@/offline/syncEngine'
 import { today } from '@/domain/lastExpenseDate'
+import { clearToasts, toasts } from '@/ui/toasts'
 import { textOf, waitFor } from '../support/viewHarness'
 
 const groupId = 'group-1'
@@ -85,6 +86,7 @@ function fakeSyncApi() {
 
 async function mountView() {
   setActivePinia(createPinia())
+  clearToasts()
   await resetDatabase()
   await db.groups.put(group)
 
@@ -1337,7 +1339,10 @@ describe('ExpenseFormView moving an expense to another group', () => {
     await wrapper.find('[data-testid="move-confirm"]').trigger('click')
     await settle()
 
-    expect(wrapper.text()).toContain('Both groups must share a base currency.')
+    // Over the top of the screen: the move panel is at the foot of a long form,
+    // and a failure announced down there is a failure nobody reads.
+    expect(toasts.value.map((toast) => toast.text).join(' '))
+      .toContain('Both groups must share a base currency.')
     expect(replace).not.toHaveBeenCalled()
   })
 })
