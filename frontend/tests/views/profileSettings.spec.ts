@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
-import ProfileView from '@/views/ProfileView.vue'
+import ProfileSettingsView from '@/views/ProfileSettingsView.vue'
 import { watchForInstallPrompt } from '@/native/install'
 import { fakeApi, mountView, settle, testUser, textOf } from '../support/viewHarness'
 
@@ -12,9 +12,9 @@ vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
 }))
 
-describe('ProfileView', () => {
+describe('the profile settings', () => {
   it('shows the signed-in address', async () => {
-    const { wrapper } = await mountView(ProfileView)
+    const { wrapper } = await mountView(ProfileSettingsView)
 
     expect(textOf(wrapper)).toContain('alice@example.com')
   })
@@ -28,7 +28,7 @@ describe('ProfileView', () => {
    */
   describe('which build is running', () => {
     it('shows the version at the foot of the page', async () => {
-      const { wrapper } = await mountView(ProfileView, {
+      const { wrapper } = await mountView(ProfileSettingsView, {
         api: fakeApi({ '/health': () => ({ status: 'ok', version: 'dev' }) }),
       })
       await settle()
@@ -38,7 +38,7 @@ describe('ProfileView', () => {
     })
 
     it('says both when the app and the server disagree', async () => {
-      const { wrapper } = await mountView(ProfileView, {
+      const { wrapper } = await mountView(ProfileSettingsView, {
         api: fakeApi({ '/health': () => ({ status: 'ok', version: '0.1.9' }) }),
       })
       await settle()
@@ -52,7 +52,7 @@ describe('ProfileView', () => {
       const api = fakeApi()
       api.get.mockRejectedValue(new Error('offline'))
 
-      const { wrapper } = await mountView(ProfileView, { api })
+      const { wrapper } = await mountView(ProfileSettingsView, { api })
       await settle()
 
       // Offline is not a version mismatch, and a dash where a number belongs
@@ -63,13 +63,13 @@ describe('ProfileView', () => {
 
   describe('saving the profile', () => {
     it('offers nothing while nothing has changed', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
 
       expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
     })
 
     it('appears on the first change', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
 
       await wrapper.find('input[type="text"]').setValue('Alice A')
       await settle(1)
@@ -80,7 +80,7 @@ describe('ProfileView', () => {
 
     it('saves the name and the currency together', async () => {
       const api = fakeApi({ '/auth/me': () => testUser })
-      const { wrapper } = await mountView(ProfileView, { api })
+      const { wrapper } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('input[type="text"]').setValue('Alice A')
       await wrapper.find('select').setValue('EUR')
@@ -97,7 +97,7 @@ describe('ProfileView', () => {
 
     it('puts everything back when cancelled', async () => {
       const api = fakeApi()
-      const { wrapper } = await mountView(ProfileView, { api })
+      const { wrapper } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('input[type="text"]').setValue('Alice A')
       await wrapper.find('select').setValue('EUR')
@@ -112,7 +112,7 @@ describe('ProfileView', () => {
     })
 
     it('leaves the theme alone, which is applied as it is switched', async () => {
-      const { wrapper, auth } = await mountView(ProfileView)
+      const { wrapper, auth } = await mountView(ProfileSettingsView)
 
       await wrapper.find('[data-testid="theme-toggle"]').trigger('click')
       await settle()
@@ -124,7 +124,7 @@ describe('ProfileView', () => {
   })
 
   it('prefills the current name and currency', async () => {
-    const { wrapper } = await mountView(ProfileView)
+    const { wrapper } = await mountView(ProfileSettingsView)
 
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Alice')
     expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('CAD')
@@ -132,7 +132,7 @@ describe('ProfileView', () => {
 
   it('saves a profile change', async () => {
     const api = fakeApi({ '/auth/me': () => ({ ...testUser, displayName: 'Alice A' }) })
-    const { wrapper } = await mountView(ProfileView, { api })
+    const { wrapper } = await mountView(ProfileSettingsView, { api })
 
     await wrapper.find('input[type="text"]').setValue('Alice A')
     await wrapper.find('form').trigger('submit')
@@ -149,7 +149,7 @@ describe('ProfileView', () => {
     const api = fakeApi()
     api.patch.mockRejectedValue(new Error('Default currency must be a three-letter currency code.'))
 
-    const { wrapper } = await mountView(ProfileView, { api })
+    const { wrapper } = await mountView(ProfileSettingsView, { api })
     await wrapper.find('form').trigger('submit')
     await settle()
 
@@ -165,13 +165,13 @@ describe('ProfileView', () => {
    */
   describe('the app colour', () => {
     it('offers the eight themes', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
 
       expect(wrapper.findAll('[data-testid^="accent-"]')).toHaveLength(8)
     })
 
     it('starts on the default when nobody has said', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
 
       const pressed = wrapper
         .findAll('[data-testid^="accent-"]')
@@ -183,7 +183,7 @@ describe('ProfileView', () => {
 
     it('wears the one that is tapped straight away', async () => {
       const api = fakeApi({ '/auth/me': () => ({ ...testUser, themeName: 'teal' }) })
-      const { wrapper, auth } = await mountView(ProfileView, { api })
+      const { wrapper, auth } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('[data-testid="accent-teal"]').trigger('click')
       await settle()
@@ -196,7 +196,7 @@ describe('ProfileView', () => {
 
     it('tells the account, so it follows onto another device', async () => {
       const api = fakeApi({ '/auth/me': () => ({ ...testUser, themeName: 'rose' }) })
-      const { wrapper } = await mountView(ProfileView, { api })
+      const { wrapper } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('[data-testid="accent-rose"]').trigger('click')
       await settle()
@@ -210,7 +210,7 @@ describe('ProfileView', () => {
     it('keeps the colour on when the server cannot be told', async () => {
       const api = fakeApi()
       api.patch.mockRejectedValue(new Error('offline'))
-      const { wrapper, auth } = await mountView(ProfileView, { api })
+      const { wrapper, auth } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('[data-testid="accent-amber"]').trigger('click')
       await settle()
@@ -222,7 +222,7 @@ describe('ProfileView', () => {
     })
 
     it('shows the one the account already wears', async () => {
-      const { wrapper, auth } = await mountView(ProfileView)
+      const { wrapper, auth } = await mountView(ProfileSettingsView)
       auth.user = { ...testUser, themeName: 'violet' } as never
       await settle(1)
 
@@ -231,7 +231,7 @@ describe('ProfileView', () => {
     })
 
     it('has no colour of your own on it any more', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
 
       // A member's colour belongs to the group, and is edited in its settings.
       expect(wrapper.findAll('[data-testid^="colour-"]')).toHaveLength(0)
@@ -247,14 +247,14 @@ describe('ProfileView', () => {
    */
   describe('the language', () => {
     it('offers English and French, each named in itself', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
 
       expect(wrapper.find('[data-testid="language-en"]').text()).toBe('English')
       expect(wrapper.find('[data-testid="language-fr"]').text()).toBe('Francais')
     })
 
     it('starts on English', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
 
       expect(wrapper.find('[data-testid="language-en"]').attributes('aria-pressed')).toBe('true')
       expect(wrapper.find('[data-testid="language-fr"]').attributes('aria-pressed')).toBe('false')
@@ -262,7 +262,7 @@ describe('ProfileView', () => {
 
     it('reads in French from the tap, and tells the account', async () => {
       const api = fakeApi({ '/auth/me': () => ({ ...testUser, locale: 'fr' }) })
-      const { wrapper, auth } = await mountView(ProfileView, { api })
+      const { wrapper, auth } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('[data-testid="language-fr"]').trigger('click')
       await settle()
@@ -279,7 +279,7 @@ describe('ProfileView', () => {
     it('keeps the language when the account cannot be told', async () => {
       const api = fakeApi()
       api.patch.mockRejectedValue(new Error('offline'))
-      const { wrapper, auth } = await mountView(ProfileView, { api })
+      const { wrapper, auth } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('[data-testid="language-fr"]').trigger('click')
       await settle()
@@ -288,7 +288,7 @@ describe('ProfileView', () => {
     })
 
     it('shows the language the account already reads in', async () => {
-      const { wrapper, auth } = await mountView(ProfileView)
+      const { wrapper, auth } = await mountView(ProfileSettingsView)
       auth.user = { ...testUser, locale: 'fr' } as never
       await settle(1)
 
@@ -297,7 +297,7 @@ describe('ProfileView', () => {
   })
 
   it('starts in dark mode, as the spec asks', async () => {
-    const { wrapper } = await mountView(ProfileView)
+    const { wrapper } = await mountView(ProfileSettingsView)
 
     const toggle = wrapper.find('[data-testid="theme-toggle"]')
     expect(toggle.attributes('aria-pressed')).toBe('false')
@@ -305,7 +305,7 @@ describe('ProfileView', () => {
   })
 
   it('switches to light mode', async () => {
-    const { wrapper, auth } = await mountView(ProfileView)
+    const { wrapper, auth } = await mountView(ProfileSettingsView)
 
     await wrapper.find('[data-testid="theme-toggle"]').trigger('click')
     await settle()
@@ -325,7 +325,7 @@ describe('ProfileView', () => {
     })
     vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:x', revokeObjectURL: vi.fn() })
 
-    const { wrapper } = await mountView(ProfileView, { api })
+    const { wrapper } = await mountView(ProfileSettingsView, { api })
     const button = wrapper.findAll('button').find((b) => b.text().includes('Download all my data'))
     await button!.trigger('click')
     await settle()
@@ -340,7 +340,7 @@ describe('ProfileView', () => {
     const api = fakeApi()
     api.blob.mockRejectedValue(new Error('The server returned 500.'))
 
-    const { wrapper } = await mountView(ProfileView, { api })
+    const { wrapper } = await mountView(ProfileSettingsView, { api })
     const button = wrapper.findAll('button').find((b) => b.text().includes('Download all my data'))
     await button!.trigger('click')
     await settle()
@@ -349,7 +349,7 @@ describe('ProfileView', () => {
   })
 
   it('disconnects the device and returns to sign-in', async () => {
-    const { wrapper, auth } = await mountView(ProfileView)
+    const { wrapper, auth } = await mountView(ProfileSettingsView)
 
     await wrapper.find('[data-testid="disconnect"]').trigger('click')
     await settle()
@@ -359,7 +359,7 @@ describe('ProfileView', () => {
   })
 
   it('stops the device reconnecting on its own', async () => {
-    const { wrapper, auth } = await mountView(ProfileView, {
+    const { wrapper, auth } = await mountView(ProfileSettingsView, {
       rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
     })
 
@@ -373,7 +373,7 @@ describe('ProfileView', () => {
   })
 
   it('shows its actions as buttons rather than lines of text', async () => {
-    const { wrapper } = await mountView(ProfileView)
+    const { wrapper } = await mountView(ProfileSettingsView)
 
     // On a dark surface a bordered button with no fill was invisible, which is why
     // signing out looked like it did not exist.
@@ -383,7 +383,7 @@ describe('ProfileView', () => {
   })
 
   it('asks for confirmation before deleting the account', async () => {
-    const { wrapper, api } = await mountView(ProfileView)
+    const { wrapper, api } = await mountView(ProfileSettingsView)
 
     const button = wrapper.findAll('button').find((b) => b.text().includes('Delete my account'))
     await button!.trigger('click')
@@ -395,7 +395,7 @@ describe('ProfileView', () => {
   })
 
   it('explains what account deletion does to other people balances', async () => {
-    const { wrapper } = await mountView(ProfileView)
+    const { wrapper } = await mountView(ProfileSettingsView)
 
     const button = wrapper.findAll('button').find((b) => b.text().includes('Delete my account'))
     await button!.trigger('click')
@@ -405,7 +405,7 @@ describe('ProfileView', () => {
   })
 
   it('can back out of deleting the account', async () => {
-    const { wrapper, api } = await mountView(ProfileView)
+    const { wrapper, api } = await mountView(ProfileSettingsView)
 
     await wrapper.findAll('button').find((b) => b.text().includes('Delete my account'))!.trigger('click')
     await settle(1)
@@ -417,7 +417,7 @@ describe('ProfileView', () => {
   })
 
   it('deletes the account once confirmed', async () => {
-    const { wrapper, api, auth } = await mountView(ProfileView)
+    const { wrapper, api, auth } = await mountView(ProfileSettingsView)
 
     await wrapper.findAll('button').find((b) => b.text().includes('Delete my account'))!.trigger('click')
     await settle(1)
@@ -430,7 +430,7 @@ describe('ProfileView', () => {
   })
 
   it('links to the importer and the conflict list', async () => {
-    const { wrapper } = await mountView(ProfileView)
+    const { wrapper } = await mountView(ProfileSettingsView)
 
     const targets = wrapper
       .findAllComponents(RouterLinkStub)
@@ -502,7 +502,7 @@ describe('ProfileView', () => {
       const restore = asSupported()
 
       try {
-        const { wrapper } = await mountView(ProfileView)
+        const { wrapper } = await mountView(ProfileSettingsView)
         await settle()
 
         const toggle = wrapper.find('[data-testid="notifications-toggle"]')
@@ -521,7 +521,7 @@ describe('ProfileView', () => {
       const restore = asSupported('granted', true)
 
       try {
-        const { wrapper } = await mountView(ProfileView)
+        const { wrapper } = await mountView(ProfileSettingsView)
         await settle()
 
         expect(wrapper.find('[data-testid="notifications-toggle"]').attributes('aria-pressed'))
@@ -535,7 +535,7 @@ describe('ProfileView', () => {
       const restore = asSupported('denied')
 
       try {
-        const { wrapper } = await mountView(ProfileView)
+        const { wrapper } = await mountView(ProfileSettingsView)
         await settle()
 
         // Nothing this app does can change that, so the note has to point at the
@@ -552,7 +552,7 @@ describe('ProfileView', () => {
     it('explains a plain address rather than offering a switch that cannot work', async () => {
       // The environment here is the same shape as a phone reading this over http on
       // the local network: no service worker, and not a secure context.
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
       await settle()
 
       expect(wrapper.find('[data-testid="notifications-toggle"]').exists()).toBe(false)
@@ -565,7 +565,7 @@ describe('ProfileView', () => {
       Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
 
       try {
-        const { wrapper } = await mountView(ProfileView)
+        const { wrapper } = await mountView(ProfileSettingsView)
         await settle()
 
         expect(wrapper.find('[data-testid="notifications-note"]').text()).toContain(
@@ -579,7 +579,7 @@ describe('ProfileView', () => {
 
   describe('installing it', () => {
     it('says what installing gets you, before the browser has offered', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
       await settle()
 
       expect(textOf(wrapper)).toContain('Install on this device')
@@ -588,7 +588,7 @@ describe('ProfileView', () => {
     })
 
     it('offers the button once the browser says it can', async () => {
-      const { wrapper } = await mountView(ProfileView)
+      const { wrapper } = await mountView(ProfileSettingsView)
       const event = new Event('beforeinstallprompt')
       Object.assign(event, { prompt: async () => {}, userChoice: Promise.resolve({ outcome: 'accepted' }) })
 

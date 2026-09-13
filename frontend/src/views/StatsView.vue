@@ -7,6 +7,7 @@ import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
+import AcrossGroups from '@/components/stats/AcrossGroups.vue'
 import { useApi } from '@/api/provider'
 import { looksOffline } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -200,6 +201,12 @@ const colours = computed(() =>
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
+/** What the figures above the rule are about: one group, or the lot. */
+const scopeName = computed(() => {
+  if (!groupId.value) return t('All groups')
+  return groups.groups.find((group) => group.id === groupId.value)?.name ?? t('All groups')
+})
+
 /**
  * Each person's share of their own bucket, so the segments fill the bar whatever
  * the bar's height. A bucket the server sent without a breakdown falls back to one
@@ -382,6 +389,15 @@ async function refresh(): Promise<void> {
     </div>
 
     <template v-if="dashboard">
+      <!--
+        Named, because there are two kinds of figure on this screen now: this half
+        is the group, and the half under the rule is the person reading it. Without
+        a name on each, two sets of "You paid" a screen apart read as a mistake.
+      -->
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">
+        {{ scopeName }}
+      </h2>
+
       <section class="surface-card mb-4 grid grid-cols-3 gap-3 p-4 text-center">
         <div>
           <p class="text-xs text-[var(--text-muted)]">{{ t('Total') }}</p>
@@ -546,5 +562,13 @@ async function refresh(): Promise<void> {
     <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
       {{ t('Nothing to add up yet. Add an expense and this fills in.') }}
     </p>
+
+    <!--
+      Under the group's own figures, because it is the other question: everything
+      above is about one group, and this is about the person reading it, added up
+      across every group they are in. Nothing answered that before - three groups
+      meant three tabs and the arithmetic in your head.
+    -->
+    <AcrossGroups />
   </AppShell>
 </template>
