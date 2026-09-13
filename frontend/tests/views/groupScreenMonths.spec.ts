@@ -98,6 +98,51 @@ describe('the month the group screen opens on', () => {
     expect(textOf(wrapper)).toContain('Groceries this month')
   })
 
+  /**
+   * The list renders one window across every month that is open, so a month opened
+   * underneath another one used to land entirely behind the "show more". Tapping a
+   * heading and finding nothing under it looks exactly like the expenses not being
+   * there, which is how an evening of entry looked lost.
+   */
+  it('shows a month when it is opened, however far down the list it starts', async () => {
+    const olderMonthExpenses = Array.from({ length: 25 }, (_, index) =>
+      testExpense({
+        id: `older-${index}`,
+        description: `Older ${index}`,
+        spentAt: iso(new Date(thisMonth.getFullYear(), thisMonth.getMonth() - 5, 20 - index, 12)),
+      }),
+    )
+
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      groups: [testGroup()],
+      expenses: [recent, ...olderMonthExpenses],
+    })
+    await settle()
+
+    const headings = wrapper.findAll('[data-testid="month-toggle"]')
+    await headings[headings.length - 1].trigger('click')
+    await settle()
+
+    // The last of twenty-five, which is well past a twenty-row window.
+    expect(textOf(wrapper)).toContain('Older 24')
+  })
+
+  it('brings the expense just added into view and marks it', async () => {
+    routeQuery = { month: olderMonth(), added: 'expense-older' }
+
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      groups: [testGroup()],
+      expenses: [recent, older],
+    })
+    await settle()
+
+    const card = wrapper.find('[data-expense-id="expense-older"]')
+    expect(card.exists()).toBe(true)
+    expect(card.classes()).toContain('ring-2')
+  })
+
   it('ignores anything in that parameter that is not a month', async () => {
     routeQuery = { month: 'august' }
 

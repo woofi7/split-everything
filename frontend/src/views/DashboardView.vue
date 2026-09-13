@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t, intlLocale } from '@/i18n'
-import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
@@ -196,7 +196,81 @@ function toggleMonth(key: string): void {
   else open.add(key)
 
   openMonths.value = open
+
+  // Opening a month shows that month. The window is one count across every month
+  // that is open, so a month opened underneath another one landed entirely behind
+  // the "show more": August had thirty-two expenses and the ten oldest, which were
+  // the ten somebody had just typed in, were on the next page. Tapping a heading
+  // and finding nothing under it is indistinguishable from the expenses not being
+  // there, and that is how a whole evening's entry looked lost.
+  if (openMonths.value.has(key)) revealThrough(key)
 }
+
+/** Grows the window until every open month down to this one is rendered in full. */
+function revealThrough(key: string): void {
+  let needed = 0
+
+  for (const month of expenseMonths.value) {
+    if (!isMonthOpen(month.key)) continue
+    needed += month.expenses.length
+    if (month.key === key) break
+  }
+
+  visibleCount.value = Math.max(visibleCount.value, needed)
+}
+
+/**
+ * The expense somebody has just added, named in the URL by the form that saved it.
+ *
+ * Opening its month is not enough on its own. A stack of old receipts lands at the
+ * bottom of an old month, behind a page of expenses nobody scrolled, so the app
+ * would open August and still show no sign of the thing that was just typed. This
+ * grows the window until it is rendered, brings it into view, and marks it for a
+ * few seconds so the eye has somewhere to land.
+ */
+const addedExpenseId = computed(() => {
+  const asked = route.query.added
+  return typeof asked === 'string' && asked ? asked : null
+})
+
+const justAdded = ref<string | null>(null)
+let clearHighlight: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  [addedExpenseId, expenseMonths],
+  async () => {
+    const id = addedExpenseId.value
+    if (!id) return
+
+    const month = expenseMonths.value.find((entry) =>
+      entry.expenses.some((expense) => expense.id === id),
+    )
+    if (!month) return
+
+    revealThrough(month.key)
+    justAdded.value = id
+
+    await nextTick()
+
+    // Asked for rather than assumed: this runs under a DOM that has no scrolling
+    // of its own in the tests, and a missing method here would throw inside a
+    // watcher, where nothing would report it.
+    const row = document.querySelector(`[data-expense-id="${id}"]`)
+    if (row instanceof HTMLElement && typeof row.scrollIntoView === 'function') {
+      row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+
+    if (clearHighlight) clearTimeout(clearHighlight)
+    clearHighlight = setTimeout(() => {
+      justAdded.value = null
+    }, 4000)
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  if (clearHighlight) clearTimeout(clearHighlight)
+})
 
 /** The slice on screen, and whether there is more behind it. */
 const openExpenses = computed(() =>
@@ -610,8 +684,13 @@ async function refresh(): Promise<void> {
                   <RouterLink
                     :to="{ name: 'expense', params: { groupId: group.id, expenseId: expense.id } }"
                     data-testid="expense-card"
+                    :data-expense-id="expense.id"
                     class="tap-target flex items-center justify-between gap-3 rounded-xl border border-l-4 p-3"
-                    :style="cardStyle(expense.paidByMemberId)"
+                    :class="justAdded === expense.id ? 'ring-2' : ''"
+                    :style="{
+                      ...cardStyle(expense.paidByMemberId),
+                      ...(justAdded === expense.id ? { '--tw-ring-color': 'var(--accent-text)' } : {}),
+                    }"
                   >
                     <span class="min-w-0">
                       <span class="flex items-center gap-2">

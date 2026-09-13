@@ -217,8 +217,12 @@ describe('ExpenseFormView', () => {
       expect(replace).toHaveBeenCalledWith({
         name: 'group',
         params: { groupId },
-        // The month it went into, so the list opens where the expense is.
-        query: { month: expect.stringMatching(/^\d{4}-\d{2}-01$/) },
+        // The month it went into and which expense it was, so the list opens
+        // where it is and says which row is the new one.
+        query: {
+          month: expect.stringMatching(/^\d{4}-\d{2}-01$/),
+          added: expect.any(String),
+        },
       }),
     )
   })
@@ -1122,7 +1126,7 @@ describe('ExpenseFormView remembering the date', () => {
     // Without the month, an expense dated outside the current one is filed
     // correctly and invisibly, which reads as "it did not save".
     await waitFor(() =>
-      replace.mock.calls.some(([to]) => to.query?.month === '2026-03-01'),
+      replace.mock.calls.some(([to]) => to.query?.month === '2026-03-01' && to.query?.added),
     )
   })
 })
