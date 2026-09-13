@@ -5,6 +5,7 @@ import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import { useApi } from '@/api/provider'
 import { useGroupsStore } from '@/stores/groups'
+import { notify, report } from '@/ui/toasts'
 import { useAuthStore } from '@/stores/auth'
 import type { AddableUser } from '@/api/types'
 
@@ -82,7 +83,6 @@ const file = ref<File | null>(null)
 const analysis = ref<Analysis | null>(null)
 const preview = ref<Preview | null>(null)
 const busy = ref<string | null>(null)
-const error = ref<string | null>(null)
 
 const target = ref<'new' | 'existing'>('new')
 const newGroupName = ref('')
@@ -202,7 +202,6 @@ function reset(): void {
   preview.value = null
   skipped.value = new Set()
   nameMapping.value = {}
-  error.value = null
 }
 
 async function onFile(event: Event): Promise<void> {
@@ -233,7 +232,7 @@ async function onFile(event: Event): Promise<void> {
       accounts.value = []
     }
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not read that export.')
+    report(caught, t('Could not read that export.'))
   } finally {
     busy.value = null
     // Cleared so choosing the same file again re-reads it.
@@ -270,11 +269,11 @@ function groupIdForRequest(): string | null {
 
 function validateTarget(): boolean {
   if (target.value === 'new' && !newGroupName.value.trim()) {
-    error.value = 'Name the group this import should create.'
+    notify(t('Name the group this import should create.'), 'error')
     return false
   }
   if (target.value === 'existing' && !existingGroupId.value) {
-    error.value = 'Choose the group to import into.'
+    notify(t('Choose the group to import into.'), 'error')
     return false
   }
   return true
@@ -283,7 +282,6 @@ function validateTarget(): boolean {
 async function loadPreview(): Promise<void> {
   if (!file.value || !analysis.value) return
 
-  error.value = null
   if (!validateTarget()) return
 
   busy.value = t('Reading the rows')
@@ -306,7 +304,7 @@ async function loadPreview(): Promise<void> {
       preview.value.rows.filter((row) => row.isDuplicate).map((row) => row.rowNumber),
     )
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not read those rows.')
+    report(caught, t('Could not read those rows.'))
   } finally {
     busy.value = null
   }
@@ -322,7 +320,6 @@ function toggleRow(rowNumber: number): void {
 async function commit(): Promise<void> {
   if (!file.value || !analysis.value) return
 
-  error.value = null
   if (!validateTarget()) return
 
   busy.value = t('Importing {count} rows', { count: toImport.value })
@@ -349,7 +346,7 @@ async function commit(): Promise<void> {
     emit('imported', result)
     reset()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not import that export.')
+    report(caught, t('Could not import that export.'))
   } finally {
     busy.value = null
   }
@@ -363,7 +360,6 @@ const dateOf = (value: string | null) =>
   <section class="flex flex-col gap-4">
     <!-- Outside the steps: a file that cannot be read fails before there is a
          step two to report it in. -->
-    <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
     <!--
       What it is doing, with something moving beside it. An import of four hundred
       rows takes seconds, and a line of static text through those seconds reads as

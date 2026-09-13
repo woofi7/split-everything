@@ -4,6 +4,7 @@ import { onMounted, ref, useTemplateRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
+import { notify, report } from '@/ui/toasts'
 import { googleClientId } from '@/api/config'
 import { loadGoogleIdentity } from '@/native/googleIdentity'
 import { useApi } from '@/api/provider'
@@ -133,7 +134,7 @@ async function signInAsDeveloper(): Promise<void> {
     await auth.signInAsDeveloper(devEmail.value, devName.value)
     await router.replace(redirectTarget())
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not sign you in.')
+    report(caught, t('Could not sign you in.'))
   } finally {
     isSigningIn.value = false
   }
@@ -141,7 +142,7 @@ async function signInAsDeveloper(): Promise<void> {
 
 async function handleCredential(credential?: string): Promise<void> {
   if (!credential) {
-    error.value = t('Google did not return a credential. Try again.')
+    notify(t('Google did not return a credential. Try again.'), 'error')
     return
   }
 
@@ -152,7 +153,7 @@ async function handleCredential(credential?: string): Promise<void> {
     await auth.signInWithGoogle(credential)
     await router.replace(redirectTarget())
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not sign you in.')
+    report(caught, t('Could not sign you in.'))
   } finally {
     isSigningIn.value = false
   }

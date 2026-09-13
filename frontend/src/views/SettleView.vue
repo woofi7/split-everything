@@ -7,6 +7,7 @@ import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore, type CrossGroupBalance } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
+import { notify, report } from '@/ui/toasts'
 import { formatMoney, parseAmountInput } from '@/domain/money'
 
 const route = useRoute()
@@ -20,7 +21,6 @@ const fromMemberId = ref(String(route.query.from ?? ''))
 const toMemberId = ref(String(route.query.to ?? ''))
 const amountInput = ref(String(route.query.amount ?? ''))
 const note = ref('')
-const error = ref<string | null>(null)
 const isSaving = ref(false)
 
 onMounted(async () => {
@@ -51,8 +51,6 @@ const memberName = (memberId: string) =>
  */
 const crossGroup = ref<CrossGroupBalance | null>(null)
 const isOffsetting = ref(false)
-const offsetError = ref<string | null>(null)
-const offsetMessage = ref<string | null>(null)
 
 /** The other side of this settlement, when that is a person with an account. */
 const otherUserId = computed(() => {
@@ -88,19 +86,21 @@ const offsetTotal = computed(() =>
 async function offsetAcrossGroups(): Promise<void> {
   if (!otherUserId.value) return
 
-  offsetError.value = null
   isOffsetting.value = true
 
   try {
     const result = await expenses.offsetAcrossGroups(otherUserId.value)
     const left = result.remaining.find((entry) => entry.net !== 0)
 
-    offsetMessage.value = left?.groupName
-      ? t('Cancelled. {amount} is left in {group}.', {
-          amount: formatMoney(Math.abs(left.net), left.currency),
-          group: left.groupName,
-        })
-      : t('Cancelled. You are square.')
+    notify(
+      left?.groupName
+        ? t('Cancelled. {amount} is left in {group}.', {
+            amount: formatMoney(Math.abs(left.net), left.currency),
+            group: left.groupName,
+          })
+        : t('Cancelled. You are square.'),
+      'done',
+    )
 
     await loadCrossGroup()
     await expenses.hydrate()
@@ -111,8 +111,7 @@ async function offsetAcrossGroups(): Promise<void> {
     // amount stayed on screen, and it was settled again six seconds later.
     followThePlan()
   } catch (caught) {
-    offsetError.value =
-      caught instanceof Error ? caught.message : t('Could not cancel those out.')
+    report(caught, t('Could not cancel those out.'))
   } finally {
     isOffsetting.value = false
   }
@@ -145,25 +144,19 @@ function usePlan(transfer: { fromMemberId: string; toMemberId: string; amount: n
 /** The last few, newest first: enough to spot one entered twice. */
 const recentSettlements = computed(() => expenses.settlementsForGroup(groupId.value).slice(0, 6))
 
-const unsettleError = ref<string | null>(null)
-
 const settledOn = (when: string) =>
   new Date(when).toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
 
 async function unsettle(settlementId: string): Promise<void> {
-  unsettleError.value = null
-
   try {
     await expenses.unsettle(settlementId)
     followThePlan()
   } catch (caught) {
-    unsettleError.value =
-      caught instanceof Error ? caught.message : t('Could not take that settlement back.')
+    report(caught, t('Could not take that settlement back.'))
   }
 }
 
 async function save(): Promise<void> {
-  error.value = null
   isSaving.value = true
 
   try {
@@ -178,7 +171,7 @@ async function save(): Promise<void> {
 
     await router.replace({ name: 'group', params: { groupId: groupId.value } })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not record the settlement.')
+    report(caught, t('Could not record the settlement.'))
   } finally {
     isSaving.value = false
   }
@@ -247,8 +240,6 @@ async function save(): Promise<void> {
         </li>
       </ul>
 
-      <p v-if="offsetMessage" data-testid="offset-done" class="mb-2 text-xs text-owed">{{ offsetMessage }}</p>
-      <p v-if="offsetError" class="mb-2 text-sm text-owing" role="alert">{{ offsetError }}</p>
 
       <button
         type="button"
@@ -305,7 +296,6 @@ async function save(): Promise<void> {
           </span>
         </li>
       </ul>
-      <p v-if="unsettleError" class="mt-2 text-sm text-owing" role="alert">{{ unsettleError }}</p>
     </section>
 
     <form class="flex flex-col gap-5" @submit.prevent="save">
@@ -359,7 +349,6 @@ async function save(): Promise<void> {
         />
       </label>
 
-      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
 
       <button
         type="submit"

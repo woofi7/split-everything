@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
+import { report } from '@/ui/toasts'
 import { useGroupsStore } from '@/stores/groups'
 import { useApi } from '@/api/provider'
 
@@ -78,7 +79,7 @@ async function redeem(): Promise<void> {
     await groups.loadAll()
     await router.replace({ name: 'group', params: { groupId: result.groupId } })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not join that group.')
+    report(caught, t('Could not join that group.'))
   } finally {
     isJoining.value = false
   }
@@ -119,9 +120,6 @@ async function redeem(): Promise<void> {
       <p v-else class="text-sm text-owing">{{ t('This invite is no longer valid. Ask for a new link.') }}
       </p>
 
-      <!-- Rendered here too: a join can fail after the preview loaded, and the
-           only other error slot below is unreachable once there is a preview. -->
-      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
     </div>
 
     <p v-else-if="error" class="py-8 text-center text-sm text-owing" role="alert">{{ error }}</p>

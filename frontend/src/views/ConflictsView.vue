@@ -6,6 +6,7 @@ import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import { db, type LocalConflict, type OutboxOperation } from '@/offline/db'
 import { useApi } from '@/api/provider'
 import { useExpensesStore } from '@/stores/expenses'
+import { report } from '@/ui/toasts'
 import { checkForAppUpdate } from '@/native/appUpdate'
 
 const expenses = useExpensesStore()
@@ -14,7 +15,6 @@ const conflicts = ref<LocalConflict[]>([])
 const rejected = ref<OutboxOperation[]>([])
 /** Queued and not sent yet. What the "waiting to sync" count is actually counting. */
 const waiting = ref<OutboxOperation[]>([])
-const error = ref<string | null>(null)
 const isResetting = ref(false)
 const isSyncing = ref(false)
 const confirmingReset = ref(false)
@@ -52,13 +52,12 @@ async function refresh(): Promise<void> {
  * that went through should disappear from it.
  */
 async function syncNow(): Promise<void> {
-  error.value = null
   isSyncing.value = true
 
   try {
     await expenses.sync()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not send those changes.')
+    report(caught, t('Could not send those changes.'))
   } finally {
     isSyncing.value = false
     await load()
@@ -72,7 +71,6 @@ async function syncNow(): Promise<void> {
  * so when it is wrong there is nothing else to look at.
  */
 async function resetToServer(): Promise<void> {
-  error.value = null
   isResetting.value = true
 
   try {
@@ -80,7 +78,7 @@ async function resetToServer(): Promise<void> {
     confirmingReset.value = false
     await load()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not reload from the server.')
+    report(caught, t('Could not reload from the server.'))
   } finally {
     isResetting.value = false
   }
@@ -98,7 +96,6 @@ function field(json: string, name: string): string {
 }
 
 async function resolve(conflict: LocalConflict, resolution: 'KeepLocal' | 'KeepRemote'): Promise<void> {
-  error.value = null
 
   try {
     await useApi().post('/sync/conflicts/resolve', {
@@ -111,7 +108,7 @@ async function resolve(conflict: LocalConflict, resolution: 'KeepLocal' | 'KeepR
     await expenses.sync()
     await load()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not resolve that conflict.')
+    report(caught, t('Could not resolve that conflict.'))
   }
 }
 
@@ -294,6 +291,5 @@ async function discard(operationId: string): Promise<void> {
       </div>
     </section>
 
-    <p v-if="error" class="mt-4 text-sm text-owing" role="alert">{{ error }}</p>
   </AppShell>
 </template>

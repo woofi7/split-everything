@@ -6,6 +6,7 @@ import {
   GROUP_ID,
   fakeApi,
   mountView,
+  saidOnScreen,
   settle,
   waitFor,
   testGroup,
@@ -300,7 +301,7 @@ describe('ImportView', () => {
     const { wrapper } = await mountView(ImportView, { api: api() })
     await chooseFile(wrapper)
 
-    expect(wrapper.find('[role="alert"]').text()).toContain('That file is empty.')
+    expect(saidOnScreen().join(' ')).toContain('That file is empty.')
   })
 
   it('commits only the assigned rows and returns to the groups', async () => {

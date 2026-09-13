@@ -6,6 +6,7 @@ import { useExpensesStore } from '@/stores/expenses'
 import { useGroupsStore } from '@/stores/groups'
 import NavigationProgress from '@/components/ui/NavigationProgress.vue'
 import UpdatePrompt from '@/components/ui/UpdatePrompt.vue'
+import ToastStack from '@/components/ui/ToastStack.vue'
 import { isNavigating } from '@/router'
 import { accentVariables, findAccent } from '@/domain/themes'
 import { setLocale } from '@/i18n'
@@ -96,6 +97,9 @@ async function safeSync(): Promise<void> {
 <template>
   <NavigationProgress :active="isNavigating" />
   <RouterView />
+  <!-- What the app has to say, over whatever screen is up: a failure is news, and
+       news belongs where the reader is looking rather than at the foot of a form. -->
+  <ToastStack />
   <!-- A new build waits for a page to be closed, and on a phone that never
        happens. This asks instead. -->
   <UpdatePrompt />

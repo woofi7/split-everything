@@ -8,6 +8,7 @@ import IconPicker from '@/components/ui/IconPicker.vue'
 import PersonPicker from '@/components/groups/PersonPicker.vue'
 import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
+import { notify, report } from '@/ui/toasts'
 import type { AddableUser } from '@/api/types'
 
 const groups = useGroupsStore()
@@ -21,7 +22,6 @@ const isPickingIcon = ref(false)
 const icon = computed(() => resolveIcon(iconName.value))
 const addable = ref<AddableUser[]>([])
 const chosen = ref<AddableUser[]>([])
-const error = ref<string | null>(null)
 const isSaving = ref(false)
 
 const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
@@ -47,10 +47,9 @@ function removePerson(index: number): void {
 }
 
 async function save(): Promise<void> {
-  error.value = null
 
   if (!name.value.trim()) {
-    error.value = t('Give the group a name.')
+    notify(t('Give the group a name.'), 'error')
     return
   }
 
@@ -77,7 +76,7 @@ async function save(): Promise<void> {
 
     await router.replace({ name: 'group', params: { groupId: group.id } })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not create the group.')
+    report(caught, t('Could not create the group.'))
   } finally {
     isSaving.value = false
   }
@@ -166,7 +165,6 @@ async function save(): Promise<void> {
         </ul>
       </div>
 
-      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
 
       <button
         type="submit"

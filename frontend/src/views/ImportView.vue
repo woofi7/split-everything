@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
+import { notify, report } from '@/ui/toasts'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { useApi } from '@/api/provider'
@@ -31,8 +32,6 @@ const settleUpActive = ref(false)
 const statementActive = ref(false)
 const progress = ref<{ stage: string; ratio: number } | null>(null)
 const usedOcr = ref(false)
-const error = ref<string | null>(null)
-const message = ref<string | null>(null)
 const isCommitting = ref(false)
 
 
@@ -55,8 +54,6 @@ async function onFile(event: Event): Promise<void> {
   const file = input.files?.[0]
   if (!file) return
 
-  error.value = null
-  message.value = null
   statementActive.value = true
   progress.value = { stage: t('Reading the file'), ratio: 0 }
 
@@ -72,8 +69,10 @@ async function onFile(event: Event): Promise<void> {
     usedOcr.value = parsed.usedOcr
 
     if (parsed.rows.length === 0) {
-      error.value =
-        'No transactions could be read from that file. Bank layouts vary a lot; try the CSV export instead.'
+      notify(
+        t('No transactions could be read from that file. Bank layouts vary a lot; try the CSV export instead.'),
+        'error',
+      )
       // Nothing came of it, so the other way in is worth offering again.
       statementActive.value = false
       return
@@ -105,7 +104,7 @@ async function onFile(event: Event): Promise<void> {
 
     session.value = created
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not read that file.')
+    report(caught, t('Could not read that file.'))
     // A file that could not be read leaves nothing behind, so both ways in come
     // back rather than stranding someone on the one that just failed.
     statementActive.value = false
@@ -168,14 +167,13 @@ function setAction(rowNumber: number, action: RowAction): void {
 async function commit(): Promise<void> {
   if (!session.value) return
 
-  error.value = null
   isCommitting.value = true
 
   try {
     const payload = await session.value.buildCommitPayload()
 
     if (payload.rows.length === 0) {
-      error.value = t('Assign at least one transaction to a group first.')
+      notify(t('Assign at least one transaction to a group first.'), 'error')
       return
     }
 
@@ -188,10 +186,10 @@ async function commit(): Promise<void> {
     session.value = null
 
     await expenses.sync()
-    message.value = `Imported ${result.createdExpenses} transactions.`
+    notify(t('Imported {count} transactions.', { count: result.createdExpenses }), 'done')
     await router.replace({ name: 'dashboard' })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not import those transactions.')
+    report(caught, t('Could not import those transactions.'))
   } finally {
     isCommitting.value = false
   }
@@ -206,7 +204,7 @@ async function onImported(result: {
 
   const parts = [t('{count} expenses', { count: result.createdExpenses })]
   if (result.createdSettlements > 0) parts.push(`${result.createdSettlements} settlements`)
-  message.value = `Imported ${parts.join(' and ')}.`
+  notify(t('Imported {what}.', { what: parts.join(' and ') }), 'done')
 
   await router.replace({ name: 'group', params: { groupId: result.groupId } })
 }
@@ -257,8 +255,6 @@ async function cancel(): Promise<void> {
         </div>
       </div>
 
-      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
-      <p v-if="message" class="text-sm text-owed" role="status">{{ message }}</p>
     </section>
 
     <section v-else class="flex flex-col gap-4">
@@ -324,7 +320,6 @@ async function cancel(): Promise<void> {
         </li>
       </ul>
 
-      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
 
       <div class="flex gap-2">
         <button

@@ -14,6 +14,7 @@ import {
   type OutboxOperation,
 } from '@/offline/db'
 import { setApiClient } from '@/api/provider'
+import { clearToasts, toasts } from '@/ui/toasts'
 import { SyncEngine } from '@/offline/syncEngine'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
@@ -258,9 +259,11 @@ export function fakeSyncApi() {
  * The sync path refuses to talk to the server as nobody, so a store-level test
  * that drives a push or a pull needs a session for the same reason the app does.
  */
-export function signInForTests(): ReturnType<typeof useAuthStore> {
+export function signInForTests(
+  overrides: Partial<typeof testUser & { isAdmin: boolean }> = {},
+): ReturnType<typeof useAuthStore> {
   const auth = useAuthStore()
-  auth.user = testUser as never
+  auth.user = { ...testUser, ...overrides } as never
   auth.tokens = {
     accessToken: 'access-1',
     accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
@@ -281,6 +284,8 @@ export interface MountViewOptions {
   activity?: LocalActivity[]
   outbox?: OutboxOperation[]
   signedIn?: boolean
+  /** Who is signed in, for the few screens that ask something about them. */
+  user?: Partial<typeof testUser & { isAdmin: boolean }>
   /** Whose device this is, as restore() would have set it before any view mounts. */
   rememberedAccount?: { email: string; displayName: string; avatarUrl: string | null }
   online?: boolean
@@ -305,6 +310,8 @@ export async function mountView(
 ): Promise<MountedView> {
   setActivePinia(createPinia())
   localStorage.clear()
+  // Nothing announced on the last screen carries over to this one.
+  clearToasts()
   await resetDatabase()
 
   // Seeded before mount, because a view reads the local replica in onMounted.
@@ -320,7 +327,7 @@ export async function mountView(
   const api = options.api ?? fakeApi()
   setApiClient(api as never)
 
-  const auth = options.signedIn === false ? useAuthStore() : signInForTests()
+  const auth = options.signedIn === false ? useAuthStore() : signInForTests(options.user)
   if (options.rememberedAccount) auth.rememberedAccount = options.rememberedAccount
   auth.attachApi(api as never)
 
@@ -349,7 +356,20 @@ export async function mountView(
   return { wrapper, api, auth, groupsStore, expensesStore }
 }
 
-/** Reads the text of the whole view, collapsed for readable assertions. */
+/**
+ * What the screen says, collapsed for readable assertions.
+ *
+ * The view's own text plus anything in the toasts, because that is what a person
+ * in front of it reads: failures and confirmations are announced at the top of the
+ * screen now rather than in a line of text somewhere down the page, and a test that
+ * could only see the page would think the app had gone quiet.
+ */
 export function textOf(wrapper: VueWrapper): string {
-  return wrapper.text().replace(/\s+/g, ' ')
+  const said = toasts.value.map((toast) => toast.text).join(' ')
+  return `${wrapper.text()} ${said}`.replace(/\s+/g, ' ').trim()
+}
+
+/** Just the toasts, for asserting what was announced and what was not. */
+export function saidOnScreen(): string[] {
+  return toasts.value.map((toast) => toast.text)
 }

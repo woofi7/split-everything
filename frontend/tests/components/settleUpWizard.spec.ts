@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearToasts, toasts } from '@/ui/toasts'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount, flushPromises } from '@vue/test-utils'
 import SettleUpWizard from '@/components/import/SettleUpWizard.vue'
@@ -129,11 +130,20 @@ async function choose(wrapper: ReturnType<typeof mount>, named = file()) {
   await flushPromises()
 }
 
+/**
+ * What the screen says: the wizard's own text plus anything announced at the top
+ * of the screen, which is where failures go now.
+ */
+function said(wrapper: { text: () => string }): string {
+  return `${wrapper.text()} ${toasts.value.map((toast) => toast.text).join(' ')}`
+}
+
 describe('SettleUpWizard', () => {
   let client: ReturnType<typeof fakeClient>
 
   beforeEach(async () => {
     setActivePinia(createPinia())
+    clearToasts()
     await resetDatabase()
     client = fakeClient()
     setApiClient(client)
@@ -206,7 +216,7 @@ describe('SettleUpWizard', () => {
     await choose(wrapper)
 
     expect(client.upload).toHaveBeenCalledWith('/import/csv/analyze', { file: expect.any(File) })
-    expect(wrapper.text()).toContain('28')
+    expect(said(wrapper)).toContain('28')
   })
 
   it('defaults to a new group named after the file', async () => {
@@ -404,7 +414,7 @@ describe('SettleUpWizard', () => {
     const wrapper = mountWizard()
     await choose(wrapper)
 
-    expect(wrapper.text()).toContain('does not look like a CSV export')
+    expect(said(wrapper)).toContain('does not look like a CSV export')
   })
 
   it('refuses to go on without a group chosen to import into', async () => {
@@ -418,7 +428,7 @@ describe('SettleUpWizard', () => {
     await wrapper.find('[data-testid="to-preview"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Choose the group')
+    expect(said(wrapper)).toContain('Choose the group')
   })
 
   it('explains a failure to read the rows', async () => {
@@ -429,7 +439,7 @@ describe('SettleUpWizard', () => {
     await wrapper.find('[data-testid="to-preview"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('the date could not be read')
+    expect(said(wrapper)).toContain('the date could not be read')
   })
 
   it('explains a failure to import', async () => {
@@ -443,7 +453,7 @@ describe('SettleUpWizard', () => {
     await wrapper.find('[data-testid="commit"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('That group is archived.')
+    expect(said(wrapper)).toContain('That group is archived.')
     expect(wrapper.emitted('imported')).toBeFalsy()
   })
 
@@ -654,7 +664,7 @@ describe('SettleUpWizard', () => {
     await wrapper.find('[data-testid="to-preview"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Name the group')
+    expect(said(wrapper)).toContain('Name the group')
     expect(client.upload).toHaveBeenCalledTimes(1)
   })
 

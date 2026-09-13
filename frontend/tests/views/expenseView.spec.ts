@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import ExpenseView from '@/views/ExpenseView.vue'
 import { db } from '@/offline/db'
-import { ALICE, BOB, GROUP_ID, fakeApi, mountView, settle, testExpense, testGroup, textOf, waitFor } from '../support/viewHarness'
+import { ALICE, BOB, GROUP_ID, fakeApi, mountView, settle, testExpense, testGroup, textOf, waitFor, saidOnScreen } from '../support/viewHarness'
 
 const replace = vi.fn()
 
@@ -210,7 +210,9 @@ describe('ExpenseView', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+    // Said at the top of the screen rather than under the box, which is where the
+    // thumb that just pressed the button is.
+    expect(saidOnScreen().join(' ')).toContain('A comment needs some text')
     expect(textOf(wrapper)).toContain('Comments (0)')
   })
 

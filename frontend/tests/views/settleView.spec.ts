@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import SettleView from '@/views/SettleView.vue'
 import { db } from '@/offline/db'
-import { ALICE, BOB, GROUP_ID, fakeApi, mountView, settle, testExpense, testGroup, textOf, waitFor } from '../support/viewHarness'
+import { ALICE, BOB, GROUP_ID, fakeApi, mountView, settle, testExpense, testGroup, textOf, waitFor, saidOnScreen } from '../support/viewHarness'
 
 const replace = vi.fn()
 let query: Record<string, string> = {}
@@ -107,7 +107,7 @@ describe('SettleView', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+    expect(saidOnScreen()).not.toHaveLength(0)
     expect(await db.settlements.count()).toBe(0)
   })
 
@@ -214,9 +214,9 @@ describe('SettleView cancelling debts across groups', () => {
       withUserId: 'user-bob',
       note: null,
     })
-    await waitFor(() => wrapper.find('[data-testid="offset-done"]').exists())
-    expect(textOf(wrapper)).toContain('100.00')
-    expect(textOf(wrapper)).toContain('Roommates')
+    await waitFor(() => saidOnScreen().length > 0)
+    expect(saidOnScreen().join(' ')).toContain('100.00')
+    expect(saidOnScreen().join(' ')).toContain('Roommates')
   })
 
   it('says nothing at all when there is nothing facing the other way', async () => {

@@ -6,6 +6,7 @@ import AppShell from '@/components/layout/AppShell.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
+import { notify, report } from '@/ui/toasts'
 import { useAuthStore } from '@/stores/auth'
 import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
@@ -21,7 +22,6 @@ const expenseId = computed(() => String(route.params.expenseId))
 const commentDraft = ref('')
 const confirmingDelete = ref(false)
 const isDeleting = ref(false)
-const error = ref<string | null>(null)
 
 onMounted(async () => {
   await groups.get(groupId.value)
@@ -106,19 +106,17 @@ function cardStyle(memberId: string) {
 }
 
 async function removeComment(commentId: string): Promise<void> {
-  error.value = null
 
   try {
     await expenses.removeComment(commentId)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not delete that comment.')
+    report(caught, t('Could not delete that comment.'))
   }
 }
 
 async function postComment(): Promise<void> {
-  error.value = null
   if (!myMemberId.value) {
-    error.value = t('You are not a member of this group.')
+    notify(t('You are not a member of this group.'), 'error')
     return
   }
 
@@ -126,19 +124,18 @@ async function postComment(): Promise<void> {
     await expenses.comment(expenseId.value, commentDraft.value, myMemberId.value)
     commentDraft.value = ''
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not post the comment.')
+    report(caught, t('Could not post the comment.'))
   }
 }
 
 async function remove(): Promise<void> {
-  error.value = null
   isDeleting.value = true
 
   try {
     await expenses.remove(expenseId.value)
     await router.replace({ name: 'group', params: { groupId: groupId.value } })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not delete the expense.')
+    report(caught, t('Could not delete the expense.'))
     confirmingDelete.value = false
   } finally {
     isDeleting.value = false
@@ -310,7 +307,6 @@ async function remove(): Promise<void> {
         </form>
       </section>
 
-      <p v-if="error" class="text-sm text-owing" role="alert">{{ error }}</p>
 
       <RouterLink
         v-if="!confirmingDelete"
