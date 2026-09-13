@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>(options => options.UseSplitEverythingPostgres(connectionString));
 
         services.AddSingleton(Bind<AuthOptions>(configuration, AuthOptions.SectionName));
+        services.AddSingleton(Bind<AdminOptions>(configuration, AdminOptions.SectionName));
         services.AddSingleton(Bind<PushOptions>(configuration, PushOptions.SectionName));
         services.AddSingleton(Bind<ReceiptStorageOptions>(configuration, ReceiptStorageOptions.SectionName));
 
@@ -40,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
 
         services.AddScoped<IActivityService, ActivityService>();
+        services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IGroupService, GroupService>();
         services.AddScoped<IInviteService, InviteService>();

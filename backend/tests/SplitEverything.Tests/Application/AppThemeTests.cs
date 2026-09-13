@@ -42,7 +42,7 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
             Substitute.For<IGoogleTokenVerifier>(),
             new InviteService(Db, Writer, Activity, Email, Options, Clock),
             Options,
-            Clock);
+            Admins, Clock);
     }
 
     [Fact]

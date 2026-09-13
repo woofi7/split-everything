@@ -138,6 +138,17 @@ For real Google sign-in, create an OAuth client in the Google Cloud console with
 `http://localhost:5173` as an authorised origin, then set `Auth:GoogleClientId`
 for the API and `VITE_GOOGLE_CLIENT_ID` for the app.
 
+### Administering the server
+
+Set `Admin:Emails` - `Admin__Emails__0` in a deployment - to the address you sign
+in with. That account gets a screen listing every group on the server, including
+the ones it is not in, and can delete an archived group and everything in it.
+
+It is configuration rather than a flag on a row for a reason: it is a fact about
+the deployment, nothing inside the application can grant it, and an empty list -
+the default - means this install has no administrator at all. Reading a group does
+not join it: nobody new appears in anybody's balances.
+
 ## Divergences from the spec
 
 Categories were removed from the whole application after the spec was written:

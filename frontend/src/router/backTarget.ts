@@ -47,9 +47,12 @@ const SCREENS: ReadonlyArray<[RegExp, string]> = [
   [/^\/dashboard/, 'Dashboard'],
   [/^\/activity/, 'Activity'],
   [/^\/stats/, 'Stats'],
+  [/^\/admin/, 'Server groups'],
+  [/^\/profile\/settings/, 'Settings'],
   [/^\/profile/, 'Profile'],
   [/^\/conflicts/, 'Sync'],
   [/^\/import/, 'Import'],
+  [/^\/add\/payment/, 'Add payment'],
   [/^\/add/, 'Add expense'],
 ]
 

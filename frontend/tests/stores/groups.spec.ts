@@ -316,6 +316,55 @@ describe('groups store', () => {
  * retry, just a spinner. That is what a phone holding the local data open in
  * another tab looks like from here.
  */
+describe('a group the server no longer lists', () => {
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    await resetDatabase()
+  })
+
+  /**
+   * Every other deletion arrives as a tombstone through the sync log. A group
+   * deleted outright cannot send one - it is gone, and so is its log - so the list
+   * not mentioning it is the only news this device will ever get.
+   */
+  it('goes from the replica, with what was in it', async () => {
+    const store = useGroupsStore()
+    store.attachApi(fakeApi() as never)
+    await store.loadAll()
+
+    await db.expenses.put({ id: 'expense-1', groupId, description: 'Dinner' } as never)
+    await db.settlements.put({ id: 'settlement-1', groupId } as never)
+
+    store.attachApi(fakeApi({ get: vi.fn(async () => []) }) as never)
+    await store.loadAll()
+
+    expect(store.groups).toHaveLength(0)
+    expect(await db.groups.count()).toBe(0)
+    expect(await db.expenses.count()).toBe(0)
+    expect(await db.settlements.count()).toBe(0)
+  })
+
+  it('stays put when the server cannot be reached at all', async () => {
+    const store = useGroupsStore()
+    store.attachApi(fakeApi() as never)
+    await store.loadAll()
+
+    store.attachApi(
+      fakeApi({
+        get: vi.fn(async () => {
+          throw new Error('offline')
+        }),
+      }) as never,
+    )
+    await store.loadAll()
+
+    // Offline is not "your groups are gone", and a device that cleared its replica
+    // on a dropped connection would be unusable on a train.
+    expect(await db.groups.count()).toBe(1)
+    expect(store.groups).toHaveLength(1)
+  })
+})
+
 describe('loading the group list when the replica will not answer', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())

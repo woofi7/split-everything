@@ -34,6 +34,9 @@ services:
       - Auth__JwtAudience=${PUBLIC_URL}
       - Auth__GoogleClientId=${GOOGLE_CLIENT_ID}
       - Auth__AppBaseUrl=${PUBLIC_URL}
+      # Whoever runs this server: lists every group, reads any of them, and deletes
+      # an archived one. Nothing in the application can grant this.
+      - Admin__Emails__0=${ADMIN_EMAIL}
       - Cors__AllowedOrigins__0=${PUBLIC_URL}
       - Push__VapidPublicKey=${VAPID_PUBLIC_KEY}
       - Push__VapidPrivateKey=${VAPID_PRIVATE_KEY}

@@ -58,6 +58,14 @@ const routes: RouteRecordRaw[] = [
   },
   { path: '/add', name: 'add-expense', component: () => import('@/views/ExpenseFormView.vue') },
   {
+    // The other thing the plus button records: money handed over rather than money
+    // spent. Its own screen, because it asks different questions and belongs in
+    // none of the totals the expense form feeds.
+    path: '/add/payment',
+    name: 'add-payment',
+    component: () => import('@/views/PaymentFormView.vue'),
+  },
+  {
     // The same form as adding, deliberately. Editing an expense asks exactly the
     // same questions, and a second copy of the split logic would drift from this
     // one the first time either changed.
@@ -70,6 +78,20 @@ const routes: RouteRecordRaw[] = [
   { path: '/import', name: 'import', component: () => import('@/views/ImportView.vue') },
   { path: '/conflicts', name: 'conflicts', component: () => import('@/views/ConflictsView.vue') },
   { path: '/profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
+  {
+    // For whoever runs the server. Reachable by anybody who types it, and empty
+    // for them: what it can do is decided on the server, not by this route.
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/AdminView.vue'),
+  },
+  {
+    // Everything you set once and then leave. Behind the gear rather than on the
+    // profile itself, which now answers where you stand across every group.
+    path: '/profile/settings',
+    name: 'profile-settings',
+    component: () => import('@/views/ProfileSettingsView.vue'),
+  },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },
 ]
 

@@ -164,7 +164,8 @@ export const useGroupsStore = defineStore('groups', () => {
       // Cache first, so the screen has content before the network answers. Inside
       // the try with everything else: it was outside, so a replica that failed to
       // answer left "Loading your groups" on screen for good.
-      groups.value = await db.groups.toArray()
+      const cached = await db.groups.toArray()
+      groups.value = cached
       settleMainGroup()
 
       const summaries = await requireApi().get<GroupSummaryDto[]>('/groups', {
@@ -176,6 +177,13 @@ export const useGroupsStore = defineStore('groups', () => {
       groups.value = merged
       isOffline.value = false
       settleMainGroup()
+
+      // Worked out from the cached list rather than read again, so a load where
+      // nothing has vanished - which is every load - costs no extra trip to the
+      // replica and finishes in exactly the same turn it always did.
+      const kept = new Set(merged.map((group) => group.id))
+      const gone = cached.map((group) => group.id).filter((id) => !kept.has(id))
+      if (gone.length > 0) await pruneVanished(gone)
     } catch (caught) {
       // Keep the cached list: an unreachable server is a normal state here. A
       // server that answered and refused is not offline, and saying so sends
@@ -184,6 +192,34 @@ export const useGroupsStore = defineStore('groups', () => {
     } finally {
       isLoading.value = false
     }
+  }
+
+  /**
+   * Clears out a group the server no longer lists.
+   *
+   * Every other deletion in this application is a tombstone that arrives through
+   * the sync log, and a group that has been deleted outright cannot send one: it is
+   * gone, and so is its log. Left alone, its expenses would sit in this device's
+   * replica for ever, and the group itself would flash back onto the screen at
+   * every cold start - read from the cache, then dropped again when the server
+   * answers - which reads exactly like a bug.
+   *
+   * Safe because a group only ever exists here after the server has returned one:
+   * creating a group is the one write in the app that needs a connection, so a
+   * group the list does not mention is a group this account has lost, by deletion
+   * or by leaving it.
+   */
+  async function pruneVanished(gone: readonly string[]): Promise<void> {
+    await db.groups.bulkDelete(gone as string[])
+    await db.expenses.where('groupId').anyOf(gone).delete()
+    await db.settlements.where('groupId').anyOf(gone).delete()
+    await db.comments.where('groupId').anyOf(gone).delete()
+    await db.activity.where('groupId').anyOf(gone).delete()
+    await db.conflicts.where('groupId').anyOf(gone).delete()
+
+    // The outbox is left alone deliberately: an unsent change for a group that has
+    // gone is a rejection waiting to be read on the conflicts screen, not something
+    // to clear away quietly on the way past.
   }
 
   async function get(groupId: string): Promise<LocalGroup | undefined> {
@@ -290,6 +326,24 @@ export const useGroupsStore = defineStore('groups', () => {
    * An admin-only change on the server, because it decides what everyone else's
    * next expense does.
    */
+  /**
+   * The names this group keeps out of its totals.
+   *
+   * Its own call rather than part of the patch above, because it is the one group
+   * setting anybody in the group may change: everything else there decides how
+   * money is divided or who is in it, and this decides whether the rent drowns out
+   * the month on a screen everybody reads.
+   */
+  async function setIgnoredNames(groupId: string, patterns: string[]): Promise<void> {
+    const dto = await requireApi().put<GroupSummaryDto>(`/groups/${groupId}/ignored-names`, {
+      patterns: patterns.map((pattern) => pattern.trim()).filter(Boolean),
+    })
+
+    const local = toLocalGroup(dto, groups.value)
+    await db.groups.put(local)
+    upsert(local)
+  }
+
   async function setDefaultSplit(
     groupId: string,
     splitType: SplitType,
@@ -437,6 +491,7 @@ export const useGroupsStore = defineStore('groups', () => {
     archive,
     unarchive,
     setDefaultSplit,
+    setIgnoredNames,
     setMemberColor,
     addUserMember,
     mergeMembers,

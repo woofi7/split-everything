@@ -41,7 +41,7 @@ public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(f
             Substitute.For<IGoogleTokenVerifier>(),
             invites,
             options,
-            Clock);
+            Admins, Clock);
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(f
 
         var auth = new AuthService(
             Db, new JwtTokenService(options, Clock),
-            Substitute.For<IGoogleTokenVerifier>(), invites, options, Clock);
+            Substitute.For<IGoogleTokenVerifier>(), invites, options, Admins, Clock);
 
         var result = await auth.SignInAsDeveloperAsync(
             new DevelopmentSignInRequest("alice@example.com", "Alice", null));
@@ -226,7 +226,7 @@ public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(f
             Db, new JwtTokenService(options, Clock),
             Substitute.For<IGoogleTokenVerifier>(),
             new InviteService(Db, Writer, Activity, Email, options, Clock),
-            options, Clock);
+            options, Admins, Clock);
 
         // The sign-in page needs to tell "not set up" apart from "broken".
         auth.GetCapabilities().GoogleConfigured.ShouldBeFalse();

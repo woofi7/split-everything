@@ -23,6 +23,7 @@ public sealed class AuthService(
     IGoogleTokenVerifier google,
     IInviteService invites,
     AuthOptions options,
+    AdminOptions admins,
     IClock clock) : IAuthService
 {
     public async Task<SignInResult> SignInWithGoogleAsync(
@@ -438,7 +439,8 @@ public sealed class AuthService(
             ? identity.Email.Split('@')[0]
             : identity.Name.Trim();
 
-    private static AuthenticatedUser Map(User user)
+    private AuthenticatedUser Map(User user)
         => new(user.Id, user.Email, user.DisplayName, user.AvatarUrl,
-            user.DefaultCurrency, user.PrefersLightTheme, user.ThemeName, user.Locale);
+            user.DefaultCurrency, user.PrefersLightTheme, user.ThemeName, user.Locale,
+            admins.Includes(user.Email));
 }

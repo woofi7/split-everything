@@ -18,7 +18,14 @@ public sealed record AuthenticatedUser(
     /// <summary>The accent the whole application wears for them, if they said.</summary>
     string? ThemeName,
     /// <summary>Which language they read the app in: en or fr.</summary>
-    string Locale);
+    string Locale,
+    /// <summary>
+    /// Whether this account runs the server, which is configured on the server and
+    /// can never be granted from inside the application. The client only uses it to
+    /// decide whether to offer the screen; every administrative call is checked
+    /// again where it lands.
+    /// </summary>
+    bool IsAdmin = false);
 
 public sealed record SignInResult(AuthenticatedUser User, AuthTokens Tokens, bool IsNewUser, IReadOnlyList<Guid> AutoJoinedGroupIds);
 

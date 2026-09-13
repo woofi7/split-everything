@@ -46,7 +46,7 @@ public class DeviceHandoverTests(PostgresFixture fixture) : ServiceTestBase(fixt
             Substitute.For<IGoogleTokenVerifier>(),
             new InviteService(Db, Writer, Activity, Email, Options, Clock),
             Options,
-            Clock);
+            Admins, Clock);
     }
 
     [Fact]

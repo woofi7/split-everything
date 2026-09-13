@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using SplitEverything.Application.Abstractions;
 using SplitEverything.Application.Contracts.Sync;
+using SplitEverything.Infrastructure.Auth;
 using SplitEverything.Infrastructure.Services;
 using SplitEverything.Infrastructure.Sync;
 
@@ -15,6 +16,13 @@ namespace SplitEverything.Tests.Support;
 public abstract class ServiceTestBase(PostgresFixture fixture) : DatabaseTestBase(fixture)
 {
     protected FixedClock Clock { get; } = new(new DateTimeOffset(2026, 8, 31, 10, 0, 0, TimeSpan.Zero));
+
+    /// <summary>
+    /// An install with no administrator, which is what every test is unless it says
+    /// otherwise: administration comes from configuration, so the default has to be
+    /// nobody rather than whoever the test happened to seed.
+    /// </summary>
+    protected AdminOptions Admins { get; } = new();
 
     protected ICurrencyConverter Currency { get; private set; } = null!;
     protected ISyncBroadcaster Broadcaster { get; private set; } = null!;

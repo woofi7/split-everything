@@ -38,7 +38,7 @@ public class AuthServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
 
         var tokens = new JwtTokenService(Options, Clock);
         Invites = new InviteService(Db, Writer, Activity, Email, Options, Clock);
-        Auth = new AuthService(Db, tokens, Google, Invites, Options, Clock);
+        Auth = new AuthService(Db, tokens, Google, Invites, Options, Admins, Clock);
     }
 
     private void GoogleReturns(string sub, string email, string name, bool verified = true)

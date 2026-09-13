@@ -16,6 +16,13 @@ export interface AuthenticatedUser {
   themeName?: string | null
   /** Which language they read the app in: en or fr. */
   locale?: string | null
+  /**
+   * Whether this account runs the server, which the server decides from its own
+   * configuration. Only ever used to decide whether to offer the screen: every
+   * administrative call is checked again where it lands, so a client that lied
+   * about this would gain nothing.
+   */
+  isAdmin?: boolean
 }
 
 export interface AuthTokens {
