@@ -190,6 +190,19 @@ export const fr: Record<string, string> = {
     "Définie pour tout le monde dans le groupe. L'application entière la porte tant que vous êtes sur ce groupe.",
   'No colour of its own': 'Aucune couleur propre',
 
+  // Cancelling debts that face each other across two groups
+  'You also owe each other elsewhere': "Vous vous devez aussi de l'argent ailleurs",
+  '{name} and you have balances facing both ways. Cancelling them out moves no money: it writes a settlement in each group so what is really outstanding sits in one place.':
+    "{name} et vous avez des soldes qui se font face. Les annuler ne déplace aucun argent : un règlement est inscrit dans chaque groupe pour que ce qui reste dû se retrouve à un seul endroit.",
+  'owes you': 'vous doit',
+  'you owe': 'vous devez',
+  archived: 'archivé',
+  'Cancel out {amount}': 'Annuler {amount}',
+  Cancelling: 'Annulation',
+  'Cancelled. {amount} is left in {group}.': 'Annulé. Il reste {amount} dans {group}.',
+  'Cancelled. You are square.': 'Annulé. Vous êtes quittes.',
+  'Could not cancel those out.': "Impossible d'annuler ces soldes.",
+
   // Moving an expense to another group
   'Move to another group': 'Déplacer vers un autre groupe',
   'It goes with its history, its comments and who paid. Anything typed above and not saved stays behind.':

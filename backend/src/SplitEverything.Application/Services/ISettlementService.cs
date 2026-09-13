@@ -15,4 +15,16 @@ public interface ISettlementService
     Task<OverallBalanceDto> GetOverallBalanceAsync(Guid userId, CancellationToken ct = default);
 
     Task NudgeAsync(Guid userId, NudgeRequest request, CancellationToken ct = default);
+
+    /// <summary>What the caller and one other person owe each other in every group they share.</summary>
+    Task<CrossGroupBalanceDto> GetCrossGroupBalanceAsync(
+        Guid userId, Guid withUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cancels the debts that face each other across two groups, by writing a
+    /// settlement in each. Nothing is paid: the pair exists so that the balance
+    /// left over sits in one place rather than in two that disagree.
+    /// </summary>
+    Task<OffsetAcrossGroupsResult> OffsetAcrossGroupsAsync(
+        Guid userId, OffsetAcrossGroupsRequest request, CancellationToken ct = default);
 }

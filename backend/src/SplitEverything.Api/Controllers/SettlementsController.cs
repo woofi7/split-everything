@@ -31,6 +31,18 @@ public sealed class SettlementsController(
     public async Task<ActionResult<OverallBalanceDto>> Overall(CancellationToken ct)
         => Ok(await settlements.GetOverallBalanceAsync(UserId, ct));
 
+    /// <summary>What the caller and one other person owe each other, group by group.</summary>
+    [HttpGet("cross-group")]
+    public async Task<ActionResult<CrossGroupBalanceDto>> CrossGroup(
+        [FromQuery] Guid withUserId, CancellationToken ct)
+        => Ok(await settlements.GetCrossGroupBalanceAsync(UserId, withUserId, ct));
+
+    /// <summary>Cancels the debts that face each other across two groups.</summary>
+    [HttpPost("cross-group/offset")]
+    public async Task<ActionResult<OffsetAcrossGroupsResult>> Offset(
+        OffsetAcrossGroupsRequest request, CancellationToken ct)
+        => Ok(await settlements.OffsetAcrossGroupsAsync(UserId, request, ct));
+
     [HttpPost("nudge")]
     public async Task<IActionResult> Nudge(NudgeRequest request, CancellationToken ct)
     {

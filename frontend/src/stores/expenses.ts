@@ -40,6 +40,47 @@ export interface ExpenseDraft {
   notes?: string | null
 }
 
+/** One group two people share, seen from the caller's side. */
+export interface CrossGroupGroup {
+  groupId: string
+  groupName: string
+  currency: string
+  /** Positive: the other person owes you this much here. */
+  net: number
+  canSettle: boolean
+}
+
+/** One cancelling pair: this much of one group's debt is met by another's. */
+export interface PlannedOffset {
+  owedGroupId: string
+  owedGroupName: string
+  owingGroupId: string
+  owingGroupName: string
+  amount: number
+  currency: string
+}
+
+export interface CrossGroupRemainder {
+  currency: string
+  net: number
+  groupId: string | null
+  groupName: string | null
+}
+
+export interface CrossGroupBalance {
+  withUserId: string
+  withName: string
+  groups: CrossGroupGroup[]
+  offsets: PlannedOffset[]
+  remaining: CrossGroupRemainder[]
+}
+
+export interface OffsetResult {
+  applied: PlannedOffset[]
+  remaining: CrossGroupRemainder[]
+  settlementsRecorded: number
+}
+
 export interface SettlementDraft {
   groupId: string
   fromMemberId: string
@@ -367,6 +408,46 @@ export const useExpensesStore = defineStore('expenses', () => {
     // and the balances either side of the move belong to the groups.
     await sync()
     await useGroupsStore().loadAll()
+  }
+
+/** What two people owe each other in a group they share. */
+  async function crossGroupBalance(withUserId: string): Promise<CrossGroupBalance> {
+    return requireApi().get<CrossGroupBalance>('/settlements/cross-group', { withUserId })
+  }
+
+  /**
+   * Cancels the debts two people hold against each other in different groups.
+   *
+   * A thousand owed one way in the flat and nine hundred the other way on a trip
+   * is really a hundred: the server writes a settlement in each group, facing
+   * opposite ways, so the two cancel and what is left sits in one place. No money
+   * moves, and the total between the two people does not change - only where it is
+   * recorded does.
+   *
+   * Online only, like moving an expense: it writes in two groups at once, which no
+   * queued local operation can describe.
+   */
+  async function offsetAcrossGroups(withUserId: string, note?: string): Promise<OffsetResult> {
+    const client = requireApi()
+
+    let result: OffsetResult
+    try {
+      result = await client.post<OffsetResult>('/settlements/cross-group/offset', {
+        withUserId,
+        note: note?.trim() || null,
+      })
+    } catch (caught) {
+      if ((caught instanceof ApiError && caught.isOffline) || looksOffline(caught)) {
+        throw new Error('Cancelling debts across groups needs a connection.', { cause: caught })
+      }
+      throw caught
+    }
+
+    // Both groups' ledgers moved, so both replicas and both balances are stale.
+    await sync()
+    await useGroupsStore().loadAll()
+
+    return result
   }
 
   async function remove(expenseId: string): Promise<void> {
@@ -796,6 +877,8 @@ export const useExpensesStore = defineStore('expenses', () => {
     edit,
     remove,
     transfer,
+    crossGroupBalance,
+    offsetAcrossGroups,
     comment,
     removeComment,
     settle,
