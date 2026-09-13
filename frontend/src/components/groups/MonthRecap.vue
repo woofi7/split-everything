@@ -8,10 +8,10 @@ import type { MonthSummary } from '@/domain/monthSummary'
 /**
  * How a finished month went.
  *
- * The heading above already says what the month cost. This says the things a total
- * cannot: who actually paid it, what the largest single thing was, and whether it
- * was a normal month or not - which is the question somebody opening August in
- * November is really asking.
+ * The heading above already says what the month came to. This says the things a
+ * total cannot: who actually paid it, what the largest single thing was, what was
+ * left out of it, and whether it was a normal month or not - which is the question
+ * somebody opening August in November is really asking.
  */
 const props = defineProps<{
   summary: MonthSummary
@@ -66,8 +66,9 @@ const againstAverage = computed(() => {
 
     <!--
       What was left out, and how much of the month it was. Said out loud rather than
-      quietly dropped: the total above includes it, and a reader who cannot see why
-      the biggest is smaller than the month would be right to distrust both.
+      quietly dropped: the heading above no longer counts it, and a month total that
+      is silently missing the rent is one nobody can check against the list under it.
+      With this line the two figures add back up to what the month cost.
     -->
     <p
       v-if="summary.ignored"
@@ -76,8 +77,8 @@ const againstAverage = computed(() => {
     >
       <span class="min-w-0 truncate">
         {{ summary.ignored.count === 1
-          ? t('1 expense left out of the highlights')
-          : t('{count} expenses left out of the highlights', { count: summary.ignored.count }) }}
+          ? t('1 expense left out of the total')
+          : t('{count} expenses left out of the total', { count: summary.ignored.count }) }}
       </span>
       <span class="shrink-0 tabular-nums">
         {{ formatMoney(summary.ignored.total, currency) }}

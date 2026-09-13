@@ -12,6 +12,7 @@ import SpendPie from '@/components/ui/SpendPie.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
 import { bucketOf, formatMonthHeading } from '@/domain/buckets'
+import { matchesAnyNamePattern } from '@/domain/namePatterns'
 import { summariseMonths } from '@/domain/monthSummary'
 import MonthRecap from '@/components/groups/MonthRecap.vue'
 import { memberColor } from '@/domain/memberColors'
@@ -96,6 +97,18 @@ const colours = computed(() =>
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
+/**
+ * Whether an expense is one of the names this group asked to leave out.
+ *
+ * The rent, in practice. It stays in the list, in the balances and in what
+ * everybody owes - it is money that moved - but it is kept out of the totals this
+ * screen states, because a household spends fifteen hundred before it has bought
+ * anything and a total carrying that barely moves from month to month. Every
+ * figure here reads from this one test, so no two of them can disagree.
+ */
+const isLeftOut = (expense: LocalExpense): boolean =>
+  matchesAnyNamePattern(expense.description, group.value?.ignoredNamePatterns ?? [])
+
 const memberName = (memberId: string) =>
   group.value?.members.find((member) => member.id === memberId)?.displayName ?? 'Someone'
 
@@ -127,9 +140,16 @@ function paidByLine(expense: LocalExpense): string {
 interface ExpenseMonth {
   key: string
   label: string
+  /** The everyday spending: the month less whatever the group leaves out. */
   total: number
+  /** How many expenses that total covers, which the list states beside it. */
   count: number
+  /** What was left out of it, so the heading can say so and the two add back up. */
+  leftOut: { total: number; count: number } | null
+  /** Every expense of the month, left-out ones included: the list shows them all. */
   expenses: LocalExpense[]
+  /** The ones the total is made of, for anything else that sums the month. */
+  everyday: LocalExpense[]
 }
 
 const expenseMonths = computed<ExpenseMonth[]>(() => {
@@ -142,13 +162,25 @@ const expenseMonths = computed<ExpenseMonth[]>(() => {
     else byMonth.set(key, [expense])
   }
 
-  return [...byMonth].map(([key, list]) => ({
-    key,
-    label: formatMonthHeading(key),
-    total: list.reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
-    count: list.length,
-    expenses: list,
-  }))
+  return [...byMonth].map(([key, list]) => {
+    const everyday = list.filter((expense) => !isLeftOut(expense))
+    const skipped = list.filter((expense) => isLeftOut(expense))
+
+    return {
+      key,
+      label: formatMonthHeading(key),
+      total: everyday.reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
+      count: everyday.length,
+      leftOut: skipped.length === 0
+        ? null
+        : {
+            total: skipped.reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
+            count: skipped.length,
+          },
+      expenses: list,
+      everyday,
+    }
+  })
 })
 
 /**
@@ -328,10 +360,61 @@ watch(() => group.value?.id, () => {
 
 onUnmounted(() => observer?.disconnect())
 
-/** What the group has spent in total, all of it, however it was settled. */
+/**
+ * What the group has spent, however it was settled: the sum of the month totals
+ * under it, which means the same names left out of it as out of each of those.
+ */
 const groupTotal = computed(() =>
-  groupExpenses.value.reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
+  groupExpenses.value
+    .filter((expense) => !isLeftOut(expense))
+    .reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
 )
+
+/**
+ * Which total is showing what it leaves out.
+ *
+ * A star rather than a second figure on every heading: the everyday total is the
+ * one being read, and a column of "+ 1,500" beside a column of totals is a screen
+ * of arithmetic homework. The star says there is more to this number, and asking -
+ * by pointing at it, or tapping on a phone, where pointing does not exist - says
+ * what the month really came to.
+ *
+ * Hover and tap are held apart, as they are on the pie: a tap arrives after the
+ * pointer is already over the thing tapped, so treating them as one state makes
+ * tapping a second total read as tapping the one already open.
+ */
+const hoveredTotal = ref<string | null>(null)
+const pinnedTotal = ref<string | null>(null)
+
+const isRevealed = (key: string) =>
+  hoveredTotal.value === key || pinnedTotal.value === key
+
+function toggleTotal(key: string): void {
+  pinnedTotal.value = pinnedTotal.value === key ? null : key
+}
+
+/**
+ * The names doing the leaving out, so the figure can say whose doing it is.
+ *
+ * "3,957.88 in all" answers how much and leaves why hanging; "excluding Loyer,
+ * Rent" is the half that tells somebody where to go and change it.
+ */
+const leftOutNames = computed(() => (group.value?.ignoredNamePatterns ?? []).join(', '))
+
+/** What the month really came to: the everyday total plus what it leaves out. */
+const inAll = (total: number, leftOut: { total: number } | null) =>
+  total + (leftOut?.total ?? 0)
+
+/** And what that leaves out, said beside it rather than quietly dropped. */
+const groupLeftOut = computed(() => {
+  const skipped = groupExpenses.value.filter(isLeftOut)
+  if (skipped.length === 0) return null
+
+  return {
+    total: skipped.reduce((sum, expense) => sum + expense.amountInBaseCurrency, 0),
+    count: skipped.length,
+  }
+})
 
 /**
  * Which row in the balances is the person reading it.
@@ -375,7 +458,7 @@ const monthSpending = computed(() => {
   if (!month || !group.value) return []
 
   const paid = new Map<string, number>()
-  for (const expense of month.expenses) {
+  for (const expense of month.everyday) {
     const payers =
       expense.payers && expense.payers.length > 0
         ? expense.payers
@@ -398,6 +481,11 @@ const monthSpending = computed(() => {
 
 /** The month the chart is about, which is this one whether or not it has anything in it. */
 const currentMonth = computed(() => bucketOf(new Date(), 'month'))
+
+/** What this month's chart leaves out, which it says underneath itself. */
+const currentMonthLeftOut = computed(
+  () => expenseMonths.value.find((entry) => entry.key === currentMonth.value)?.leftOut ?? null,
+)
 
 /**
  * How each finished month went, by month.
@@ -520,6 +608,22 @@ async function refresh(): Promise<void> {
           <template #heading>{{ formatMonthHeading(currentMonth) }}</template>
           <template #empty>{{ t('Nothing spent this month yet.') }}</template>
         </SpendPie>
+
+        <!--
+          The chart counts the same expenses the month heading below it does, so it
+          has to say the same thing about what it leaves out. A slice that quietly
+          held the rent and a total that quietly did not would make a liar of one
+          of them.
+        -->
+        <p
+          v-if="currentMonthLeftOut"
+          data-testid="pie-left-out"
+          class="mt-2 text-center text-xs text-[var(--text-muted)]"
+        >
+          {{ t('+ {amount} left out', {
+            amount: formatMoney(currentMonthLeftOut.total, currency),
+          }) }}
+        </p>
       </section>
 
       <section v-if="balances.length > 0" class="surface-card mb-4 p-4">
@@ -627,17 +731,54 @@ async function refresh(): Promise<void> {
         <!--
           The total sits beside the heading rather than in the pie, which now
           answers a different question. It belongs to the list underneath it: the
-          sum of every expense there, not only the ones scrolled into view.
+          sum of every month total there, not only the ones scrolled into view -
+          which means it leaves out what they leave out, and says so underneath.
         -->
         <div class="mb-2 flex items-baseline justify-between gap-3">
           <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Expenses') }}</h2>
 
           <p
             v-if="groupExpenses.length > 0"
-            data-testid="group-total"
-            class="shrink-0 text-sm font-medium tabular-nums"
+            class="relative shrink-0 text-right"
+            data-testid="group-total-zone"
+            @mouseenter="hoveredTotal = 'group'"
+            @mouseleave="hoveredTotal = null"
           >
-            {{ formatMoney(groupTotal, currency) }}
+            <button
+              v-if="groupLeftOut"
+              type="button"
+              data-testid="group-total"
+              class="block text-sm font-medium tabular-nums"
+              :aria-label="t('{amount} in all, with what is left out', {
+                amount: formatMoney(inAll(groupTotal, groupLeftOut), currency),
+              })"
+              @click="toggleTotal('group')"
+            >
+              {{ formatMoney(groupTotal, currency) }}<span
+                class="text-accent"
+                aria-hidden="true"
+              >*</span>
+            </button>
+
+            <span v-else data-testid="group-total" class="block text-sm font-medium tabular-nums">
+              {{ formatMoney(groupTotal, currency) }}
+            </span>
+
+            <span
+              v-if="groupLeftOut && isRevealed('group')"
+              data-testid="group-left-out"
+              class="absolute top-full right-0 z-10 mt-0.5 max-w-52 rounded-md border px-2 py-1 text-right text-[0.7rem] tabular-nums shadow-sm"
+              style="background: var(--surface-raised); border-color: var(--border)"
+            >
+              <span class="block whitespace-nowrap">
+                {{ t('{amount} in all', {
+                  amount: formatMoney(inAll(groupTotal, groupLeftOut), currency),
+                }) }}
+              </span>
+              <span v-if="leftOutNames" class="block text-[var(--text-muted)]">
+                {{ t('excluding {names}', { names: leftOutNames }) }}
+              </span>
+            </span>
           </p>
         </div>
 
@@ -648,28 +789,89 @@ async function refresh(): Promise<void> {
         -->
         <ul v-if="expenseMonths.length > 0" class="flex flex-col gap-3">
           <li v-for="month in expenseMonths" :key="month.key">
-            <button
-              type="button"
-              data-testid="month-toggle"
-              class="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left"
-              :aria-expanded="isMonthOpen(month.key)"
-              @click="toggleMonth(month.key)"
-            >
-              <FontAwesomeIcon
-                :icon="faChevronRight"
-                class="h-3 w-3 shrink-0 text-[var(--text-muted)] transition-transform"
-                :class="isMonthOpen(month.key) ? 'rotate-90' : ''"
-                aria-hidden="true"
-              />
-              <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ month.label }}</span>
-              <span class="shrink-0 text-xs text-[var(--text-muted)]">{{ month.count }}</span>
-              <span
-                data-testid="month-total"
-                class="shrink-0 text-sm tabular-nums text-[var(--text-muted)]"
+            <div class="flex w-full items-center gap-2">
+              <button
+                type="button"
+                data-testid="month-toggle"
+                class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1.5 text-left"
+                :aria-expanded="isMonthOpen(month.key)"
+                @click="toggleMonth(month.key)"
               >
-                {{ formatMoney(month.total, currency) }}
+                <FontAwesomeIcon
+                  :icon="faChevronRight"
+                  class="h-3 w-3 shrink-0 text-[var(--text-muted)] transition-transform"
+                  :class="isMonthOpen(month.key) ? 'rotate-90' : ''"
+                  aria-hidden="true"
+                />
+                <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ month.label }}</span>
+                <span class="shrink-0 text-xs text-[var(--text-muted)]">{{ month.count }}</span>
+              </button>
+
+              <!--
+              The total keeps to itself rather than living inside the heading
+              button: once it answers a question of its own, it cannot also be
+              part of the control that opens the month.
+            -->
+              <!--
+                The pointer is on this, not on the figure: what the star reveals
+                appears below it, and a zone that ended at the figure meant the
+                line pushed the pointer off the very thing keeping it on screen -
+                it appeared, the pointer left, it went, the pointer returned. A
+                flicker, sixty times a second.
+              -->
+              <span
+                class="relative shrink-0 pr-1 text-right"
+                data-testid="month-total-zone"
+                @mouseenter="hoveredTotal = month.key"
+                @mouseleave="hoveredTotal = null"
+              >
+                <button
+                  v-if="month.leftOut"
+                  type="button"
+                  data-testid="month-total"
+                  class="block text-sm tabular-nums text-[var(--text-muted)]"
+                  :aria-label="t('{amount} in all, with what is left out', {
+                    amount: formatMoney(inAll(month.total, month.leftOut), currency),
+                  })"
+                  @click="toggleTotal(month.key)"
+                >
+                  {{ formatMoney(month.total, currency) }}<span
+                    class="text-accent"
+                    aria-hidden="true"
+                  >*</span>
+                </button>
+
+                <span
+                  v-else
+                  data-testid="month-total"
+                  class="block text-sm tabular-nums text-[var(--text-muted)]"
+                >
+                  {{ formatMoney(month.total, currency) }}
+                </span>
+
+                <!--
+                  What the month really came to, on asking. Floated rather than
+                  inserted: a line that takes up room shuffles every heading below
+                  it down the screen while somebody is reading them.
+                -->
+                <span
+                  v-if="month.leftOut && isRevealed(month.key)"
+                  data-testid="month-left-out"
+                  class="absolute top-full right-1 z-10 mt-0.5 max-w-52 rounded-md border px-2 py-1 text-right text-[0.7rem] tabular-nums shadow-sm"
+                  style="background: var(--surface-raised); border-color: var(--border)"
+                >
+                  <span class="block whitespace-nowrap">
+                    {{ t('{amount} in all', {
+                      amount: formatMoney(inAll(month.total, month.leftOut), currency),
+                    }) }}
+                  </span>
+                  <span v-if="leftOutNames" class="block text-[var(--text-muted)]">
+                    {{ t('excluding {names}', { names: leftOutNames }) }}
+                  </span>
+                </span>
               </span>
-            </button>
+
+            </div>
 
             <MonthRecap
               v-if="isMonthOpen(month.key) && recaps.get(month.key)"

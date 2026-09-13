@@ -526,7 +526,8 @@ describe('DashboardView on the main group', () => {
 
       await openMonth(wrapper, 1)
 
-      const recap = wrapper.find('[data-testid="month-recap"]')
+      // The second: the month running has a recap of its own above this one.
+      const recap = wrapper.findAll('[data-testid="month-recap"]')[1]
       const members = recap.findAll('[data-testid="recap-member"]').map((row) => row.text())
 
       // Largest first: 900 of the 1,000 came from one of them.
@@ -544,7 +545,7 @@ describe('DashboardView on the main group', () => {
 
       await openMonth(wrapper, 1)
 
-      const biggest = wrapper.find('[data-testid="recap-biggest"]').text()
+      const biggest = wrapper.findAll('[data-testid="recap-biggest"]')[1].text()
       expect(biggest).toContain('Rent')
       expect(biggest).toContain('900.00')
     })
@@ -559,21 +560,28 @@ describe('DashboardView on the main group', () => {
       await openMonth(wrapper, 1)
 
       // 1,000 against 400 the month before, and against a 400 average of the others.
+      // The first comparison on screen, because the month running has none.
       const comparison = wrapper.find('[data-testid="recap-comparison"]').text()
       expect(comparison).toContain('600.00 more than')
       expect(comparison).toContain('600.00 above')
     })
 
-    it('leaves the running month to its own total', async () => {
+    it('describes the running month, and compares it with nothing', async () => {
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
         expenses: history(),
       })
       await settle()
 
-      // The current month is open by default and has no recap: a few days against a
-      // whole month would say only that the month is young.
-      expect(wrapper.find('[data-testid="month-recap"]').exists()).toBe(false)
+      // Open by default, and now saying something: who has paid for this month so
+      // far is a fair question, and it used to be answered with a blank.
+      const recap = wrapper.findAll('[data-testid="month-recap"]')[0]
+      expect(recap.exists()).toBe(true)
+      expect(recap.findAll('[data-testid="recap-member"]').length).toBeGreaterThan(0)
+
+      // But not compared: a few days against a whole month would say only that the
+      // month is young.
+      expect(recap.find('[data-testid="recap-comparison"]').exists()).toBe(false)
     })
   })
 

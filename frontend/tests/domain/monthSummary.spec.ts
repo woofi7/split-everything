@@ -40,16 +40,42 @@ describe('summarising a month', () => {
     ])
   })
 
-  it('leaves out the month that has not finished', () => {
+  it('describes the month that has not finished, and leads with it', () => {
     const summaries = summariseMonths(
       [spend('2026-09-01', 500), spend('2026-08-01', 25)],
       'CAD',
       inSeptember,
     )
 
-    // September is a fact in progress. Comparing it to a whole August would say
-    // only that September is young.
-    expect(summaries.map((month) => month.key)).toEqual(['2026-08-01'])
+    // It is the month on screen, and having nothing to say about it was a blank
+    // where "who has paid for September so far" belongs.
+    expect(summaries.map((month) => month.key)).toEqual(['2026-09-01', '2026-08-01'])
+    expect(summaries[0].total).toBe(500)
+  })
+
+  it('compares the month in progress with nothing, because it is not finished', () => {
+    const [september] = summariseMonths(
+      [spend('2026-09-01', 500), spend('2026-08-01', 25), spend('2026-07-01', 30)],
+      'CAD',
+      inSeptember,
+    )
+
+    // Three days of September against the whole of August says only that September
+    // is young.
+    expect(september.versusPrevious).toBeNull()
+    expect(september.versusAverage).toBeNull()
+  })
+
+  it('keeps the month in progress out of everybody else\'s average', () => {
+    const [, august] = summariseMonths(
+      [spend('2026-09-01', 5000), spend('2026-08-01', 100), spend('2026-07-01', 50)],
+      'CAD',
+      inSeptember,
+    )
+
+    // August against July alone: a month two days old cannot drag the usual month
+    // up or down.
+    expect(august.versusAverage).toBe(50)
   })
 
   it('splits the total by who paid it, largest first', () => {
@@ -162,18 +188,63 @@ describe('summarising a month', () => {
       expect(august.biggest).toEqual({ description: 'Groceries at Metro', amount: 167 })
     })
 
-    it('leaves the total alone', () => {
+    it('totals what is left, and counts only that', () => {
       const [august] = summariseMonths(withRent, 'CAD', inSeptember, ['Loyer'])
 
-      // A display rule has no business changing what the month cost: this total has
-      // to match the expenses listed under it.
-      expect(august.total).toBe(1757)
+      // The question a month total answers is "what did we spend?", and a household
+      // that pays fifteen hundred of rent before buying anything cannot read that
+      // off a figure the rent dominates.
+      expect(august.total).toBe(257)
+      expect(august.count).toBe(2)
     })
 
     it('says what was left out rather than dropping it quietly', () => {
       const [august] = summariseMonths(withRent, 'CAD', inSeptember, ['Loyer'])
 
+      // The whole defence of leaving anything out: the screen says so, and the two
+      // figures add back up to the 1,757 the month really cost.
       expect(august.ignored).toEqual({ total: 1500, count: 1 })
+      expect(august.total + august.ignored!.total).toBe(1757)
+    })
+
+    it('leaves it out of who paid what, so the shares add up to the total', () => {
+      const [august] = summariseMonths(
+        [
+          spend('2026-08-01', 1500, 'Loyer aout', [[alice, 1500]]),
+          spend('2026-08-01', 60, 'Groceries', [[alice, 60]]),
+          spend('2026-08-01', 40, 'Dinner', [[bob, 40]]),
+        ],
+        'CAD',
+        inSeptember,
+        ['Loyer'],
+      )
+
+      expect(august.byMember).toEqual([
+        { memberId: alice, amount: 60 },
+        { memberId: bob, amount: 40 },
+      ])
+      expect(august.byMember.reduce((sum, member) => sum + member.amount, 0)).toBe(august.total)
+    })
+
+    it('compares months on what was left, which is the comparison worth making', () => {
+      // Two identical months but for a pizza, under a rent that moved by 300. On the
+      // full figures August is the cheaper month; on what they actually spent it is
+      // the dearer one, and that is the question being asked.
+      const [august, july] = summariseMonths(
+        [
+          spend('2026-07-01', 1800, 'Loyer juillet'),
+          spend('2026-07-01', 100, 'Groceries'),
+          spend('2026-08-01', 1500, 'Loyer aout'),
+          spend('2026-08-01', 140, 'Groceries'),
+        ],
+        'CAD',
+        inSeptember,
+        ['Loyer'],
+      )
+
+      expect(july.total).toBe(100)
+      expect(august.total).toBe(140)
+      expect(august.versusPrevious).toEqual({ difference: 40, percent: 40, label: '2026-07-01' })
     })
 
     it('matches whatever the case', () => {
@@ -222,8 +293,12 @@ describe('summarising a month', () => {
         ['Loyer'],
       )
 
+      // Nothing to call biggest, and nothing in the total either - but the month is
+      // still here, saying where its fifteen hundred went.
       expect(august.biggest).toBeNull()
-      expect(august.total).toBe(1500)
+      expect(august.total).toBe(0)
+      expect(august.count).toBe(0)
+      expect(august.ignored).toEqual({ total: 1500, count: 1 })
     })
   })
 
@@ -241,7 +316,13 @@ describe('summarising a month', () => {
     ])
   })
 
-  it('is empty when nothing has finished yet', () => {
-    expect(summariseMonths([spend('2026-09-01', 40)], 'CAD', inSeptember)).toEqual([])
+  it('is the month in progress alone when nothing has finished yet', () => {
+    const summaries = summariseMonths([spend('2026-09-01', 40)], 'CAD', inSeptember)
+
+    expect(summaries.map((month) => [month.key, month.total])).toEqual([['2026-09-01', 40]])
+  })
+
+  it('is empty when there is nothing at all', () => {
+    expect(summariseMonths([], 'CAD', inSeptember)).toEqual([])
   })
 })
