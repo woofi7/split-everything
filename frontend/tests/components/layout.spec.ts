@@ -81,6 +81,24 @@ describe('AppShell', () => {
     expect(html.indexOf('Change')).toBeLessThan(html.indexOf('data-testid="back"'))
   })
 
+  it('names the screen behind it, rather than the one it belongs under', () => {
+    window.history.replaceState({ back: '/activity' }, '')
+
+    const wrapper = mountShell({ backTo: { name: 'group' }, backLabel: 'Group' })
+
+    // Reached from the activity feed, so that is where back leads and what it
+    // should say - whatever the screen itself declares it belongs under.
+    expect(wrapper.find('[data-testid="back"]').attributes('aria-label')).toBe('Back to Activity')
+
+    window.history.replaceState(null, '')
+  })
+
+  it('falls back to the declared name when there is nothing behind it', () => {
+    const wrapper = mountShell({ backTo: { name: 'group' }, backLabel: 'Roommates' })
+
+    expect(wrapper.find('[data-testid="back"]').attributes('aria-label')).toBe('Back to Roommates')
+  })
+
   it('has no back button on a screen a tab can reach', () => {
     const wrapper = mountShell({})
 
