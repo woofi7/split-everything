@@ -125,6 +125,38 @@ describe('totals when the group leaves names out', () => {
     expect(wrapper.find('[data-testid="month-left-out"]').text()).toContain('$1,600.00')
   })
 
+  it('shuts again on a second tap, pointer or no pointer', async () => {
+    const { wrapper } = await mountGroup()
+    const zone = () => wrapper.find('[data-testid="month-total-zone"]')
+    const showing = () => wrapper.find('[data-testid="month-left-out"]').exists()
+
+    // A phone: two taps, open and shut.
+    await wrapper.find('[data-testid="month-total"]').trigger('click')
+    await settle()
+    expect(showing()).toBe(true)
+
+    await wrapper.find('[data-testid="month-total"]').trigger('click')
+    await settle()
+    expect(showing()).toBe(false)
+
+    // A mouse, where the pointer is still sitting on what was just closed: hover
+    // used to open it straight back up, so the press did nothing at all.
+    await zone().trigger('mouseenter')
+    await wrapper.find('[data-testid="month-total"]').trigger('click')
+    await settle()
+    expect(showing()).toBe(true)
+
+    await wrapper.find('[data-testid="month-total"]').trigger('click')
+    await settle()
+    expect(showing()).toBe(false)
+
+    // Leaving and coming back is a fresh question, and hover answers it again.
+    await zone().trigger('mouseleave')
+    await zone().trigger('mouseenter')
+    await settle()
+    expect(showing()).toBe(true)
+  })
+
   it('leaves the month open and shut where it was when the total is asked', async () => {
     const { wrapper } = await mountGroup()
 

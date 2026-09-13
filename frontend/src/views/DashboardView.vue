@@ -382,15 +382,40 @@ const groupTotal = computed(() =>
  * Hover and tap are held apart, as they are on the pie: a tap arrives after the
  * pointer is already over the thing tapped, so treating them as one state makes
  * tapping a second total read as tapping the one already open.
+ *
+ * Which leaves the third state, and it is the one that made a press do nothing: a
+ * second click closes it, but on a mouse the pointer is still sitting on the thing
+ * that was just closed, and hover opened it straight back up. So closing it also
+ * says "not while the pointer stays here", and moving away clears that - because
+ * arriving again is a fresh question rather than the same one.
  */
 const hoveredTotal = ref<string | null>(null)
 const pinnedTotal = ref<string | null>(null)
+const closedUnderPointer = ref<string | null>(null)
 
 const isRevealed = (key: string) =>
-  hoveredTotal.value === key || pinnedTotal.value === key
+  pinnedTotal.value === key ||
+  (hoveredTotal.value === key && closedUnderPointer.value !== key)
+
+function pointAt(key: string): void {
+  hoveredTotal.value = key
+  closedUnderPointer.value = null
+}
+
+function pointAway(): void {
+  hoveredTotal.value = null
+  closedUnderPointer.value = null
+}
 
 function toggleTotal(key: string): void {
-  pinnedTotal.value = pinnedTotal.value === key ? null : key
+  if (pinnedTotal.value === key) {
+    pinnedTotal.value = null
+    closedUnderPointer.value = key
+    return
+  }
+
+  pinnedTotal.value = key
+  closedUnderPointer.value = null
 }
 
 /**
@@ -741,8 +766,8 @@ async function refresh(): Promise<void> {
             v-if="groupExpenses.length > 0"
             class="relative shrink-0 text-right"
             data-testid="group-total-zone"
-            @mouseenter="hoveredTotal = 'group'"
-            @mouseleave="hoveredTotal = null"
+            @mouseenter="pointAt('group')"
+            @mouseleave="pointAway"
           >
             <button
               v-if="groupLeftOut"
@@ -822,8 +847,8 @@ async function refresh(): Promise<void> {
               <span
                 class="relative shrink-0 pr-1 text-right"
                 data-testid="month-total-zone"
-                @mouseenter="hoveredTotal = month.key"
-                @mouseleave="hoveredTotal = null"
+                @mouseenter="pointAt(month.key)"
+                @mouseleave="pointAway"
               >
                 <button
                   v-if="month.leftOut"
