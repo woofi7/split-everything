@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from '@/i18n'
+import { intlLocale, t } from '@/i18n'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -11,6 +11,7 @@ import { calculateSplit, splitValuesFor, type SplitType } from '@/domain/splitti
 import { formatMoney, parseAmountInput, roundMoney } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
 import { lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpenseDate'
+import { bucketOf } from '@/domain/buckets'
 
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
@@ -51,10 +52,21 @@ const spentAt = ref(isEditing.value ? today() : (lastExpenseDate() ?? today()))
  *
  * Watched rather than assumed, because the form can open on a date carried over
  * from the last expense: a form that quietly starts on last Saturday is a wrong
- * date nobody looks at twice, so when it is not today the field says so and
- * offers the one tap back.
+ * date nobody looks at twice, so when it is not today the field says so in words,
+ * wears a border that asks to be read, and offers the one tap back.
  */
 const isToday = computed(() => spentAt.value === today())
+
+/** The date in words, for the times it is not today and that matters. */
+const spentAtLabel = computed(() => {
+  const [year, month, day] = spentAt.value.split('-').map(Number)
+  if (!year || !month || !day) return spentAt.value
+
+  return new Date(year, month - 1, day).toLocaleDateString(intlLocale.value, {
+    day: 'numeric',
+    month: 'long',
+  })
+})
 
 function useToday(): void {
   spentAt.value = today()
@@ -580,8 +592,15 @@ async function save(): Promise<void> {
       // starts. Adding only: an edit is about one expense from whenever it was.
       rememberExpenseDate(spentAt.value)
 
-      // Queued locally, so this returns straight away whether online or not.
-      await router.replace({ name: 'group', params: { groupId: group.value.id } })
+      // Queued locally, so this returns straight away whether online or not. The
+      // month goes with it: the group screen opens on the current one, so an
+      // expense dated in August was added, synced, and invisible - which reads as
+      // "it did not save" and had somebody adding it four times over.
+      await router.replace({
+        name: 'group',
+        params: { groupId: group.value.id },
+        query: { month: bucketOf(fields.spentAt, 'month') },
+      })
     }
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : t('Could not save the expense.')
@@ -643,16 +662,20 @@ async function save(): Promise<void> {
 
         <label class="flex shrink-0 flex-col gap-1">
           <span class="flex items-baseline justify-between gap-2 text-xs text-[var(--text-muted)]">
-            {{ t('Date') }}
             <!--
-              Only when it is carrying a date over, which is the only time it is
-              not obvious what the field holds.
+              Named by the date it holds once that is not today. A date input shows
+              the day in figures, in whatever order the phone's locale puts them,
+              and that is exactly the thing an eye slides over - which is how a
+              week of expenses went into a month nobody meant.
             -->
+            <span :class="isToday ? '' : 'text-accent'">
+              {{ isToday ? t('Date') : spentAtLabel }}
+            </span>
             <button
               v-if="!isEditing && !isToday"
               type="button"
               data-testid="use-today"
-              class="text-accent"
+              class="text-accent underline"
               @click="useToday"
             >{{ t('Today') }}
             </button>
@@ -660,8 +683,9 @@ async function save(): Promise<void> {
           <input
             v-model="spentAt"
             type="date"
+            data-testid="spent-at"
             class="tap-target rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
-            style="border-color: var(--border)"
+            :style="{ borderColor: isToday ? 'var(--border)' : 'var(--accent-text)' }"
           />
         </label>
       </div>

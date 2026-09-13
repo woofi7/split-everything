@@ -164,9 +164,24 @@ const expenseMonths = computed<ExpenseMonth[]>(() => {
  */
 const openMonths = ref<Set<string> | null>(null)
 
+/**
+ * The month somebody has just added to, named in the URL by the form that saved it.
+ *
+ * Without it the screen opens on the current month whatever was added, so an
+ * expense dated in August is filed correctly and invisibly: the person is looking
+ * at September, sees nothing, and concludes it did not save. What you just did has
+ * to be on the screen you land on.
+ */
+const addedMonth = computed(() => {
+  const asked = route.query.month
+  return typeof asked === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null
+})
+
 const defaultMonth = computed(() => {
   const thisMonth = bucketOf(new Date(), 'month')
   const months = expenseMonths.value.map((month) => month.key)
+
+  if (addedMonth.value && months.includes(addedMonth.value)) return addedMonth.value
 
   return months.includes(thisMonth) ? thisMonth : (months[0] ?? null)
 })
