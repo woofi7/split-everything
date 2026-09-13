@@ -9,6 +9,18 @@ public interface IGroupService
     Task<IReadOnlyList<GroupSummaryDto>> ListAsync(Guid userId, bool includeArchived = false, CancellationToken ct = default);
     Task<GroupDto> UpdateAsync(Guid userId, Guid groupId, UpdateGroupRequest request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Sets the names this group keeps out of its totals.
+    ///
+    /// Any member, not only an owner or an admin. The rest of a group's settings
+    /// decide how money is divided and who is in it, which is why they are an
+    /// admin's business; this decides whether the rent drowns out the month on a
+    /// screen everybody reads, and it changes no amount, no balance and nothing
+    /// anybody owes. The person who notices that the totals are useless is rarely
+    /// the person holding the owner's account.
+    /// </summary>
+    Task<GroupDto> SetIgnoredNamesAsync(Guid userId, Guid groupId, SetIgnoredNamesRequest request, CancellationToken ct = default);
+
     Task<GroupDto> ArchiveAsync(Guid userId, Guid groupId, CancellationToken ct = default);
     Task<GroupDto> UnarchiveAsync(Guid userId, Guid groupId, CancellationToken ct = default);
 

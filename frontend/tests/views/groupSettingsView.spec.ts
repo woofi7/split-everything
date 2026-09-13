@@ -8,6 +8,7 @@ import {
   USER_ID,
   fakeApi,
   mountView,
+  saidOnScreen,
   settle,
   testExpense,
   testGroup,
@@ -826,7 +827,7 @@ describe('GroupSettingsView', () => {
       )
     })
 
-    it('reports a refusal in the dialog, where the eye already is', async () => {
+    it('reports a refusal over the top of the screen, and keeps the dialog open', async () => {
       const { wrapper, client } = await openMerge()
       client.post.mockRejectedValue(new Error('The group owner cannot be merged away.'))
 
@@ -835,12 +836,16 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
 
-      // At the foot of the section it read as nothing having happened at all.
-      expect(wrapper.find('[data-testid="merge-confirm"]').text())
-        .toContain('cannot be merged away')
+      // At the foot of the section it read as nothing having happened at all, and
+      // the foot of a section is somewhere nobody was looking.
+      expect(saidOnScreen().join(' ')).toContain('cannot be merged away')
+
+      // And still open, with both choices as they were: a refusal is not a reason
+      // to make somebody pick the two people again.
+      expect(wrapper.find('[data-testid="merge-confirm"]').exists()).toBe(true)
     })
 
-    it('reports it once, not in two places', async () => {
+    it('reports it once, not once per attempt', async () => {
       const { wrapper, client } = await openMerge()
       client.post.mockRejectedValue(new Error('The group owner cannot be merged away.'))
 
@@ -848,12 +853,13 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
+      await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
+      await settle()
 
-      const alerts = wrapper
-        .findAll('[role="alert"]')
-        .filter((node) => node.text().includes('cannot be merged away'))
-
-      expect(alerts).toHaveLength(1)
+      // The same refusal twice is one problem. Two identical cards say no more
+      // than one, and the second would push something else off the screen.
+      expect(saidOnScreen().filter((said) => said.includes('cannot be merged away')))
+        .toHaveLength(1)
     })
 
     it('offers no merge to someone who is only a member', async () => {
@@ -1113,10 +1119,10 @@ describe('GroupSettingsView', () => {
       expect(wrapper.find('[data-testid="pattern-matches"]').text()).toContain('1 expense')
     })
 
-    it('saves the patterns with the rest of the settings', async () => {
-      const patch = vi.fn(async () => testGroup())
+    it('saves the patterns on their own, because they are not an admin setting', async () => {
+      const put = vi.fn(async () => testGroup())
       const client = api()
-      client.patch = patch
+      client.put = put
 
       const { wrapper } = await mountView(GroupSettingsView, { api: client })
       await settle()
@@ -1129,10 +1135,51 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle(2)
 
-      expect(patch).toHaveBeenCalledWith(
-        expect.stringContaining('/groups/'),
-        expect.objectContaining({ ignoredNamePatterns: ['Loyer'] }),
+      expect(put).toHaveBeenCalledWith(
+        expect.stringContaining('/ignored-names'),
+        { patterns: ['Loyer'] },
       )
+    })
+
+    /**
+     * Who gets to decide.
+     *
+     * Everything else on this screen is an admin's: how costs are divided, who is
+     * in the group, what it is called. This changes what a total reads and not a
+     * penny of what anybody owes, and the person who notices that the rent is
+     * drowning out the month is rarely the one holding the owner's account.
+     */
+    it('lets an ordinary member set them, and save', async () => {
+      const shared = testGroup()
+      shared.members = shared.members.map((member) =>
+        member.userId === USER_ID ? { ...member, role: 'Member' as const } : member,
+      )
+
+      const put = vi.fn(async () => shared)
+      const client = fakeApi({ '/groups': () => shared })
+      client.put = put
+
+      const { wrapper } = await mountView(GroupSettingsView, { api: client, groups: [shared] })
+      await settle()
+
+      await wrapper.find('[data-testid="add-pattern"]').trigger('click')
+      await settle()
+      await wrapper.find('[data-testid="pattern-input"]').setValue('Loyer')
+      await settle()
+
+      // The bar used to be an admin's too, so a member could type a pattern and
+      // then find nothing to press.
+      expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(true)
+
+      await wrapper.find('[data-testid="save-settings"]').trigger('click')
+      await settle(2)
+
+      expect(put).toHaveBeenCalledWith(
+        expect.stringContaining('/ignored-names'),
+        { patterns: ['Loyer'] },
+      )
+      // And nothing else about the group, which is still not theirs to change.
+      expect(client.patch).not.toHaveBeenCalled()
     })
 
     it('does not save a row somebody left blank', async () => {

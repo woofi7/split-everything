@@ -46,6 +46,15 @@ public sealed class GroupsController(
         => Ok(await groups.UnarchiveAsync(UserId, groupId, ct));
 
     /// <summary>
+    /// The names this group keeps out of its totals. Any member: it changes what a
+    /// screen reads and not a penny of what anybody owes.
+    /// </summary>
+    [HttpPut("{groupId:guid}/ignored-names")]
+    public async Task<ActionResult<GroupDto>> SetIgnoredNames(
+        Guid groupId, SetIgnoredNamesRequest request, CancellationToken ct)
+        => Ok(await groups.SetIgnoredNamesAsync(UserId, groupId, request, ct));
+
+    /// <summary>
     /// Changes one member's colour. Your own is yours; anyone else's is an admin
     /// decision, because it changes what everybody in the group sees.
     /// </summary>

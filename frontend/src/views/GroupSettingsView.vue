@@ -12,6 +12,7 @@ import AccentChoice from '@/components/ui/AccentChoice.vue'
 import { resolveIcon } from '@/domain/icons'
 import { groupColor } from '@/domain/themes'
 import { useGroupsStore } from '@/stores/groups'
+import { notify, report } from '@/ui/toasts'
 import { useExpensesStore } from '@/stores/expenses'
 import { compileNamePattern } from '@/domain/namePatterns'
 import { useAuthStore } from '@/stores/auth'
@@ -147,8 +148,6 @@ function readSplitFromGroup(): void {
 /** Seeds sensible numbers when the type changes, rather than leaving them blank. */
 function changeSplitType(next: SplitType): void {
   splitType.value = next
-  message.value = null
-  error.value = null
 
   if (next === 'Equal') return
 
@@ -189,8 +188,6 @@ const inviteEmail = ref('')
 const newInvite = ref<InviteDto | null>(null)
 const qrUrl = ref<string | null>(null)
 const addable = ref<AddableUser[]>([])
-const error = ref<string | null>(null)
-const message = ref<string | null>(null)
 
 /** Open while two people are being chosen, and closed the moment it is done. */
 const isMergeOpen = ref(false)
@@ -198,7 +195,6 @@ const mergeSource = ref('')
 const mergeTarget = ref('')
 const isMerging = ref(false)
 /** Kept apart from the page error, so a refusal is not reported twice. */
-const mergeError = ref<string | null>(null)
 
 /**
  * Who can be merged away.
@@ -322,9 +318,6 @@ function pickColour(memberId: string, colorHex: string): void {
 }
 
 function openMerge(): void {
-  error.value = null
-  message.value = null
-  mergeError.value = null
   mergeSource.value = ''
   mergeTarget.value = ''
   isMergeOpen.value = true
@@ -335,16 +328,15 @@ async function confirmMerge(): Promise<void> {
 
   const goingName = nameOf(mergeSource.value)
   const stayingName = nameOf(mergeTarget.value)
-  mergeError.value = null
   isMerging.value = true
 
   try {
     await groups.mergeMembers(groupId.value, mergeSource.value, mergeTarget.value)
-    message.value = `${goingName} was merged into ${stayingName}.`
+    notify(t('{going} was merged into {staying}.', { going: goingName, staying: stayingName }), 'done')
     isMergeOpen.value = false
     await loadAddable()
   } catch (caught) {
-    mergeError.value = caught instanceof Error ? caught.message : t('Could not merge those two.')
+    report(caught, t('Could not merge those two.'))
   } finally {
     isMerging.value = false
   }
@@ -390,11 +382,6 @@ const isDirty = computed(() => {
   if ((iconName.value ?? null) !== (current.iconName ?? null)) return true
   if (themeName.value !== (current.themeName ?? '')) return true
 
-  const storedPatterns = current.ignoredNamePatterns ?? []
-  const patterns = ignoredPatterns.value.map((pattern) => pattern.trim()).filter(Boolean)
-  if (patterns.length !== storedPatterns.length) return true
-  if (patterns.some((pattern, index) => pattern !== storedPatterns[index])) return true
-
   const storedType = current.defaultSplitType ?? 'Equal'
   if (splitType.value !== storedType) return true
   if (!splitNeedsValues.value) return false
@@ -405,10 +392,35 @@ const isDirty = computed(() => {
   )
 })
 
-/** Anything at all to save, colours included. */
-const hasChanges = computed(
-  () => isDirty.value || Object.keys(pendingColours.value).length > 0,
+/** The names to leave out, held apart because anybody in the group may change them. */
+const cleanedPatterns = computed(() =>
+  ignoredPatterns.value.map((pattern) => pattern.trim()).filter(Boolean),
 )
+
+const patternsDirty = computed(() => {
+  const stored = group.value?.ignoredNamePatterns ?? []
+  const patterns = cleanedPatterns.value
+
+  return (
+    patterns.length !== stored.length ||
+    patterns.some((pattern, index) => pattern !== stored[index])
+  )
+})
+
+/**
+ * Anything this person can actually save.
+ *
+ * Not the same list for everybody: an ordinary member may set the names left out
+ * of the totals and their own colour, and nothing else on this screen. The bar
+ * used to appear only for an admin, which left a member who had picked a colour
+ * looking at a change with no way to keep it.
+ */
+const hasChanges = computed(() => {
+  if (patternsDirty.value) return true
+  if (Object.keys(pendingColours.value).length > 0) return true
+
+  return canAdminister.value && isDirty.value
+})
 
 /**
  * Puts every field back to the group, so a change can be abandoned.
@@ -424,8 +436,6 @@ function revert(): void {
   themeName.value = current?.themeName ?? ''
   pendingColours.value = {}
   readSplitFromGroup()
-  message.value = null
-  error.value = null
 }
 
 /**
@@ -437,12 +447,16 @@ function revert(): void {
 async function save(): Promise<void> {
   if (splitProblem.value) return
 
-  error.value = null
-  message.value = null
   isSaving.value = true
 
   try {
-    if (isDirty.value) {
+    // Blank rows are somebody part-way through typing, not a pattern. Its own
+    // request, because it is the one thing here that does not need an admin.
+    if (patternsDirty.value) {
+      await groups.setIgnoredNames(groupId.value, cleanedPatterns.value)
+    }
+
+    if (canAdminister.value && isDirty.value) {
       await groups.update(groupId.value, {
         name: name.value,
         iconName: iconName.value,
@@ -450,10 +464,6 @@ async function save(): Promise<void> {
         themeName: themeName.value || null,
         defaultSplitType: splitType.value,
         defaultSplitValues: splitNeedsValues.value ? splitValues.value : null,
-        // Blank rows are somebody part-way through typing, not a pattern.
-        ignoredNamePatterns: ignoredPatterns.value
-          .map((pattern) => pattern.trim())
-          .filter(Boolean),
       })
     }
 
@@ -464,9 +474,9 @@ async function save(): Promise<void> {
     }
     pendingColours.value = {}
 
-    message.value = t('Saved.')
+    notify(t('Saved.'), 'done')
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not save the group.')
+    report(caught, t('Could not save the group.'))
   } finally {
     isSaving.value = false
   }
@@ -490,26 +500,23 @@ async function loadAddable(): Promise<void> {
 
 /** Someone who already has an account, so they see the group straight away. */
 async function addPerson(person: AddableUser): Promise<void> {
-  error.value = null
   try {
     await groups.addUserMember(groupId.value, person.id)
     await loadAddable()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not add that person.')
+    report(caught, t('Could not add that person.'))
   }
 }
 
 async function removeMember(memberId: string): Promise<void> {
-  error.value = null
   try {
     await groups.removeMember(groupId.value, memberId)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not remove that person.')
+    report(caught, t('Could not remove that person.'))
   }
 }
 
 async function createInvite(): Promise<void> {
-  error.value = null
   qrUrl.value = null
 
   try {
@@ -525,7 +532,7 @@ async function createInvite(): Promise<void> {
     const png = await useApi().blob(`/groups/invites/${newInvite.value.id}/qr`, { size: 8 })
     qrUrl.value = URL.createObjectURL(png)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not create an invite.')
+    report(caught, t('Could not create an invite.'))
   }
 }
 
@@ -536,37 +543,32 @@ async function copyInviteLink(): Promise<void> {
   // Claiming success there told people the link was copied when nothing had
   // happened, so say what is going on and leave the link on screen to select.
   if (!navigator.clipboard) {
-    message.value = null
-    error.value = t('Copying needs a secure connection. The link above can be selected instead.')
+    notify(t('Copying needs a secure connection. The link above can be selected instead.'), 'error')
     return
   }
 
   try {
     await navigator.clipboard.writeText(newInvite.value.url)
-    error.value = null
-    message.value = t('Invite link copied.')
+    notify(t('Invite link copied.'), 'done')
   } catch {
-    message.value = null
-    error.value = t('Could not copy the link. It can be selected above instead.')
+    notify(t('Could not copy the link. It can be selected above instead.'), 'error')
   }
 }
 
 async function archive(): Promise<void> {
-  error.value = null
   try {
     await groups.archive(groupId.value)
     await router.replace({ name: 'dashboard' })
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not archive the group.')
+    report(caught, t('Could not archive the group.'))
   }
 }
 
 async function unarchive(): Promise<void> {
-  error.value = null
   try {
     await groups.unarchive(groupId.value)
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : t('Could not reopen the group.')
+    report(caught, t('Could not reopen the group.'))
   }
 }
 </script>
@@ -726,13 +728,21 @@ async function unarchive(): Promise<void> {
     </section>
 
     <!--
-      Names to keep out of the monthly highlights. Not out of the totals: the month
-      still cost what it cost, and a total that disagrees with the expenses under it
-      is a bug nobody can explain.
+      Names to keep out of the totals the group screen states. Not out of the money:
+      the month still cost what it cost, everyone still owes their share of it, and
+      every screen that leaves one of these out says how much it left out - a total
+      that quietly disagrees with the expenses under it is a bug nobody can explain.
+
+      The one setting here that is not an admin's. Everything else on this screen
+      decides how money is divided or who is in the group; this decides whether the
+      rent drowns out the month on a screen everybody reads, and the person who
+      notices that is rarely the one holding the owner's account.
     -->
     <section class="surface-card mb-4 p-4">
-      <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Leave out of the highlights') }}</h2>
-      <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('The rent is bigger than everything else every month, so calling it the biggest expense says nothing. Names matching these are skipped when picking that out. Totals, balances and who owes whom never change.') }}
+      <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Leave out of the totals') }}</h2>
+      <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('The rent is bigger than everything else every month, so it drowns out what the group actually spent. Names matching these are kept out of the month and group totals, and skipped when picking the biggest expense. Each total says how much it left out, so nothing goes missing.') }}
+      </p>
+      <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('Balances and who owes whom never change: the rent is still money somebody paid and somebody owes.') }}
       </p>
       <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('A name matches if it contains what you type. Use * for anything: Loyer* matches everything starting with Loyer.') }}
       </p>
@@ -750,7 +760,6 @@ async function unarchive(): Promise<void> {
               type="text"
               data-testid="pattern-input"
               placeholder="Loyer"
-              :disabled="!canAdminister"
               class="tap-target min-w-0 flex-1 rounded-lg border bg-[var(--surface-raised)] px-3 text-sm"
               style="border-color: var(--border)"
             />
@@ -758,7 +767,6 @@ async function unarchive(): Promise<void> {
               type="button"
               data-testid="remove-pattern"
               class="tap-target shrink-0 px-2 text-sm text-[var(--text-muted)]"
-              :disabled="!canAdminister"
               :aria-label="t('Remove')"
               @click="removePattern(index)"
             >
@@ -782,7 +790,7 @@ async function unarchive(): Promise<void> {
         </div>
 
         <button
-          v-if="canAdminister && ignoredPatterns.length < 10"
+          v-if="ignoredPatterns.length < 10"
           type="button"
           data-testid="add-pattern"
           class="btn btn-press btn-secondary min-h-0 self-start px-3 py-1.5 text-xs"
@@ -792,7 +800,7 @@ async function unarchive(): Promise<void> {
         </button>
       </div>
 
-      <p v-if="!canAdminister" class="mt-3 text-xs text-[var(--text-muted)]">{{ t('Only an owner or an admin can change this.') }}
+      <p class="mt-3 text-xs text-[var(--text-muted)]">{{ t('Anyone in the group can change this. It only decides what the totals say, and never what anybody owes.') }}
       </p>
     </section>
 
@@ -953,7 +961,6 @@ async function unarchive(): Promise<void> {
         <p v-else class="text-xs text-[var(--text-muted)]">{{ t('Choose both. This cannot be undone.') }}
         </p>
 
-        <p v-if="mergeError" class="text-sm text-owing" role="alert">{{ mergeError }}</p>
 
         <div class="flex gap-2">
           <button
@@ -1043,8 +1050,6 @@ async function unarchive(): Promise<void> {
       @close="isPickingIcon = false"
     />
 
-    <p v-if="message" class="mt-4 text-sm text-owed" role="status">{{ message }}</p>
-    <p v-if="error" class="mt-4 text-sm text-owing" role="alert">{{ error }}</p>
 
     <!--
       One save for every setting on the screen, in the corner, and only once there
@@ -1055,7 +1060,7 @@ async function unarchive(): Promise<void> {
       Clear of the tab bar and of the add button in the middle of it.
     -->
     <div
-      v-if="hasChanges && canAdminister"
+      v-if="hasChanges"
       data-testid="save-bar"
       class="fixed right-4 z-40 flex gap-2"
       style="bottom: calc(6rem + env(safe-area-inset-bottom))"

@@ -266,6 +266,28 @@ public sealed class GroupService(
         return await GetAsync(userId, groupId, ct);
     }
 
+    public async Task<GroupDto> SetIgnoredNamesAsync(
+        Guid userId, Guid groupId, SetIgnoredNamesRequest request, CancellationToken ct = default)
+    {
+        // A member, not an admin. This changes what a total reads on a screen and
+        // nothing about the money: no amount moves, no balance changes, and the
+        // expenses it leaves out are still listed, still owed and still settled the
+        // same way. Everything else on the settings screen stays an admin's.
+        await GroupAccess.RequireMemberAsync(db, userId, groupId, ct);
+        var group = await GroupAccess.RequireGroupAsync(db, groupId, ct);
+        GroupAccess.RequireWritable(group);
+
+        group.IgnoredNamePatternsJson = BuildIgnoredNamePatterns(request.Patterns ?? []);
+
+        await writer.RecordAsync(group, SyncEntityType.Group, groupId, SyncOperation.Update,
+            DeviceFor(userId), userId, GroupPayload(group), ct: ct);
+
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
+
+        return await GetAsync(userId, groupId, ct);
+    }
+
     /// <summary>
     /// Reads an optional text field from a patch: trimmed, or null when the caller
     /// sent an empty string to clear it. Rejects anything too long for the column

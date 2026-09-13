@@ -116,4 +116,83 @@ public class GroupIgnoredNamesTests(PostgresFixture fixture) : ServiceTestBase(f
         await Should.ThrowAsync<ValidationException>(
             () => Groups.UpdateAsync(userId, group.Id, Patterns([new string('a', 201)])));
     }
+
+    /// <summary>
+    /// Who gets to decide.
+    ///
+    /// Everything else on a group's settings screen is an admin's: how costs are
+    /// divided, who is in the group, what it is called. This is not that. It
+    /// changes what a total reads and no amount, no balance and nothing anybody
+    /// owes - and the person who notices that the rent is drowning out the month is
+    /// rarely the one holding the owner's account.
+    /// </summary>
+    public class WhoCanSetThem(PostgresFixture fixture) : ServiceTestBase(fixture)
+    {
+        private async Task<(Guid OwnerId, Guid MemberId, GroupDto Group)> TwoOfUsAsync()
+        {
+            var owner = await TestData.SeedUserAsync(Db, "Nicolas", "nicolas@example.com");
+            var other = await TestData.SeedUserAsync(Db, "Emma", "emma@example.com");
+
+            var group = await Groups.CreateAsync(owner.Id,
+                new CreateGroupRequest("Roommates", "CAD", null, null, null, null));
+            await Groups.AddUserMemberAsync(owner.Id, group.Id, new AddUserMemberRequest(other.Id));
+
+            return (owner.Id, other.Id, group);
+        }
+
+        [Fact]
+        public async Task Anybody_in_the_group_can_set_them()
+        {
+            var (_, memberId, group) = await TwoOfUsAsync();
+
+            var updated = await Groups.SetIgnoredNamesAsync(
+                memberId, group.Id, new SetIgnoredNamesRequest(["Loyer"]));
+
+            updated.IgnoredNamePatterns.ShouldBe(["Loyer"]);
+        }
+
+        [Fact]
+        public async Task An_ordinary_member_still_cannot_change_the_rest()
+        {
+            var (_, memberId, group) = await TwoOfUsAsync();
+
+            // The line is drawn at money and membership, and it has not moved.
+            await Should.ThrowAsync<ForbiddenException>(
+                () => Groups.UpdateAsync(memberId, group.Id,
+                    new UpdateGroupRequest("Renamed", null, null, null, null)));
+        }
+
+        [Fact]
+        public async Task Somebody_outside_the_group_cannot()
+        {
+            var (_, _, group) = await TwoOfUsAsync();
+            var stranger = await TestData.SeedUserAsync(Db, "Stranger", "stranger@example.com");
+
+            await Should.ThrowAsync<ForbiddenException>(
+                () => Groups.SetIgnoredNamesAsync(
+                    stranger.Id, group.Id, new SetIgnoredNamesRequest(["Loyer"])));
+        }
+
+        [Fact]
+        public async Task The_same_bounds_apply_however_it_is_set()
+        {
+            var (_, memberId, group) = await TwoOfUsAsync();
+            var many = Enumerable.Range(0, 11).Select(index => $"pattern{index}").ToList();
+
+            await Should.ThrowAsync<ValidationException>(
+                () => Groups.SetIgnoredNamesAsync(memberId, group.Id, new SetIgnoredNamesRequest(many)));
+        }
+
+        [Fact]
+        public async Task An_empty_list_clears_them()
+        {
+            var (ownerId, memberId, group) = await TwoOfUsAsync();
+            await Groups.SetIgnoredNamesAsync(ownerId, group.Id, new SetIgnoredNamesRequest(["Loyer"]));
+
+            var cleared = await Groups.SetIgnoredNamesAsync(
+                memberId, group.Id, new SetIgnoredNamesRequest([]));
+
+            cleared.IgnoredNamePatterns.ShouldBeNull();
+        }
+    }
 }

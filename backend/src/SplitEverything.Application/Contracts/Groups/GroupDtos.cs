@@ -38,6 +38,13 @@ public sealed record GroupMemberDto(
     /// <summary>Their colour in this group. Null on rows that predate the column.</summary>
     string? ColorHex = null);
 
+/// <summary>
+/// The names this group keeps out of its totals. The whole list every time: it is
+/// edited as a list on one screen, and a patch of one line would be a merge nobody
+/// asked for.
+/// </summary>
+public sealed record SetIgnoredNamesRequest(IReadOnlyList<string> Patterns);
+
 /// <summary>Changes one member's colour in one group.</summary>
 public sealed record SetMemberColorRequest(string ColorHex);
 
