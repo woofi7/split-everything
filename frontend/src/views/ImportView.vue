@@ -314,7 +314,7 @@ async function cancel(): Promise<void> {
             <button
               type="button"
               class="btn btn-press btn-secondary min-h-0 px-2 py-1 text-xs"
-              :class="row.action === 'ignore' ? 'border-brand-500 text-brand-400' : ''"
+              :class="row.action === 'ignore' ? 'border-brand-500 text-accent' : ''"
               :style="row.action === 'ignore' ? undefined : 'border-color: var(--border)'"
               @click="setAction(row.rowNumber, row.action === 'ignore' ? 'personal' : 'ignore')"
             >

@@ -25,24 +25,49 @@
 }
 
 /*
- * The surfaces carry the accent too.
+ * The surfaces wear the accent.
  *
- * Choosing a colour changes the whole background, not just the buttons: a tint of
- * the brand fill mixed into the neutral ink underneath. Mixed here rather than
- * worked out in script and set from there, because the brand token is the only
- * thing that changes and everything built on it follows on its own.
+ * Choosing a colour changes the whole screen, not just the buttons: the page, the
+ * cards, the inputs and the borders are all the accent, and the only thing that
+ * separates them is how light they are. Set here rather than worked out in script,
+ * because the brand token is the only thing that changes and everything built on it
+ * follows on its own.
  *
- * The tint is deliberately weak. It has to be enough to see the app is wearing a
- * colour and not enough to eat the contrast the text needs against it, and the
- * neutral theme has to still read as neutral.
+ * Fixed lightness, the accent's own hue, and a share of its chroma. That is the
+ * whole trick, and it is what a mix with a neutral ink could not do: mixing a colour
+ * into slate carries the colour's own lightness in with it, so at any strength worth
+ * seeing, amber came out three shades lighter than indigo and the contrast of every
+ * word on the screen moved with it. Pinning the lightness per layer and taking hue
+ * and chroma from the accent puts all eight themes on the same footing - the same
+ * contrast against the text, the same separation between a card and the page - and
+ * leaves the colour free to be as strong as it can be there.
+ *
+ * The share is there because sRGB is not a sphere. Ask for more chroma than it holds
+ * at a given lightness and the browser does not politely stop at the edge: it clips,
+ * and clipping bends the hue. Asked for everything, amber at this darkness came back
+ * maroon, which is not a shade of amber, it is a different colour with amber's name
+ * on it. Roughly half in the dark theme and a little under half in the light one is
+ * the point where every one of the eight still lands within a few degrees of the hue
+ * it was asked for.
+ *
+ * Every figure here is held to the text it carries. Measured, not estimated: the
+ * lightest surface of each theme keeps at least 4.5:1 against the muted text, the
+ * accent text, and the owed and owing colours, for all eight accents.
  */
 :root {
   color-scheme: dark;
 
+  /*
+   * The weaker mix, for a browser with no relative colour syntax. It is the palette
+   * this app wore before, so an older phone gets a quieter app rather than a broken
+   * one - a custom property the browser cannot compute does not fall back, it
+   * disappears, and every surface with it.
+   */
   --surface: color-mix(in oklab, var(--color-brand-600) 16%, var(--color-ink-900));
   --surface-raised: color-mix(in oklab, var(--color-brand-600) 18%, var(--color-ink-800));
   --surface-sunken: color-mix(in oklab, var(--color-brand-600) 14%, var(--color-ink-950));
   --border: color-mix(in oklab, var(--color-brand-600) 26%, var(--color-ink-700));
+  --accent-text: var(--color-brand-400);
   --text: var(--color-ink-50);
   --text-muted: var(--color-ink-400);
 }
@@ -50,13 +75,68 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  /* Lighter still: the same tint that reads as a wash on white would be a stain. */
   --surface: color-mix(in oklab, var(--color-brand-600) 6%, #ffffff);
   --surface-raised: color-mix(in oklab, var(--color-brand-600) 9%, #f8fafc);
   --surface-sunken: color-mix(in oklab, var(--color-brand-600) 12%, #eef2f7);
   --border: color-mix(in oklab, var(--color-brand-600) 22%, #dbe2ea);
+  --accent-text: color-mix(in oklab, var(--color-brand-600) 70%, var(--color-ink-900));
   --text: var(--color-ink-900);
-  --text-muted: var(--color-ink-500);
+
+  /*
+   * Darker than the dark theme's muted, and darker than it used to be. Small grey
+   * text on white was already thin at 3.9:1; on a surface carrying a real colour it
+   * would be unreadable.
+   */
+  --text-muted: var(--color-ink-700);
+
+  /*
+   * Money, in a light theme's own greens and reds.
+   *
+   * The dark theme's pair are bright enough to read on a dark surface and nowhere
+   * near dark enough to read on a light one - the green sat at 1.4:1 against the
+   * page, which is a figure nobody could read and the most important figure on the
+   * screen. These are the same two colours several shades down.
+   */
+  --color-owed: #065f46;
+  --color-owing: #9f1239;
+}
+
+@supports (color: oklch(from red l c h)) {
+  :root {
+    --surface: oklch(from var(--color-brand-600) 0.25 calc(c * 0.55) h);
+    --surface-raised: oklch(from var(--color-brand-600) 0.3 calc(c * 0.55) h);
+    --surface-sunken: oklch(from var(--color-brand-600) 0.19 calc(c * 0.55) h);
+    --border: oklch(from var(--color-brand-600) 0.48 c h);
+
+    /*
+     * Accent-coloured text, which is not the accent: a link in the brand colour on
+     * a surface in the brand colour is a link nobody can read. Lifted to a
+     * lightness that clears the surfaces below it and keeps the hue.
+     */
+    --accent-text: oklch(from var(--color-brand-600) 0.83 c h);
+
+    /*
+     * The quiet text belongs to the palette too. A neutral grey that looked right
+     * on nearly black reads as dirt on a surface with a colour in it, so this is
+     * the same hue with most of the chroma taken out - quiet against the text
+     * above it, and still part of the same screen.
+     */
+    --text-muted: oklch(from var(--color-brand-600) 0.78 calc(c * 0.25) h);
+  }
+
+  :root[data-theme='light'] {
+    /*
+     * A smaller share than the dark theme takes. There is very little room left in
+     * sRGB this close to white, so the same fraction that reads as a deep colour
+     * down there comes back up here as a clipped one: sky arrived as cyan.
+     */
+    --surface: oklch(from var(--color-brand-600) 0.95 calc(c * 0.4) h);
+    --surface-raised: oklch(from var(--color-brand-600) 0.91 calc(c * 0.4) h);
+    --surface-sunken: oklch(from var(--color-brand-600) 0.87 calc(c * 0.4) h);
+    --border: oklch(from var(--color-brand-600) 0.7 c h);
+    --accent-text: oklch(from var(--color-brand-600) 0.42 c h);
+    --text-muted: oklch(from var(--color-brand-600) 0.45 calc(c * 0.3) h);
+  }
 }
 
 /*
@@ -127,6 +207,19 @@ body {
 }
 
 /*
+ * Text in the accent: a quiet link, a small mark, the tab you are on.
+ *
+ * Its own token rather than one of the brand shades, because what reads on a
+ * surface depends on the surface: the light shade that stood out on a nearly black
+ * page disappears against a page wearing the same colour, and on the light theme it
+ * was never readable at all. This is the shade that clears whichever surface the
+ * theme put underneath it.
+ */
+@utility text-accent {
+  color: var(--accent-text);
+}
+
+/*
  * Buttons, defined once.
  *
  * Every button used to be a border with no fill, which on a dark surface made it
@@ -173,7 +266,9 @@ body {
   }
 
   &:focus-visible {
-    outline: 2px solid var(--color-brand-400);
+    /* The accent text shade, not the accent: a ring in the same colour as the
+       surface it is drawn on is a ring nobody can find with a keyboard. */
+    outline: 2px solid var(--accent-text);
     outline-offset: 2px;
   }
 

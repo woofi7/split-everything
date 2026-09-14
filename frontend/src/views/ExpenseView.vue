@@ -164,7 +164,7 @@ async function remove(): Promise<void> {
           <MoneyAmount :amount="expense.amount" :currency="expense.currency" size="lg" />
           <span
             v-if="expense.pending"
-            class="rounded-full bg-brand-600/20 px-2 py-0.5 text-xs text-brand-400"
+            class="rounded-full bg-brand-600/20 px-2 py-0.5 text-xs text-accent"
           >{{ t('Waiting to sync') }}
           </span>
         </div>

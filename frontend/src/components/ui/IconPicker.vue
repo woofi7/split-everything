@@ -298,7 +298,7 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
                   class="tap-target flex w-full flex-col items-center gap-1 rounded-lg border p-2 text-[10px] leading-tight"
                   :class="
                     result.icon.name === modelValue
-                      ? 'border-brand-500 text-brand-400'
+                      ? 'border-brand-500 text-accent'
                       : result.icon.name === activeIcon?.name
                         ? 'border-[var(--color-ink-500)]'
                         : 'border-transparent text-[var(--text-muted)]'
@@ -309,7 +309,7 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
                   <FontAwesomeIcon :icon="result.icon.definition" class="h-5 w-5" aria-hidden="true" />
                   <span class="w-full truncate">
                     <span v-for="(part, index) in captionFor(result).parts" :key="index">
-                      <mark v-if="part.match" class="bg-transparent font-semibold text-brand-400">{{ part.text }}</mark>
+                      <mark v-if="part.match" class="bg-transparent font-semibold text-accent">{{ part.text }}</mark>
                       <template v-else>{{ part.text }}</template>
                     </span>
                   </span>

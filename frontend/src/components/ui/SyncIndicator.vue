@@ -34,7 +34,7 @@ const state = computed(() => {
       label: props.isOffline
         ? t('Offline, {count} waiting', { count: props.pendingCount })
         : t('{count} waiting to sync', { count: props.pendingCount }),
-      tone: 'text-brand-400',
+      tone: 'text-accent',
     }
   }
   if (props.isOffline) return { key: 'offline', label: t('Offline'), tone: 'text-[var(--text-muted)]' }

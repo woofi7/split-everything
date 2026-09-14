@@ -13,6 +13,11 @@ coverage/
 
 # Node
 node_modules/
+# Typechecking the configs emits these beside their sources, and Vite reads the .js
+# in preference to the .ts it came from.
+frontend/vite.config.js
+frontend/vitest.config.js
+frontend/capacitor.config.js
 dist/
 dist-ssr/
 .vite/

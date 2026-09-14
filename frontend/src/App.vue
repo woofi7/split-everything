@@ -43,7 +43,30 @@ watchEffect(() => {
   for (const [token, value] of Object.entries(accentVariables(accent.value))) {
     root.style.setProperty(token, value)
   }
+
+  paintBrowserChrome()
 })
+
+/**
+ * Tells the browser what colour the page is.
+ *
+ * The phone paints its own bars around the app - the status bar above, the gesture
+ * area below - from this, and it is a single colour declared in the document head,
+ * so it knew nothing of the accent and stayed the old slate whatever the app was
+ * wearing. Now that a group can turn the whole screen indigo or rose, a strip of
+ * unrelated navy at the top of it is the first thing you see.
+ *
+ * Read back off the element rather than worked out here, because the surfaces are
+ * the stylesheet's business: it derives them from the brand token in a way this has
+ * no need to know.
+ */
+function paintBrowserChrome(): void {
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (!meta) return
+
+  const surface = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()
+  if (surface) meta.setAttribute('content', surface)
+}
 
 onMounted(() => {
   // Coming back online is the moment the queue should drain, and it is also when
