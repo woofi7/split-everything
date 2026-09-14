@@ -19,7 +19,14 @@ export default defineConfig({
     environment: 'jsdom',
     // Vite inlines import.meta.env.VITE_* at transform time, so a value has to be
     // present here for the configured branch of src/api/config.ts to be reachable.
-    env: { VITE_API_BASE_URL: '/api' },
+    //
+    // The timezone is pinned for the same kind of reason: the app decides what
+    // "today" is from the device's own clock, and a suite that runs in UTC on a
+    // build machine and in Eastern time on a laptop cannot say whether that is
+    // right. Eastern, because that is where this is used and because it is behind
+    // UTC - an evening there is already tomorrow in UTC, which is the case that
+    // was wrong.
+    env: { VITE_API_BASE_URL: '/api', TZ: 'America/Toronto' },
     globals: true,
     setupFiles: ['tests/setup.ts'],
     include: ['tests/**/*.spec.ts'],
