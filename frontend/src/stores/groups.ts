@@ -17,6 +17,7 @@ interface GroupSummaryDto {
   baseCurrency: string
   iconName: string | null
   colorHex: string
+  themeName?: string | null
   isArchived: boolean
   myNetBalance: number
   memberCount?: number
@@ -217,6 +218,7 @@ export const useGroupsStore = defineStore('groups', () => {
     description?: string | null
     iconName?: string | null
     colorHex?: string | null
+    themeName?: string | null
     placeholderMemberNames?: string[]
   }): Promise<LocalGroup> {
     const dto = await requireApi().post<GroupSummaryDto>('/groups', request)
@@ -234,6 +236,8 @@ export const useGroupsStore = defineStore('groups', () => {
       description: string | null
       iconName: string | null
       colorHex: string | null
+      /** The accent the app wears for this group, by name, or null for none. */
+      themeName: string | null
       baseCurrency: string
       // The group's own fields and how it splits are the same PATCH, so a screen
       // that edits both can save both in one request rather than half-succeeding.
@@ -247,6 +251,7 @@ export const useGroupsStore = defineStore('groups', () => {
     const payload: Record<string, unknown> = { ...changes }
     if ('iconName' in payload && payload.iconName === null) payload.iconName = ''
     if ('description' in payload && payload.description === null) payload.description = ''
+    if ('themeName' in payload && payload.themeName === null) payload.themeName = ''
 
     // An empty map is the explicit clear, matching the server's convention, and
     // equal needs no values at all.
@@ -461,6 +466,10 @@ function toLocalGroup(dto: GroupSummaryDto, existing: LocalGroup[]): LocalGroup 
     baseCurrency: dto.baseCurrency,
     iconName: dto.iconName,
     colorHex: dto.colorHex,
+    // Read straight from the answer, with no fallback to what was cached: both the
+    // list and the detail carry it, so a null here is a group whose colour was
+    // cleared rather than one this read did not mention.
+    themeName: dto.themeName ?? null,
     isArchived: dto.isArchived,
     lineageId: dto.lineageId ?? previous?.lineageId ?? '',
     members: dto.members ?? previous?.members ?? [],

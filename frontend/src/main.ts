@@ -99,6 +99,9 @@ async function bootstrap(): Promise<void> {
 
   const expenses = useExpensesStore()
   expenses.attachSync(new SyncEngine(new HttpSyncApi(api)))
+  // For moving an expense between groups, which is the one write there that the
+  // outbox cannot carry.
+  expenses.attachApi(api)
 
   // A replica another tab is holding at an older schema version is a wait with no
   // end, so it is raced rather than waited out, and the app stops there: every

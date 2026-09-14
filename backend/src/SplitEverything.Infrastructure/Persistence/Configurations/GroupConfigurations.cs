@@ -16,6 +16,7 @@ public class GroupConfiguration : IEntityTypeConfiguration<Group>
         builder.Property(g => g.BaseCurrency).HasMaxLength(3).IsRequired();
         builder.Property(g => g.IconName).HasMaxLength(48);
         builder.Property(g => g.ColorHex).HasMaxLength(9).IsRequired();
+        builder.Property(g => g.ThemeName).HasMaxLength(32);
         builder.Property(g => g.VectorClockJson).HasColumnType("jsonb").IsRequired();
         builder.Property(g => g.DefaultSplitValuesJson).HasColumnType("jsonb");
         builder.Property(g => g.IgnoredNamePatternsJson).HasColumnType("jsonb");
@@ -80,7 +81,6 @@ public class GroupInviteConfiguration : IEntityTypeConfiguration<GroupInvite>
             .HasForeignKey(i => i.GroupId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.Ignore(i => i.IsRedeemable);
     }
 }
 

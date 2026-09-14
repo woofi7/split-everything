@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import GroupPicker from '@/components/groups/GroupPicker.vue'
 import { resolveIcon } from '@/domain/icons'
+import { groupColor } from '@/domain/themes'
 import { useGroupsStore } from '@/stores/groups'
 
 /**
@@ -32,7 +33,7 @@ const icon = computed(() => resolveIcon(group.value?.iconName ?? null))
     type="button"
     data-testid="group-mark"
     class="btn-press mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white"
-    :style="{ backgroundColor: group.colorHex || '#4f46e5' }"
+    :style="{ backgroundColor: groupColor(group) }"
     :aria-label="`Group: ${group.name}. Change group`"
     :title="`${group.name} - change group`"
     aria-haspopup="dialog"

@@ -19,6 +19,12 @@ export interface LocalGroup {
   baseCurrency: string
   iconName?: string | null
   colorHex: string
+  /**
+   * The accent the app wears while this group is the one being looked at, by name,
+   * or null when the group has no colour of its own and each person's account
+   * setting stands.
+   */
+  themeName?: string | null
   isArchived: boolean
   lineageId: string
   members: LocalMember[]

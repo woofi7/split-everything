@@ -93,6 +93,70 @@ describe('GroupSettingsView', () => {
       )
     })
 
+    /**
+     * The group's colour.
+     *
+     * Set on the group, so everyone in it sees the same one, and worn by the whole
+     * app while that group is the one being looked at. Which is why it can be
+     * unset: a group with no colour of its own leaves each person's own account
+     * colour alone.
+     */
+    describe('the group colour', () => {
+      it('saves the colour with the rest of the settings', async () => {
+        const client = api()
+        const { wrapper } = await mountView(GroupSettingsView, { api: client })
+        await settle()
+
+        await wrapper.find('[data-testid="accent-teal"]').trigger('click')
+        await settle(1)
+        await wrapper.find('[data-testid="save-settings"]').trigger('click')
+        await settle()
+
+        expect(client.patch).toHaveBeenCalledWith(
+          `/groups/${GROUP_ID}`,
+          expect.objectContaining({ themeName: 'teal' }),
+        )
+      })
+
+      it('shows the one the group is already wearing', async () => {
+        const { wrapper } = await mountView(GroupSettingsView, {
+          api: api({ '/groups': () => testGroup({ themeName: 'amber' }) }),
+          groups: [testGroup({ themeName: 'amber' })],
+        })
+        await settle()
+
+        expect(wrapper.find('[data-testid="accent-amber"]').attributes('aria-pressed')).toBe('true')
+      })
+
+      it('gives the group back to whatever colour each person chose', async () => {
+        const client = api({ '/groups': () => testGroup({ themeName: 'amber' }) })
+        const { wrapper } = await mountView(GroupSettingsView, {
+          api: client,
+          groups: [testGroup({ themeName: 'amber' })],
+        })
+        await settle()
+
+        await wrapper.find('[data-testid="clear-group-colour"]').trigger('click')
+        await settle(1)
+        await wrapper.find('[data-testid="save-settings"]').trigger('click')
+        await settle()
+
+        // Null, which the store sends as the empty string the server reads as a
+        // clear rather than as "leave it alone".
+        expect(client.patch).toHaveBeenCalledWith(
+          `/groups/${GROUP_ID}`,
+          expect.objectContaining({ themeName: '' }),
+        )
+      })
+
+      it('offers nothing to clear when the group has no colour of its own', async () => {
+        const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+        await settle()
+
+        expect(wrapper.find('[data-testid="clear-group-colour"]').exists()).toBe(false)
+      })
+    })
+
     it('goes away once it is saved', async () => {
       const client = api()
       const { wrapper } = await mountView(GroupSettingsView, { api: client })

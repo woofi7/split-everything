@@ -59,6 +59,23 @@ export function resolveAccent(name: string | null | undefined): AccentTheme {
 }
 
 /**
+ * The colour that stands for a group: its own accent where it has one, and the
+ * colour stored on the group where it does not.
+ *
+ * One answer for the mark in the corner, the picker and the settings screen, so a
+ * group that is wearing teal is never a teal background with an indigo dot beside
+ * its name.
+ */
+export function groupColor(
+  group: { themeName?: string | null; colorHex?: string | null } | null | undefined,
+): string {
+  const theme = findAccent(group?.themeName)
+  if (theme) return theme.shades[2]
+
+  return group?.colorHex || resolveAccent(DEFAULT_ACCENT).shades[2]
+}
+
+/**
  * The theme as the variables the stylesheet reads.
  *
  * Set on the root element rather than swapped by a class, so every utility built

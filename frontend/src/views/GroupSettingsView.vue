@@ -8,7 +8,9 @@ import AppShell from '@/components/layout/AppShell.vue'
 import IconPicker from '@/components/ui/IconPicker.vue'
 import PersonPicker from '@/components/groups/PersonPicker.vue'
 import ColorChoice from '@/components/ui/ColorChoice.vue'
+import AccentChoice from '@/components/ui/AccentChoice.vue'
 import { resolveIcon } from '@/domain/icons'
+import { groupColor } from '@/domain/themes'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { compileNamePattern } from '@/domain/namePatterns'
@@ -173,6 +175,15 @@ const myMemberId = computed(() =>
 )
 const name = ref('')
 const iconName = ref<string | null>(null)
+/**
+ * The colour this group wears, by name, or empty for none.
+ *
+ * A group setting rather than a personal one: it is the group's colour, so it is
+ * the same for everyone in it, and while the app is on this group it is the
+ * background and every card. Empty leaves each person's own account colour alone,
+ * which is what a group that has never been given one does.
+ */
+const themeName = ref('')
 const isPickingIcon = ref(false)
 const inviteEmail = ref('')
 const newInvite = ref<InviteDto | null>(null)
@@ -344,6 +355,7 @@ onMounted(async () => {
   const loaded = await groups.get(groupId.value)
   name.value = loaded?.name ?? ''
   iconName.value = loaded?.iconName ?? null
+  themeName.value = loaded?.themeName ?? ''
   readSplitFromGroup()
 
   // For the match counts beside the patterns. Reads the local replica, so it costs
@@ -376,6 +388,7 @@ const isDirty = computed(() => {
 
   if (name.value.trim() !== current.name) return true
   if ((iconName.value ?? null) !== (current.iconName ?? null)) return true
+  if (themeName.value !== (current.themeName ?? '')) return true
 
   const storedPatterns = current.ignoredNamePatterns ?? []
   const patterns = ignoredPatterns.value.map((pattern) => pattern.trim()).filter(Boolean)
@@ -408,6 +421,7 @@ function revert(): void {
   const current = group.value
   name.value = current?.name ?? ''
   iconName.value = current?.iconName ?? null
+  themeName.value = current?.themeName ?? ''
   pendingColours.value = {}
   readSplitFromGroup()
   message.value = null
@@ -432,6 +446,8 @@ async function save(): Promise<void> {
       await groups.update(groupId.value, {
         name: name.value,
         iconName: iconName.value,
+        // Empty is the explicit clear, which the store sends as such.
+        themeName: themeName.value || null,
         defaultSplitType: splitType.value,
         defaultSplitValues: splitNeedsValues.value ? splitValues.value : null,
         // Blank rows are somebody part-way through typing, not a pattern.
@@ -569,7 +585,7 @@ async function unarchive(): Promise<void> {
           <button
             type="button"
             class="tap-target flex h-11 w-11 items-center justify-center rounded-lg text-white"
-            :style="{ backgroundColor: group?.colorHex ?? '#4f46e5' }"
+            :style="{ backgroundColor: groupColor({ themeName, colorHex: group?.colorHex }) }"
             :data-icon="icon.name"
             :aria-label="`Group icon: ${icon.label}. Choose a different one`"
             @click="isPickingIcon = true"
@@ -588,6 +604,34 @@ async function unarchive(): Promise<void> {
             style="border-color: var(--border)"
           />
         </label>
+      </div>
+
+      <!--
+        The group's colour, with the group's name and icon, because it is the same
+        kind of thing: what this group looks like. Chosen from the eight the app
+        has rather than from a colour wheel, so each one is a set of shades that
+        stays readable in the dark and in the light, and so the same name means the
+        same colour on every device.
+      -->
+      <div class="mt-1 flex flex-col gap-2">
+        <span class="text-sm text-[var(--text-muted)]">{{ t('Group colour') }}</span>
+        <p class="text-xs text-[var(--text-muted)]">{{ t('Set for everyone in the group. The whole app wears it while you are on this group.') }}
+        </p>
+
+        <AccentChoice
+          :value="themeName"
+          :label="t('Group colour')"
+          @pick="themeName = $event"
+        />
+
+        <button
+          v-if="themeName"
+          type="button"
+          data-testid="clear-group-colour"
+          class="self-start text-xs text-brand-400"
+          @click="themeName = ''"
+        >{{ t('No colour of its own') }}
+        </button>
       </div>
 
       <!-- Enter still saves, but the button that does it is at the foot of the

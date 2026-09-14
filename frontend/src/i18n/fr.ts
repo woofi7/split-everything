@@ -163,6 +163,7 @@ export const fr: Record<string, string> = {
 
   // An expense
   Date: 'Date',
+  Today: "Aujourd'hui",
   'What was it': "C'était quoi",
   Group: 'Groupe',
   Split: 'Partage',
@@ -182,6 +183,30 @@ export const fr: Record<string, string> = {
   'Keep it': 'La garder',
   'That expense is not on this device yet.': "Cette dépense n'est pas encore sur cet appareil.",
   'Add a comment': 'Ajouter un commentaire',
+
+  // A group's colour
+  'Group colour': 'Couleur du groupe',
+  'Set for everyone in the group. The whole app wears it while you are on this group.':
+    "Définie pour tout le monde dans le groupe. L'application entière la porte tant que vous êtes sur ce groupe.",
+  'No colour of its own': 'Aucune couleur propre',
+
+  // Moving an expense to another group
+  'Move to another group': 'Déplacer vers un autre groupe',
+  'It goes with its history, its comments and who paid. Anything typed above and not saved stays behind.':
+    "Elle part avec son historique, ses commentaires et qui a payé. Ce qui est saisi ci-dessus sans être enregistré reste ici.",
+  'There is no other group in {currency} to move this to.':
+    "Il n'y a aucun autre groupe en {currency} vers lequel la déplacer.",
+  'Which group': 'Quel groupe',
+  'Choose a group': 'Choisissez un groupe',
+  'These people are not in {group}. Say who they are there.':
+    'Ces personnes ne sont pas dans {group}. Indiquez qui elles y sont.',
+  'Choose someone': 'Choisissez quelqu\'un',
+  Someone: 'Quelqu\'un',
+  'Move it': 'Déplacer',
+  Moving: 'Déplacement',
+  'Could not move the expense.': 'Impossible de déplacer la dépense.',
+  'Could not read who is in that group. Moving an expense needs a connection.':
+    "Impossible de lire qui fait partie de ce groupe. Déplacer une dépense exige une connexion.",
 
   // A group
   Icon: 'Icône',

@@ -18,7 +18,8 @@ Built to the spec in [docs/spec.md](docs/spec.md).
 - **Imports** a Settle Up CSV export (upload, map, preview, commit) and a bank or
   credit-card statement parsed entirely in the browser.
 - **Groups** can be archived, merged, split apart, and individual expenses moved
-  between them carrying their full history.
+  between them carrying their full history. Each one can wear a colour of its own,
+  which the whole app takes on while that group is the one being looked at.
 - **Recurring expenses**, receipts, threaded comments, multi-currency
   with frozen rates, push notifications, and a stats dashboard.
 
