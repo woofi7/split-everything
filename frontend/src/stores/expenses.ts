@@ -587,6 +587,42 @@ export const useExpensesStore = defineStore('expenses', () => {
   }
 
   /**
+   * Takes back a settlement.
+   *
+   * Recorded money can be recorded wrongly - the same transfer entered twice, or a
+   * payment that never happened - and until now the app could write one and never
+   * show it again, which left the balance wrong with nothing to press. A tombstone
+   * like any other delete, so the other phone learns of it rather than holding a
+   * payment this one has forgotten.
+   */
+  async function unsettle(settlementId: string): Promise<void> {
+    const existing = await db.settlements.get(settlementId)
+    if (!existing) throw new Error('That settlement is not on this device.')
+
+    const tombstoned = { ...existing, isDeleted: true, pending: true }
+    await db.settlements.put(tombstoned)
+    replaceSettlement(tombstoned)
+
+    await requireSync().enqueue({
+      entityType: 'Settlement',
+      entityId: settlementId,
+      operation: 'Delete',
+      groupId: existing.groupId,
+      payload: { id: settlementId },
+    })
+
+    await refreshPendingCount()
+    syncSoon()
+  }
+
+  function replaceSettlement(settlement: LocalSettlement): void {
+    const index = settlements.value.findIndex((candidate) => candidate.id === settlement.id)
+    if (index >= 0) settlements.value[index] = settlement
+    else settlements.value.push(settlement)
+    settlements.value = [...settlements.value]
+  }
+
+  /**
    * Who paid an expense, in base currency, whatever shape the stored row is in.
    *
    * A row saved by a build that only knew one payer has no payers field, and the
@@ -882,6 +918,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     comment,
     removeComment,
     settle,
+    unsettle,
     balanceFor,
     settleUpPlan,
     rawDebts,

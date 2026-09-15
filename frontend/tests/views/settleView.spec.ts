@@ -249,3 +249,112 @@ describe('SettleView cancelling debts across groups', () => {
     expect(api.get).not.toHaveBeenCalledWith('/settlements/cross-group', expect.anything())
   })
 })
+
+/**
+ * A settlement could be recorded and never seen again: the balance moved, and
+ * there was nothing on any screen saying why or letting anybody take it back. Two
+ * people offset their debts across groups, the form kept the figure it had been
+ * prefilled with, and the button underneath recorded the same debt a second time
+ * six seconds later - with no way to undo it.
+ */
+describe('SettleView showing what is already settled', () => {
+  const settled = (overrides: Record<string, unknown> = {}) => ({
+    id: 'settlement-1',
+    groupId: GROUP_ID,
+    fromMemberId: BOB,
+    toMemberId: ALICE,
+    amount: 30,
+    currency: 'CAD',
+    amountInBaseCurrency: 30,
+    settledAt: '2026-09-14T12:00:00Z',
+    note: null,
+    isDeleted: false,
+    vectorClock: {},
+    serverSeq: 1,
+    pending: false,
+    ...overrides,
+  })
+
+  it('lists what the group has already been told about', async () => {
+    query = {}
+
+    const { wrapper } = await mountView(SettleView, {
+      api: api(),
+      expenses: [testExpense()],
+      settlements: [settled({ note: 'Cancelled against Ski trip' })],
+    })
+    await settle()
+
+    expect(wrapper.findAll('[data-testid="settlement-row"]')).toHaveLength(1)
+    expect(textOf(wrapper)).toContain('Bob paid Alice')
+    expect(textOf(wrapper)).toContain('Cancelled against Ski trip')
+  })
+
+  it('takes one back, and stops suggesting the transfer it paid', async () => {
+    query = {}
+
+    const { wrapper, expensesStore } = await mountView(SettleView, {
+      api: api(),
+      expenses: [testExpense()],
+      settlements: [settled()],
+    })
+    await settle()
+
+    await wrapper.find('[data-testid="unsettle-settlement-1"]').trigger('click')
+    await settle()
+
+    // A tombstone, so the other phone learns of it too rather than holding a
+    // payment this one has forgotten.
+    expect(expensesStore.settlementsForGroup(GROUP_ID)).toHaveLength(0)
+    expect(await db.outbox.where('entityId').equals('settlement-1').count()).toBe(1)
+  })
+
+  it('empties the amount once an offset has cleared what it was for', async () => {
+    query = { from: BOB, to: ALICE, amount: '925' }
+
+    const group = testGroup()
+    group.members = group.members.map((member) =>
+      member.id === BOB ? { ...member, userId: 'user-bob', isPlaceholder: false } : member,
+    )
+
+    const { wrapper } = await mountView(SettleView, {
+      api: fakeApi({
+        '/groups': () => group,
+        '/settlements/cross-group': () => ({
+          withUserId: 'user-bob',
+          withName: 'Bob',
+          groups: [
+            { groupId: GROUP_ID, groupName: 'Roommates', currency: 'CAD', net: -925, canSettle: true },
+            { groupId: 'group-2', groupName: 'Ski trip', currency: 'CAD', net: 925, canSettle: true },
+          ],
+          offsets: [
+            {
+              owedGroupId: 'group-2',
+              owedGroupName: 'Ski trip',
+              owingGroupId: GROUP_ID,
+              owingGroupName: 'Roommates',
+              amount: 925,
+              currency: 'CAD',
+            },
+          ],
+          remaining: [{ currency: 'CAD', net: 0, groupId: null, groupName: null }],
+        }),
+        '/settlements/cross-group/offset': () => ({
+          applied: [],
+          remaining: [{ currency: 'CAD', net: 0, groupId: null, groupName: null }],
+          settlementsRecorded: 2,
+        }),
+      }),
+      groups: [group],
+      expenses: [],
+    })
+    await settle()
+
+    await wrapper.find('[data-testid="offset-across-groups"]').trigger('click')
+    await settle()
+
+    // The figure that was on screen has been cancelled, so the button below it
+    // must not still be armed with it.
+    expect((wrapper.find('input[inputmode="decimal"]').element as HTMLInputElement).value).toBe('')
+  })
+})

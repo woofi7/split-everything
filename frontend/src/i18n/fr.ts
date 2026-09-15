@@ -190,6 +190,11 @@ export const fr: Record<string, string> = {
     "Définie pour tout le monde dans le groupe. L'application entière la porte tant que vous êtes sur ce groupe.",
   'No colour of its own': 'Aucune couleur propre',
 
+  // Settlements a group already holds
+  'Already settled': 'Déjà réglé',
+  'Take this settlement back': 'Annuler ce règlement',
+  'Could not take that settlement back.': "Impossible d'annuler ce règlement.",
+
   // Cancelling debts that face each other across two groups
   'You also owe each other elsewhere': "Vous vous devez aussi de l'argent ailleurs",
   '{name} and you have balances facing both ways. Cancelling them out moves no money: it writes a settlement in each group so what is really outstanding sits in one place.':

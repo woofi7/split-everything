@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from '@/i18n'
+import { intlLocale, t } from '@/i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -104,6 +104,12 @@ async function offsetAcrossGroups(): Promise<void> {
 
     await loadCrossGroup()
     await expenses.hydrate()
+
+    // The form was filled from a suggestion the offset has just made obsolete.
+    // Left standing, the button under it records the same debt a second time,
+    // which is what happened the first time this shipped: the offset went in, the
+    // amount stayed on screen, and it was settled again six seconds later.
+    followThePlan()
   } catch (caught) {
     offsetError.value =
       caught instanceof Error ? caught.message : t('Could not cancel those out.')
@@ -112,10 +118,48 @@ async function offsetAcrossGroups(): Promise<void> {
   }
 }
 
+/**
+ * Points the form at what is still outstanding, or empties it when nothing is.
+ *
+ * The amount box is the dangerous part of this screen: it holds a number somebody
+ * tapped a while ago, and the button below it is "record a payment of exactly
+ * that".
+ */
+function followThePlan(): void {
+  const next = plan.value.find(
+    (transfer) =>
+      (transfer.fromMemberId === fromMemberId.value && transfer.toMemberId === toMemberId.value) ||
+      (transfer.fromMemberId === toMemberId.value && transfer.toMemberId === fromMemberId.value),
+  )
+
+  if (next) usePlan(next)
+  else amountInput.value = ''
+}
+
 function usePlan(transfer: { fromMemberId: string; toMemberId: string; amount: number }): void {
   fromMemberId.value = transfer.fromMemberId
   toMemberId.value = transfer.toMemberId
   amountInput.value = String(transfer.amount)
+}
+
+/** The last few, newest first: enough to spot one entered twice. */
+const recentSettlements = computed(() => expenses.settlementsForGroup(groupId.value).slice(0, 6))
+
+const unsettleError = ref<string | null>(null)
+
+const settledOn = (when: string) =>
+  new Date(when).toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
+
+async function unsettle(settlementId: string): Promise<void> {
+  unsettleError.value = null
+
+  try {
+    await expenses.unsettle(settlementId)
+    followThePlan()
+  } catch (caught) {
+    unsettleError.value =
+      caught instanceof Error ? caught.message : t('Could not take that settlement back.')
+  }
 }
 
 async function save(): Promise<void> {
@@ -220,6 +264,48 @@ async function save(): Promise<void> {
             : t('Cancel out {amount}', { amount: formatMoney(offsetTotal, crossGroup.offsets[0].currency) })
         }}
       </button>
+    </section>
+
+    <!--
+      What this group has already been told about.
+      
+      A settlement could be written and never seen again: the balance moved and
+      there was nothing on any screen to say why, or to press when it was wrong.
+      Which is how one recorded twice stayed recorded twice.
+    -->
+    <section v-if="recentSettlements.length > 0" class="surface-card mb-5 p-4">
+      <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Already settled') }}</h2>
+      <ul class="flex flex-col gap-2 text-sm">
+        <li
+          v-for="entry in recentSettlements"
+          :key="entry.id"
+          data-testid="settlement-row"
+          class="flex items-center justify-between gap-2"
+        >
+          <span class="min-w-0">
+            <span class="block truncate">
+              {{ memberName(entry.fromMemberId) }} paid {{ memberName(entry.toMemberId) }}
+            </span>
+            <span class="block truncate text-xs text-[var(--text-muted)]">
+              {{ settledOn(entry.settledAt) }}<template v-if="entry.note"> - {{ entry.note }}</template>
+            </span>
+          </span>
+          <span class="flex shrink-0 items-center gap-2">
+            <MoneyAmount :amount="entry.amount" :currency="entry.currency" size="sm" />
+            <button
+              type="button"
+              :data-testid="`unsettle-${entry.id}`"
+              class="tap-target px-2 text-xs text-[var(--text-muted)]"
+              :aria-label="t('Take this settlement back')"
+              :title="t('Take this settlement back')"
+              @click="unsettle(entry.id)"
+            >
+              <span aria-hidden="true">x</span>
+            </button>
+          </span>
+        </li>
+      </ul>
+      <p v-if="unsettleError" class="mt-2 text-sm text-owing" role="alert">{{ unsettleError }}</p>
     </section>
 
     <form class="flex flex-col gap-5" @submit.prevent="save">
