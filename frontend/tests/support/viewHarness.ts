@@ -329,6 +329,9 @@ export async function mountView(
 
   const expensesStore = useExpensesStore()
   expensesStore.attachSync(new SyncEngine(fakeSyncApi(), () => options.online ?? false))
+  // For the writes that cannot be queued - moving an expense, cancelling debts
+  // across two groups - which the store asks for directly, as the app does.
+  expensesStore.attachApi(api as never)
 
   const wrapper = mount(component, {
     global: {

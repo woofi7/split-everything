@@ -296,6 +296,255 @@ public sealed class SettlementService(
         return (expenses, settlements);
     }
 
+    public async Task<CrossGroupBalanceDto> GetCrossGroupBalanceAsync(
+        Guid userId, Guid withUserId, CancellationToken ct = default)
+    {
+        if (userId == withUserId)
+            throw new ValidationException("Pick somebody else to settle with.");
+
+        var other = await db.Users.FirstOrDefaultAsync(u => u.Id == withUserId, ct)
+                    ?? throw new NotFoundException($"User {withUserId}");
+
+        var shared = await SharedGroupsAsync(userId, withUserId, ct);
+        var offsets = PlanOffsets(shared);
+
+        return new CrossGroupBalanceDto(
+            withUserId,
+            other.DisplayName,
+            shared.Select(g => new CrossGroupGroupDto(g.GroupId, g.Name, g.Currency, g.Net, g.CanSettle)).ToList(),
+            offsets,
+            Remainders(shared, offsets));
+    }
+
+    public async Task<OffsetAcrossGroupsResult> OffsetAcrossGroupsAsync(
+        Guid userId, OffsetAcrossGroupsRequest request, CancellationToken ct = default)
+    {
+        if (userId == request.WithUserId)
+            throw new ValidationException("Pick somebody else to settle with.");
+
+        var shared = await SharedGroupsAsync(userId, request.WithUserId, ct);
+        var offsets = PlanOffsets(shared);
+
+        if (offsets.Count == 0)
+            throw new ValidationException(
+                "There is nothing to cancel out: what you owe each other does not face in both directions.");
+
+        var byGroup = shared.ToDictionary(g => g.GroupId);
+        var now = clock.UtcNow;
+        var deviceId = GroupService.DeviceFor(userId);
+        var touched = new Dictionary<Guid, long>();
+        var recorded = new List<Settlement>();
+
+        foreach (var offset in offsets)
+        {
+            var owed = byGroup[offset.OwedGroupId];
+            var owing = byGroup[offset.OwingGroupId];
+
+            // Two settlements, opposite ways round, written as a pair. The one in
+            // the group where they owe has them paying; the one in the group where
+            // the caller owes has the caller paying. Together they move debt from
+            // one group to the other and leave the total between the two people
+            // exactly as it was.
+            var theyPay = NewOffsetSettlement(owed, owed.TheirMemberId, owed.MyMemberId, offset.Amount,
+                now, request.Note, owing.Name);
+            var iPay = NewOffsetSettlement(owing, owing.MyMemberId, owing.TheirMemberId, offset.Amount,
+                now, request.Note, owed.Name);
+
+            theyPay.OffsetSettlementId = iPay.Id;
+            iPay.OffsetSettlementId = theyPay.Id;
+
+            db.Settlements.Add(theyPay);
+            db.Settlements.Add(iPay);
+            recorded.Add(theyPay);
+            recorded.Add(iPay);
+
+            foreach (var (settlement, group, counterpart) in new[]
+                     {
+                         (theyPay, owed, owing.Name),
+                         (iPay, owing, owed.Name)
+                     })
+            {
+                var seq = await writer.RecordAsync(settlement, SyncEntityType.Settlement, group.GroupId,
+                    SyncOperation.Create, deviceId, userId, SettlementPayload(settlement), ct: ct);
+                touched[group.GroupId] = seq;
+
+                await activity.RecordAsync(group.GroupId, ActivityKind.SettlementCreated, userId, group.MyMemberId,
+                    SyncEntityType.Settlement, settlement.Id,
+                    $"{Format(offset.Amount, group.Currency)} cancelled against {counterpart}",
+                    new { settlement.Amount, settlement.Currency }, ct);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        var clocks = recorded.ToDictionary(s => s.Id, s => s.Clock.Counters);
+        db.ChangeTracker.Clear();
+
+        foreach (var (groupId, seq) in touched)
+        {
+            var accepted = recorded
+                .Where(s => s.GroupId == groupId)
+                .Select(s => new SyncAcceptedDto(s.Id, s.Id, s.ServerSeq, clocks[s.Id]))
+                .ToList();
+
+            await broadcaster.BroadcastAsync(groupId, new SyncPushResult(
+                accepted, [], [], new Dictionary<Guid, long> { [groupId] = seq }), deviceId, ct);
+        }
+
+        // Read again rather than reused: the offsets changed the ledgers they were
+        // planned from, and what is left is the thing worth reporting back.
+        var after = await SharedGroupsAsync(userId, request.WithUserId, ct);
+
+        return new OffsetAcrossGroupsResult(offsets, Remainders(after, []), recorded.Count);
+    }
+
+    /// <summary>One shared group, seen from the caller's side.</summary>
+    private sealed record SharedGroup(
+        Guid GroupId, string Name, string Currency, Guid LineageId, Guid MyMemberId, Guid TheirMemberId,
+        decimal Net, bool CanSettle);
+
+    /// <summary>
+    /// Every group both people are active in, with what they owe each other there.
+    ///
+    /// The figure is the pairwise debt, which is the one the who-owes-whom view
+    /// shows: what these two owe each other directly, rather than a share of a
+    /// simplified plan that may route through somebody else entirely.
+    /// </summary>
+    private async Task<List<SharedGroup>> SharedGroupsAsync(Guid userId, Guid withUserId, CancellationToken ct)
+    {
+        var mine = await db.GroupMembers
+            .Where(m => m.UserId == userId && m.Status == MembershipStatus.Active && !m.IsDeleted)
+            .Select(m => new
+            {
+                m.Id, m.GroupId, m.Group!.Name, m.Group.BaseCurrency, m.Group.LineageId, m.Group.IsArchived
+            })
+            .ToListAsync(ct);
+
+        var theirs = await db.GroupMembers
+            .Where(m => m.UserId == withUserId && m.Status == MembershipStatus.Active && !m.IsDeleted)
+            .Select(m => new { m.Id, m.GroupId })
+            .ToListAsync(ct);
+
+        var theirMember = theirs.ToDictionary(m => m.GroupId, m => m.Id);
+        var shared = new List<SharedGroup>();
+
+        foreach (var membership in mine)
+        {
+            if (!theirMember.TryGetValue(membership.GroupId, out var theirId)) continue;
+
+            var (expenses, settlements) = await LoadLedgerAsync(membership.GroupId, ct);
+            var pairwise = BalanceCalculator.PairwiseDebts(expenses, settlements, membership.BaseCurrency);
+
+            var net = 0m;
+            foreach (var debt in pairwise)
+            {
+                if (debt.FromMemberId == theirId && debt.ToMemberId == membership.Id) net += debt.Amount;
+                else if (debt.FromMemberId == membership.Id && debt.ToMemberId == theirId) net -= debt.Amount;
+            }
+
+            if (net == 0m) continue;
+
+            shared.Add(new SharedGroup(
+                membership.GroupId, membership.Name, membership.BaseCurrency, membership.LineageId,
+                membership.Id, theirId, net, !membership.IsArchived));
+        }
+
+        return shared.OrderByDescending(g => Math.Abs(g.Net)).ToList();
+    }
+
+    /// <summary>
+    /// The pairs that cancel, largest first.
+    ///
+    /// Only within one currency: a thousand dollars against nine hundred euros is
+    /// not an offset, it is an exchange, and this is not the place to decide a rate
+    /// that both people would then be stuck with. Only between groups that still
+    /// take writes, since an archived group cannot hold the settlement.
+    /// </summary>
+    private static List<PlannedOffsetDto> PlanOffsets(IEnumerable<SharedGroup> shared)
+    {
+        var offsets = new List<PlannedOffsetDto>();
+
+        foreach (var byCurrency in shared.Where(g => g.CanSettle).GroupBy(g => g.Currency))
+        {
+            var owed = byCurrency.Where(g => g.Net > 0m)
+                .Select(g => (g.GroupId, g.Name, Left: g.Net)).OrderByDescending(g => g.Left).ToList();
+            var owing = byCurrency.Where(g => g.Net < 0m)
+                .Select(g => (g.GroupId, g.Name, Left: -g.Net)).OrderByDescending(g => g.Left).ToList();
+
+            var i = 0;
+            var j = 0;
+
+            while (i < owed.Count && j < owing.Count)
+            {
+                var amount = Math.Min(owed[i].Left, owing[j].Left);
+                if (amount > 0m)
+                {
+                    offsets.Add(new PlannedOffsetDto(
+                        owed[i].GroupId, owed[i].Name, owing[j].GroupId, owing[j].Name,
+                        amount, byCurrency.Key));
+                }
+
+                owed[i] = owed[i] with { Left = owed[i].Left - amount };
+                owing[j] = owing[j] with { Left = owing[j].Left - amount };
+
+                if (owed[i].Left <= 0m) i++;
+                if (owing[j].Left <= 0m) j++;
+            }
+        }
+
+        return offsets;
+    }
+
+    /// <summary>What is left per currency once the pairs have cancelled, and where.</summary>
+    private static List<CrossGroupRemainderDto> Remainders(
+        IEnumerable<SharedGroup> shared, IReadOnlyList<PlannedOffsetDto> offsets)
+    {
+        var remaining = new List<CrossGroupRemainderDto>();
+
+        foreach (var byCurrency in shared.GroupBy(g => g.Currency))
+        {
+            var left = byCurrency.ToDictionary(g => g.GroupId, g => g.Net);
+
+            foreach (var offset in offsets.Where(o => o.Currency == byCurrency.Key))
+            {
+                left[offset.OwedGroupId] -= offset.Amount;
+                left[offset.OwingGroupId] += offset.Amount;
+            }
+
+            var net = CurrencyPrecision.Round(left.Values.Sum(), byCurrency.Key);
+            var carrying = left.Where(entry => entry.Value != 0m).Select(entry => entry.Key).ToList();
+            var where = carrying.Count == 1
+                ? byCurrency.First(g => g.GroupId == carrying[0])
+                : null;
+
+            remaining.Add(new CrossGroupRemainderDto(byCurrency.Key, net, where?.GroupId, where?.Name));
+        }
+
+        return remaining;
+    }
+
+    private Settlement NewOffsetSettlement(
+        SharedGroup group, Guid fromMemberId, Guid toMemberId, decimal amount,
+        DateTimeOffset when, string? note, string counterpartName)
+        => new()
+        {
+            Id = Guid.CreateVersion7(),
+            GroupId = group.GroupId,
+            FromMemberId = fromMemberId,
+            ToMemberId = toMemberId,
+            Amount = amount,
+            Currency = group.Currency,
+            AmountInBaseCurrency = amount,
+            ExchangeRate = 1m,
+            SettledAt = when,
+            // Says what it is on the row itself. A settlement nobody paid needs to
+            // explain itself in the list it appears in, on a device that may never
+            // have heard of the group on the other side of it.
+            Note = string.IsNullOrWhiteSpace(note) ? $"Cancelled against {counterpartName}" : note.Trim(),
+            OriginLineageId = group.LineageId,
+            CreatedAt = when,
+            UpdatedAt = when
+        };
+
     private async Task<Dictionary<Guid, string>> MemberNamesAsync(Guid groupId, CancellationToken ct)
         => await db.GroupMembers
             .Where(m => m.GroupId == groupId)
@@ -317,7 +566,7 @@ public sealed class SettlementService(
     {
         settlement.Id, settlement.GroupId, settlement.FromMemberId, settlement.ToMemberId,
         settlement.Amount, settlement.Currency, settlement.AmountInBaseCurrency,
-        settlement.SettledAt, settlement.Note, settlement.IsDeleted
+        settlement.SettledAt, settlement.Note, settlement.OffsetSettlementId, settlement.IsDeleted
     };
 
     private static string Format(decimal amount, string currency)

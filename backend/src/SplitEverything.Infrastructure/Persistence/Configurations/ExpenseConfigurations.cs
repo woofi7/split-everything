@@ -259,6 +259,11 @@ public class SettlementConfiguration : IEntityTypeConfiguration<Settlement>
         builder.HasIndex(s => new { s.GroupId, s.SettledAt });
         builder.HasIndex(s => new { s.GroupId, s.ServerSeq });
 
+        // Plain column, no foreign key: the two halves of an offset point at each
+        // other, so whichever is written first would point at a row that does not
+        // exist yet.
+        builder.Property(s => s.OffsetSettlementId);
+
         builder.HasOne(s => s.Group)
             .WithMany(g => g.Settlements)
             .HasForeignKey(s => s.GroupId)

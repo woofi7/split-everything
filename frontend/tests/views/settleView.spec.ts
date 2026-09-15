@@ -119,3 +119,133 @@ describe('SettleView', () => {
     expect(textOf(wrapper)).not.toContain('Suggested transfers')
   })
 })
+
+/**
+ * Two people who share more than one group can owe each other in both directions
+ * at once, and paying both in full is two transfers where none is needed. The
+ * settle screen is already about settling with somebody, so it is where the app
+ * says so.
+ */
+describe('SettleView cancelling debts across groups', () => {
+  /** Bob with an account of his own, since a placeholder exists in one group only. */
+  const withAccounts = () => {
+    const group = testGroup()
+    group.members = group.members.map((member) =>
+      member.id === BOB ? { ...member, userId: 'user-bob', isPlaceholder: false } : member,
+    )
+    return group
+  }
+
+  const facingBalance = {
+    withUserId: 'user-bob',
+    withName: 'Bob',
+    groups: [
+      { groupId: GROUP_ID, groupName: 'Roommates', currency: 'CAD', net: 1025, canSettle: true },
+      { groupId: 'group-2', groupName: 'Ski trip', currency: 'CAD', net: -925, canSettle: true },
+    ],
+    offsets: [
+      {
+        owedGroupId: GROUP_ID,
+        owedGroupName: 'Roommates',
+        owingGroupId: 'group-2',
+        owingGroupName: 'Ski trip',
+        amount: 925,
+        currency: 'CAD',
+      },
+    ],
+    remaining: [{ currency: 'CAD', net: 100, groupId: GROUP_ID, groupName: 'Roommates' }],
+  }
+
+  const crossGroupApi = (balance: unknown = facingBalance) =>
+    fakeApi({
+      '/groups': () => withAccounts(),
+      '/settlements/cross-group': () => balance,
+      '/settlements/cross-group/offset': () => ({
+        applied: facingBalance.offsets,
+        remaining: facingBalance.remaining,
+        settlementsRecorded: 2,
+      }),
+    })
+
+  it('says what the two of them owe each other elsewhere', async () => {
+    query = { from: BOB, to: ALICE, amount: '30' }
+
+    const { wrapper } = await mountView(SettleView, {
+      api: crossGroupApi(),
+      groups: [withAccounts()],
+      expenses: [testExpense()],
+    })
+    await settle()
+
+    const panel = wrapper.find('[data-testid="cross-group"]')
+    expect(panel.exists()).toBe(true)
+    expect(textOf(wrapper)).toContain('Ski trip')
+    expect(textOf(wrapper)).toContain('1,025.00')
+    expect(textOf(wrapper)).toContain('925.00')
+  })
+
+  it('offers to cancel out only the part that faces both ways', async () => {
+    query = { from: BOB, to: ALICE, amount: '30' }
+
+    const { wrapper } = await mountView(SettleView, {
+      api: crossGroupApi(),
+      groups: [withAccounts()],
+      expenses: [testExpense()],
+    })
+    await settle()
+
+    expect(wrapper.find('[data-testid="offset-across-groups"]').text()).toContain('925.00')
+  })
+
+  it('says where the difference ended up once it has', async () => {
+    query = { from: BOB, to: ALICE, amount: '30' }
+
+    const { wrapper, api } = await mountView(SettleView, {
+      api: crossGroupApi(),
+      groups: [withAccounts()],
+      expenses: [testExpense()],
+    })
+    await settle()
+
+    await wrapper.find('[data-testid="offset-across-groups"]').trigger('click')
+    await settle()
+
+    expect(api.post).toHaveBeenCalledWith('/settlements/cross-group/offset', {
+      withUserId: 'user-bob',
+      note: null,
+    })
+    await waitFor(() => wrapper.find('[data-testid="offset-done"]').exists())
+    expect(textOf(wrapper)).toContain('100.00')
+    expect(textOf(wrapper)).toContain('Roommates')
+  })
+
+  it('says nothing at all when there is nothing facing the other way', async () => {
+    query = { from: BOB, to: ALICE, amount: '30' }
+
+    const { wrapper } = await mountView(SettleView, {
+      api: crossGroupApi({ ...facingBalance, offsets: [], remaining: [] }),
+      groups: [withAccounts()],
+      expenses: [testExpense()],
+    })
+    await settle()
+
+    // One group between two people is the ordinary case and needs no explaining.
+    expect(wrapper.find('[data-testid="cross-group"]').exists()).toBe(false)
+  })
+
+  it('says nothing for somebody who has no account to look up', async () => {
+    query = { from: BOB, to: ALICE, amount: '30' }
+
+    // Bob as a placeholder: he exists in this group and nowhere else, so there is
+    // nothing of his to find in another.
+    const { wrapper, api } = await mountView(SettleView, {
+      api: fakeApi({ '/groups': () => testGroup(), '/settlements/cross-group': () => facingBalance }),
+      groups: [testGroup()],
+      expenses: [testExpense()],
+    })
+    await settle()
+
+    expect(wrapper.find('[data-testid="cross-group"]').exists()).toBe(false)
+    expect(api.get).not.toHaveBeenCalledWith('/settlements/cross-group', expect.anything())
+  })
+})
