@@ -112,9 +112,17 @@
    * The dark theme's pair are bright enough to read on a deep surface and nowhere
    * near dark enough to read on a pale one - the green sat at 1.4:1 against the
    * page, which is the most important figure on the screen rendered invisible.
+   *
+   * Green and red rather than emerald and rose, which is what the first attempt at
+   * this used: emerald leans towards teal and rose towards pink, and at the depth a
+   * pale surface needs they stop reading as the two colours money comes in. These
+   * are the plainest green and red the palette has that still clear 4.5:1 on the
+   * page and on a card - 5.8 and 5.2 at worst across the eight accents - which is
+   * everywhere an amount or an error is written. The third surface is for input
+   * fields, and nothing is ever set in these colours on one.
    */
-  --color-owed: var(--color-emerald-800);
-  --color-owing: var(--color-rose-800);
+  --color-owed: var(--color-green-800);
+  --color-owing: var(--color-red-700);
 }
 
 :root[data-theme='light'][data-accent='violet'] {
