@@ -214,7 +214,12 @@ describe('ExpenseFormView', () => {
     // The navigation happens after the local write and the queue entry, so wait
     // for it rather than assuming a fixed number of turns.
     await vi.waitFor(() =>
-      expect(replace).toHaveBeenCalledWith({ name: 'group', params: { groupId } }),
+      expect(replace).toHaveBeenCalledWith({
+        name: 'group',
+        params: { groupId },
+        // The month it went into, so the list opens where the expense is.
+        query: { month: expect.stringMatching(/^\d{4}-\d{2}-01$/) },
+      }),
     )
   })
 
@@ -965,6 +970,13 @@ describe('ExpenseFormView remembering the date', () => {
   const dateField = (wrapper: Awaited<ReturnType<typeof mountView>>['wrapper']) =>
     wrapper.find('input[type="date"]')
 
+  /** What a device looks like part-way through a batch entered the same day. */
+  const rememberForToday = (date: string) =>
+    localStorage.setItem(
+      'split-everything.last-expense-date',
+      JSON.stringify({ date, usedOn: today() }),
+    )
+
   it('starts on today when nothing has been added on this device', async () => {
     const { wrapper } = await mountView()
 
@@ -972,7 +984,7 @@ describe('ExpenseFormView remembering the date', () => {
   })
 
   it('starts on the date the last expense used', async () => {
-    localStorage.setItem('split-everything.last-expense-date', '2026-03-14')
+    rememberForToday('2026-03-14')
 
     const { wrapper } = await mountView()
 
@@ -980,7 +992,7 @@ describe('ExpenseFormView remembering the date', () => {
   })
 
   it('says so, and offers one tap back to today', async () => {
-    localStorage.setItem('split-everything.last-expense-date', '2026-03-14')
+    rememberForToday('2026-03-14')
     const { wrapper } = await mountView()
 
     const back = wrapper.find('[data-testid="use-today"]')
@@ -1008,12 +1020,14 @@ describe('ExpenseFormView remembering the date', () => {
     // the next one starts. Waited for rather than counted in turns: the save
     // crosses several IndexedDB transactions.
     await waitFor(
-      () => localStorage.getItem('split-everything.last-expense-date') === '2026-02-02',
+      () =>
+        JSON.parse(localStorage.getItem('split-everything.last-expense-date') ?? '{}').date ===
+        '2026-02-02',
     )
   })
 
   it('leaves it alone when an old expense is edited', async () => {
-    localStorage.setItem('split-everything.last-expense-date', '2026-03-14')
+    rememberForToday('2026-03-14')
 
     setActivePinia(createPinia())
     await resetDatabase()
@@ -1075,7 +1089,41 @@ describe('ExpenseFormView remembering the date', () => {
     // Saved, and only then asked what it remembered: the answer here is that
     // nothing moved, which is only worth asserting once the save has finished.
     await waitFor(() => replace.mock.calls.length > 0)
-    expect(localStorage.getItem('split-everything.last-expense-date')).toBe('2026-03-14')
+    expect(JSON.parse(localStorage.getItem('split-everything.last-expense-date')!).date).toBe(
+      '2026-03-14',
+    )
+  })
+
+  it('says which day it is carrying over, in words, and marks the field', async () => {
+    rememberForToday('2026-03-14')
+    const { wrapper } = await mountView()
+
+    // The figures in a date input are the thing an eye slides over: this is how a
+    // week of expenses went into a month nobody meant.
+    expect(wrapper.text()).toContain('March 14')
+    expect(wrapper.find('[data-testid="spent-at"]').attributes('style')).toContain('--accent-text')
+
+    await wrapper.find('[data-testid="use-today"]').trigger('click')
+    await settle(1)
+
+    expect(wrapper.text()).toContain('Date')
+    expect(wrapper.find('[data-testid="spent-at"]').attributes('style')).toContain('--border')
+  })
+
+  it('lands on the month the expense went into, not the month the list opens on', async () => {
+    rememberForToday('2026-03-14')
+    const { wrapper } = await mountView()
+
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Groceries')
+    await wrapper.find('input[inputmode="decimal"]').setValue('60')
+    await settle()
+    await wrapper.find('form').trigger('submit')
+
+    // Without the month, an expense dated outside the current one is filed
+    // correctly and invisibly, which reads as "it did not save".
+    await waitFor(() =>
+      replace.mock.calls.some(([to]) => to.query?.month === '2026-03-01'),
+    )
   })
 })
 

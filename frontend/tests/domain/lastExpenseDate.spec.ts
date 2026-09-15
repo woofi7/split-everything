@@ -17,10 +17,39 @@ describe('the date an expense starts on', () => {
     expect(lastExpenseDate()).toBeNull()
   })
 
-  it('offers back the date last used', () => {
+  it('offers back the date last used, within the day it was used', () => {
     rememberExpenseDate('2026-03-14')
 
     expect(lastExpenseDate()).toBe('2026-03-14')
+  })
+
+  /**
+   * The bound that matters.
+   *
+   * Kept for ever, this is a trap: an evening spent entering August receipts left
+   * every expense added afterwards dated in August, filed under a month heading
+   * the dashboard keeps closed. It looked exactly like an expense that had not
+   * saved, and the app said nothing.
+   */
+  it('forgets a date used on an earlier day', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 8, 13, 21, 0))
+    rememberExpenseDate('2026-08-04')
+    expect(lastExpenseDate()).toBe('2026-08-04')
+
+    vi.setSystemTime(new Date(2026, 8, 14, 9, 0))
+
+    expect(lastExpenseDate()).toBeNull()
+  })
+
+  it('keeps it across the evening it was typed in', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 8, 14, 20, 15))
+    rememberExpenseDate('2026-08-04')
+
+    vi.setSystemTime(new Date(2026, 8, 14, 23, 45))
+
+    expect(lastExpenseDate()).toBe('2026-08-04')
   })
 
   it('ignores anything that is not a calendar date', () => {
@@ -28,6 +57,14 @@ describe('the date an expense starts on', () => {
 
     // A date input given nonsense shows blank with nothing to say why, so the form
     // falls back to today instead.
+    expect(lastExpenseDate()).toBeNull()
+  })
+
+  it('ignores the shape the first version stored, which never expired', () => {
+    localStorage.setItem('split-everything.last-expense-date', '2026-08-04')
+
+    // A device that met that version starts from today rather than from whenever
+    // it last stopped typing.
     expect(lastExpenseDate()).toBeNull()
   })
 
