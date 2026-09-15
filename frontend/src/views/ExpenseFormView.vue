@@ -586,7 +586,7 @@ async function save(): Promise<void> {
         params: { groupId: group.value.id, expenseId: editingId.value },
       })
     } else {
-      await expenses.add({ groupId: group.value.id, ...fields })
+      const added = await expenses.add({ groupId: group.value.id, ...fields })
 
       // After it saved, so a refused expense does not move where the next one
       // starts. Adding only: an edit is about one expense from whenever it was.
@@ -599,7 +599,9 @@ async function save(): Promise<void> {
       await router.replace({
         name: 'group',
         params: { groupId: group.value.id },
-        query: { month: bucketOf(fields.spentAt, 'month') },
+        // The month, and which expense: a month is thirty rows and the one just
+        // typed can be the last of them, which is no more visible than it was.
+        query: { month: bucketOf(fields.spentAt, 'month'), added: added.id },
       })
     }
   } catch (caught) {
