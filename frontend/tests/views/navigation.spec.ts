@@ -23,9 +23,12 @@ vi.mock('vue-router', () => ({
     query: {},
     fullPath: '/',
   }),
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => routerStub,
   RouterLink: RouterLinkStub,
 }))
+
+/** One instance, so a test can see what the back button did. */
+const routerStub = { push: vi.fn(), replace: vi.fn(), back: vi.fn() }
 
 vi.mock('@/import/statementWorkerClient', () => ({
   StatementWorkerClient: class {
@@ -134,16 +137,42 @@ describe('the back button', () => {
     expect(wrapper.find('[data-testid="back"]').attributes('aria-label')).toBe(`Back to ${parent}`)
   })
 
-  it.each(subScreens)('points somewhere real on the %s screen', async (_name, component) => {
+  it.each(subScreens)('goes somewhere real from the %s screen with nothing behind it', async (_name, component) => {
+    routerStub.push.mockClear()
+    routerStub.back.mockClear()
+
     const { wrapper } = await mountView(component, {
       api: api(),
       expenses: [testExpense()],
     })
 
-    // A link, not history: a screen opened from a notification or a shared URL
-    // has nothing to go back to.
-    const to = wrapper.findComponent('[data-testid="back"]').props('to') as { name?: string }
+    await wrapper.find('[data-testid="back"]').trigger('click')
+
+    // A screen opened from a notification or a shared URL has nothing to go back
+    // to, and pressing back there must not leave the app.
+    expect(routerStub.back).not.toHaveBeenCalled()
+    const to = routerStub.push.mock.calls[0]?.[0] as { name?: string }
     expect(to?.name).toBeTruthy()
+  })
+
+  it.each(subScreens)('goes back the way it was reached on the %s screen', async (_name, component) => {
+    routerStub.push.mockClear()
+    routerStub.back.mockClear()
+    window.history.replaceState({ back: '/activity' }, '')
+
+    const { wrapper } = await mountView(component, {
+      api: api(),
+      expenses: [testExpense()],
+    })
+
+    await wrapper.find('[data-testid="back"]').trigger('click')
+
+    // An expense opened from the activity feed returns to the feed, not to the
+    // group the expense happens to belong to.
+    expect(routerStub.back).toHaveBeenCalled()
+    expect(routerStub.push).not.toHaveBeenCalled()
+
+    window.history.replaceState(null, '')
   })
 
   it.each(tabScreens)('is not on the %s screen, which is a tab', async (_name, component) => {

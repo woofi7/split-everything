@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { RouterLink, type RouteLocationRaw } from 'vue-router'
+import { useRouter, type RouteLocationRaw } from 'vue-router'
 import { computed } from 'vue'
 import BottomNav from './BottomNav.vue'
+import { labelForPath, previousScreen } from '@/router/backTarget'
 import SyncIndicator from '@/components/ui/SyncIndicator.vue'
 
 /**
@@ -19,10 +20,11 @@ const props = withDefaults(
     isSyncing?: boolean
     showNav?: boolean
     /**
-     * Where this screen goes back to, on the screens no tab can reach. A route
-     * rather than history: a screen opened from a notification, a shared link or
-     * a reload has no history to go back to, and after a redirect the previous
-     * entry is not where the person came from.
+     * Where this screen goes back to when there is nothing behind it: opened from
+     * a notification, a shared link, or a cold start. The rest of the time the
+     * control goes back the way the person came, which is what back means - an
+     * expense reached from the activity feed returns to the feed, not to the group
+     * the expense happens to belong to.
      */
     backTo?: RouteLocationRaw
     /** Named, so the control reads as a destination rather than just "back". */
@@ -39,6 +41,32 @@ const props = withDefaults(
     backLabel: 'Back',
   },
 )
+
+const router = useRouter()
+
+/**
+ * Back the way the person came, or to the screen this one belongs under.
+ *
+ * History first, because that is what back means: an expense opened from the
+ * activity feed returns to the feed, and the same expense opened from its group
+ * returns to the group, without either screen having to know where it was reached
+ * from. The declared destination is for when there is no history to use - a shared
+ * link, a notification, a cold start - where going back would leave the app.
+ */
+function goBack(): void {
+  if (previousScreen()) {
+    router.back()
+    return
+  }
+
+  if (props.backTo) void router.push(props.backTo)
+}
+
+/** What the control says it leads to, which is the screen actually behind it. */
+const backDestination = computed(() => {
+  const previous = previousScreen()
+  return (previous && labelForPath(previous)) || props.backLabel
+})
 
 /**
  * Whether the sync state is worth a line on screen. Nothing to report is the normal
@@ -121,12 +149,13 @@ const hasSyncNews = computed(
         <div class="flex shrink-0 items-center gap-2">
           <slot name="header-action" />
 
-          <RouterLink
+          <button
             v-if="props.backTo"
-            :to="props.backTo"
+            type="button"
             data-testid="back"
             class="btn btn-press btn-secondary h-11 w-11 shrink-0 rounded-full px-0"
-            :aria-label="`Back to ${props.backLabel}`"
+            :aria-label="`Back to ${backDestination}`"
+            @click="goBack"
           >
             <svg
               class="h-5 w-5"
@@ -138,7 +167,7 @@ const hasSyncNews = computed(
             >
               <path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-          </RouterLink>
+          </button>
         </div>
       </div>
 
