@@ -593,6 +593,12 @@ describe('ExpenseFormView editing an expense', () => {
     expect(wrapper.find('[data-testid="back"]').exists()).toBe(true)
   })
 
+  it('offers a way back when adding too, as the payment form does', async () => {
+    const { wrapper } = await mountView()
+
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(true)
+  })
+
   it('says so when the expense is not on this device', async () => {
     setActivePinia(createPinia())
     await resetDatabase()

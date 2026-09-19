@@ -407,7 +407,7 @@ async function move(): Promise<void> {
 const backTarget = computed(() =>
   isEditing.value && groupId.value
     ? { name: 'expense', params: { groupId: groupId.value, expenseId: editingId.value } }
-    : undefined,
+    : { name: 'dashboard' },
 )
 
 const colours = computed(() => memberColors(members.value.map((member) => member.id)))
