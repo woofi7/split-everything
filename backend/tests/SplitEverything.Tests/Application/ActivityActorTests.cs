@@ -8,13 +8,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// The actor on an activity entry.
-///
-/// The app colours people by member id, and the feed only carried the account id.
-/// The same person would have had one colour on an expense card and another beside
-/// the entry about it, which is worse than no colour at all.
-/// </summary>
 public class ActivityActorTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private async Task<(Guid UserId, GroupDto Group, Guid Me)> SetupAsync()
@@ -53,7 +46,6 @@ public class ActivityActorTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var feed = await Activity.ListAsync(userId, group.Id, new PageRequest(1, 20));
         var entry = feed.Items.First(e => e.SubjectId == expense.Id);
 
-        // Same key, so the same colour on both screens.
         entry.ActorMemberId.ShouldBe(expense.PaidByMemberId);
     }
 
@@ -68,7 +60,6 @@ public class ActivityActorTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
         var feed = await Activity.ListAsync(userId, group.Id, new PageRequest(1, 20));
 
-        // A system entry has nobody to colour, and must not be dropped for it.
         feed.Items.ShouldContain(e => e.Summary == "Something happened" && e.ActorMemberId == null);
     }
 }

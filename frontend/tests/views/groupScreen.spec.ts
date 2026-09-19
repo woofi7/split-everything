@@ -21,11 +21,6 @@ vi.mock('vue-router', () => ({
 
 const api = () => fakeApi({ '/groups': () => testGroup() })
 
-/**
- * The one group screen, reached either as the dashboard or by a group's own URL.
- * There used to be two of these; the group route now renders the dashboard, so
- * these behaviours are asserted where they actually live.
- */
 describe('the group screen', () => {
   it('marks the corner with the group icon rather than the app icon', async () => {
     const { wrapper } = await mountView(DashboardView, {
@@ -34,11 +29,8 @@ describe('the group screen', () => {
     })
     await settle()
 
-    // What tells two groups apart at a glance, and the same figure shown beside
-    // the group's name everywhere else.
     const mark = wrapper.find('[data-testid="group-mark"]')
     expect(mark.exists()).toBe(true)
-    // jsdom normalises the hex to rgb, so the colour is checked as it lands.
     expect(mark.attributes('style')).toContain('rgb(18, 52, 86)')
     expect(mark.find('svg').attributes('data-icon')).toBe('house')
     expect(wrapper.find('[data-testid="app-icon"]').exists()).toBe(false)
@@ -51,7 +43,6 @@ describe('the group screen', () => {
     })
     await settle()
 
-    // The corner is never empty, and no caller has to decide.
     expect(wrapper.find('[data-testid="group-mark"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="app-icon"]').exists()).toBe(true)
   })
@@ -59,9 +50,6 @@ describe('the group screen', () => {
   it('names the group first and the screen second', async () => {
     const { wrapper } = await mountView(DashboardView, { api: api() })
 
-    // Which group you are in is the thing worth reading first, and it is the same
-    // question on activity and stats. The member count it replaces is on the
-    // balances below and in the group's own settings.
     expect(wrapper.find('h1').text()).toBe('Roommates')
     expect(textOf(wrapper)).toContain('Dashboard')
   })
@@ -161,15 +149,12 @@ describe('the group screen', () => {
       expenses: [testExpense()],
     })
 
-    // There is a settle link at all: the section's own button.
     expect(
       wrapper
         .findAllComponents(RouterLinkStub)
         .some((candidate) => JSON.stringify(candidate.props().to).includes('settle')),
     ).toBe(true)
 
-    // And the transfer's carries the parties and the amount, so the form opens
-    // filled in.
     const prefilled = wrapper
       .findAllComponents(RouterLinkStub)
       .map((candidate) => candidate.props().to as { query?: Record<string, unknown> })
@@ -184,7 +169,6 @@ describe('the group screen', () => {
   it('links to the group settings from the gear', async () => {
     const { wrapper } = await mountView(DashboardView, { api: api() })
 
-    // One press, one destination. It used to be a menu of two things.
     const link = wrapper
       .findAllComponents(RouterLinkStub)
       .find((candidate) => JSON.stringify(candidate.props().to).includes('group-settings'))
@@ -202,7 +186,6 @@ describe('the group screen expense rows', () => {
     })
     await settle()
 
-    // A list of amounts with no dates cannot be reconciled against anything.
     expect(textOf(wrapper)).toMatch(/14 Mar|Mar 14/)
   })
 
@@ -213,7 +196,6 @@ describe('the group screen expense rows', () => {
     })
     await settle()
 
-    // Scoped to the expense list: the balance rows carry swatches of their own.
     const swatches = wrapper
       .findAll('span[aria-hidden="true"]')
       .filter((span) => (span.attributes('style') ?? '').includes('background-color'))
@@ -248,7 +230,6 @@ describe('the group screen expense card colour', () => {
 
     const backgrounds = cards.map((card) => card.attributes('style'))
     expect(backgrounds[0]).toContain('background')
-    // Two payers, two colours: the point is telling them apart at a glance.
     expect(backgrounds[0]).not.toBe(backgrounds[1])
   })
 
@@ -261,8 +242,6 @@ describe('the group screen expense card colour', () => {
 
     const style = wrapper.find('[data-testid="expense-card"]').attributes('style') ?? ''
 
-    // A full-strength colour behind the text would be unreadable in either theme,
-    // and mixing with the surface token keeps it right in both.
     expect(style).toContain('color-mix')
     expect(style).toContain('--surface-raised')
   })

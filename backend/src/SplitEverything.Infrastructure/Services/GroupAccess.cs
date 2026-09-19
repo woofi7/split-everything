@@ -6,16 +6,8 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// The single access check for everything group-scoped.
-///
-/// The app is private and gated by Google sign-in, but "signed in" is not
-/// "entitled to this group", so every read and write resolves the caller's active
-/// membership here rather than trusting an id from the request.
-/// </summary>
 internal static class GroupAccess
 {
-    /// <summary>Active membership of the caller, or a 403.</summary>
     public static async Task<GroupMember> RequireMemberAsync(
         AppDbContext db, Guid userId, Guid groupId, CancellationToken ct = default)
     {
@@ -32,7 +24,6 @@ internal static class GroupAccess
         return member ?? throw new ForbiddenException("You are not a member of this group.");
     }
 
-    /// <summary>Membership that also carries the right to change group settings.</summary>
     public static async Task<GroupMember> RequireAdminAsync(
         AppDbContext db, Guid userId, Guid groupId, CancellationToken ct = default)
     {

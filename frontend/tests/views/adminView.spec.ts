@@ -9,14 +9,6 @@ vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
 }))
 
-/**
- * Every group on the server, for whoever runs it.
- *
- * Six groups called the same thing, five of them archived leftovers of a transfer,
- * and no way to be rid of them: that is what this screen is for. It is also the
- * only screen in the application that destroys anything, so most of what follows
- * is about how hard that is to do by accident.
- */
 describe('the server groups screen', () => {
   const live = {
     id: 'group-live',
@@ -89,7 +81,6 @@ describe('the server groups screen', () => {
     await settle()
     expect(wrapper.find('[data-testid="confirm-delete"]').attributes('disabled')).toBeUndefined()
 
-    // Nothing has been asked of the server on the way here.
     expect(api.delete).not.toHaveBeenCalled()
   })
 

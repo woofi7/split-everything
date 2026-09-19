@@ -4,7 +4,6 @@ import type { ApiClient } from '@/api/client'
 
 describe('VAPID key decoding', () => {
   it('decodes a base64url key to raw bytes', () => {
-    // "hello" as base64url, with the padding the browser omits.
     const bytes = decodeVapidKey('aGVsbG8')
 
     expect(new TextDecoder().decode(bytes)).toBe('hello')
@@ -26,16 +25,7 @@ describe('VAPID key decoding', () => {
   })
 })
 
-/**
- * What turning notifications on reports back.
- *
- * This existed as a boolean, and the profile screen turned every false into
- * "Notifications were not allowed." A server deployed without its VAPID pair then
- * told the phone it had refused permission it had actually granted, which sent
- * people into their browser's site settings to fix something that was not there.
- */
 describe('registering for notifications', () => {
-  /** A real uncompressed P-256 point, which is the only shape Web Push accepts. */
   const REAL_KEY =
     'BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw'
 
@@ -45,7 +35,6 @@ describe('registering for notifications', () => {
     delete: vi.fn(async () => ({})),
   })
 
-  /** A browser that can do push, with the permission answer under test. */
   function browserThat(permission: NotificationPermission): void {
     vi.stubGlobal('Notification', {
       permission,
@@ -76,7 +65,6 @@ describe('registering for notifications', () => {
     browserThat('granted')
     const client = api('')
 
-    // The exact production symptom: permission granted, nothing to subscribe to.
     expect(await registerForPush(client as unknown as ApiClient, 'device')).toBe('unconfigured')
     expect(client.post).not.toHaveBeenCalled()
   })
@@ -104,9 +92,6 @@ describe('registering for notifications', () => {
   it('refuses a key that is not one, rather than failing inside atob', async () => {
     browserThat('granted')
 
-    // What a server served in production once: the contact address in the slot
-    // meant for the public key. The browser's own message for this names atob and
-    // says nothing about a setting being wrong.
     expect(
       await registerForPush(api('mailto:someone@example.com') as unknown as ApiClient, 'device'),
     ).toBe('unconfigured')
@@ -115,14 +100,12 @@ describe('registering for notifications', () => {
   it('refuses a key of the wrong length, which decodes cleanly and still is not one', async () => {
     browserThat('granted')
 
-    // "hello" is valid base64url and five bytes. Web Push wants sixty-five.
     expect(await registerForPush(api('aGVsbG8') as unknown as ApiClient, 'device')).toBe(
       'unconfigured',
     )
   })
 
   it('says unsupported when the browser has no push at all', async () => {
-    // No PushManager and no service worker: an old browser, not a refusal.
     expect(await registerForPush(api('BKey') as unknown as ApiClient, 'device')).toBe('unsupported')
   })
 })

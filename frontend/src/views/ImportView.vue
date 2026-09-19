@@ -22,26 +22,16 @@ const router = useRouter()
 const worker = new StatementWorkerClient()
 const session = ref<StatementReviewSession | null>(null)
 
-/**
- * Which of the two ways in is being used, so the other stops being offered.
- *
- * The statement reader shows its own state as soon as it has a file; the export
- * wizard keeps its file to itself and says so.
- */
 const settleUpActive = ref(false)
 const statementActive = ref(false)
 const progress = ref<{ stage: string; ratio: number } | null>(null)
 const usedOcr = ref(false)
 const isCommitting = ref(false)
 
-
 onMounted(async () => {
   await groups.loadAll()
-
 })
 
-// Terminating the worker drops the parsed statement from memory. Combined with
-// the session's own cleanup, nothing about the file survives leaving this screen.
 onBeforeUnmount(async () => {
   worker.dispose()
   await session.value?.cancel()
@@ -73,13 +63,10 @@ async function onFile(event: Event): Promise<void> {
         t('No transactions could be read from that file. Bank layouts vary a lot; try the CSV export instead.'),
         'error',
       )
-      // Nothing came of it, so the other way in is worth offering again.
       statementActive.value = false
       return
     }
 
-    // Fingerprints are computed here, on the device, and only the hashes are sent
-    // to ask whether the server already has these transactions.
     const fingerprints = await Promise.all(
       parsed.rows.map((row) =>
         row.date && row.amount !== null
@@ -91,9 +78,6 @@ async function onFile(event: Event): Promise<void> {
     const duplicates = await checkDuplicates(fingerprints.filter((f): f is string => f !== null))
     const suggestions = await fetchSuggestions(parsed.rows.map((row) => row.description))
 
-    // Every group's categories, before the rows are looked at: a statement is
-    // where filing pays for itself - two hundred lines nobody will ever file by
-    // hand - and the guess has to be ready when the rows appear.
     await Promise.all(groups.visibleGroups.map((group) => groups.loadCategories(group.id)))
 
     const created = new StatementReviewSession(
@@ -115,12 +99,9 @@ async function onFile(event: Event): Promise<void> {
     session.value = created
   } catch (caught) {
     report(caught, t('Could not read that file.'))
-    // A file that could not be read leaves nothing behind, so both ways in come
-    // back rather than stranding someone on the one that just failed.
     statementActive.value = false
   } finally {
     progress.value = null
-    // Clear the picker, so re-choosing the same file re-parses it.
     input.value = ''
   }
 }
@@ -178,7 +159,6 @@ function setCategory(rowNumber: number, categoryKey: string): void {
   session.value?.setCategory(rowNumber, categoryKey || null)
 }
 
-/** The list to choose from for a row: the one kept by the group it is going to. */
 const categoriesFor = (groupId: string | null) =>
   groupId ? groups.categoriesOf(groupId) : []
 
@@ -233,20 +213,13 @@ async function cancel(): Promise<void> {
   usedOcr.value = false
 }
 </script>
-
 <template>
   <AppShell :title="t('Import')" :back-to="{ name: 'profile' }" :back-label="t('Profile')">
     <section v-if="!session" class="flex flex-col gap-4">
-      <!--
-        Two ways in, until one of them is being used. Leaving the other on screen
-        offers a second question nobody asked and a second file input to pick by
-        mistake, which is how an export ended up in the statement reader.
-      -->
       <div v-if="!settleUpActive" data-testid="statement-import" class="surface-card p-4">
         <h2 class="font-medium">{{ t('A bank or credit card statement') }}</h2>
         <p class="mt-1 text-sm text-[var(--text-muted)]">{{ t('The file is read on this device and never uploaded. Only the transactions you confirm are sent, and everything else is discarded when you leave this screen.') }}
         </p>
-
         <label
           class="btn btn-press btn-secondary mt-3 w-full cursor-pointer"
           style="border-color: var(--border)"
@@ -254,7 +227,6 @@ async function cancel(): Promise<void> {
           <input type="file" accept=".csv,.pdf,text/csv,application/pdf" class="hidden" @change="onFile" />
         </label>
       </div>
-
       <SettleUpWizard
         v-show="!statementActive"
         data-testid="settleup-import"
@@ -262,7 +234,6 @@ async function cancel(): Promise<void> {
         @cancel="() => undefined"
         @active="settleUpActive = $event"
       />
-
       <div v-if="progress" class="surface-card p-4" aria-live="polite">
         <p class="text-sm">{{ progress.stage }}</p>
         <div class="mt-2 h-1.5 rounded-full bg-[var(--surface-sunken)]">
@@ -272,13 +243,10 @@ async function cancel(): Promise<void> {
           />
         </div>
       </div>
-
     </section>
-
     <section v-else class="flex flex-col gap-4">
       <div v-if="usedOcr" class="surface-card p-3 text-xs text-[var(--text-muted)]">{{ t('That statement had no text layer, so it was read from the images. Check the amounts before importing.') }}
       </div>
-
       <div v-if="summary" class="surface-card p-3 text-sm">
         <p>
           {{ summary.toCommit }} to import, {{ summary.personal }} left personal,
@@ -287,7 +255,6 @@ async function cancel(): Promise<void> {
           <template v-if="summary.problems > 0">, {{ summary.problems }} need fixing</template>
         </p>
       </div>
-
       <ul class="flex flex-col gap-2">
         <li v-for="row in session.rows" :key="row.rowNumber" class="surface-card p-3">
           <div class="flex items-start justify-between gap-3">
@@ -304,14 +271,12 @@ async function cancel(): Promise<void> {
                 Already recorded in {{ row.duplicateOf?.groupName }}
               </p>
             </div>
-
             <MoneyAmount
               :amount="row.amount ?? 0"
               :currency="row.currency ?? 'CAD'"
               size="sm"
             />
           </div>
-
           <div class="mt-2 flex flex-wrap items-center gap-2">
             <select
               class="rounded-lg border bg-[var(--surface)] px-2 py-1 text-xs"
@@ -324,13 +289,6 @@ async function cancel(): Promise<void> {
                 Split in {{ group.name }}
               </option>
             </select>
-
-            <!--
-              Filed by the group's own keywords the moment the group is chosen,
-              and changed here when the guess is wrong. A plain select rather than
-              the search box the expense form uses: this is a list of two hundred
-              rows, and a dropdown panel per row is a screen nobody can read.
-            -->
             <select
               v-if="row.groupId && categoriesFor(row.groupId).length > 0"
               data-testid="row-category"
@@ -349,7 +307,6 @@ async function cancel(): Promise<void> {
                 {{ category.name }}
               </option>
             </select>
-
             <button
               type="button"
               class="btn btn-press btn-secondary min-h-0 px-2 py-1 text-xs"
@@ -362,8 +319,6 @@ async function cancel(): Promise<void> {
           </div>
         </li>
       </ul>
-
-
       <div class="flex gap-2">
         <button
           type="button"

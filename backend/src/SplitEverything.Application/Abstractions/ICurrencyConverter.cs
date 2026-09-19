@@ -2,7 +2,6 @@ namespace SplitEverything.Application.Abstractions;
 
 public sealed record ConversionResult(decimal Amount, decimal Rate, DateTimeOffset RateAsOf);
 
-/// <summary>Frankfurter-backed conversion with a daily cache in Postgres.</summary>
 public interface ICurrencyConverter
 {
     Task<ConversionResult> ConvertAsync(

@@ -46,7 +46,6 @@ describe('statement CSV parsing, in the browser', () => {
     const result = await parseStatementCsv(csv)
 
     expect(result.rows[0].amount).toBe(84.32)
-    // A credit is money coming back, so it reads as negative.
     expect(result.rows[1].amount).toBe(-20)
   })
 
@@ -157,8 +156,6 @@ describe('statement text extraction', () => {
       2026,
     )
 
-    // A statement spanning the new year prints no year; December belongs to the
-    // earlier one or the transaction lands eleven months late.
     expect(rows[0].date?.getUTCFullYear()).toBe(2025)
     expect(rows[1].date?.getUTCFullYear()).toBe(2026)
   })

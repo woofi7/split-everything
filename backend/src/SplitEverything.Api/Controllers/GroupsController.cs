@@ -47,43 +47,26 @@ public sealed class GroupsController(
     public async Task<ActionResult<GroupDto>> Unarchive(Guid groupId, CancellationToken ct)
         => Ok(await groups.UnarchiveAsync(UserId, groupId, ct));
 
-    /// <summary>
-    /// What this group files its expenses under: its own list, or the server's for
-    /// a group that has never edited it.
-    /// </summary>
     [HttpGet("{groupId:guid}/categories")]
     public async Task<ActionResult<IReadOnlyList<CategoryDto>>> Categories(
         Guid groupId, CancellationToken ct)
         => Ok(await categories.GetForGroupAsync(UserId, groupId, ct));
 
-    /// <summary>
-    /// Replaces it, taking a copy of the server's list the first time. Any member,
-    /// for the same reason the names left out of the totals are.
-    /// </summary>
     [HttpPut("{groupId:guid}/categories")]
     public async Task<ActionResult<IReadOnlyList<CategoryDto>>> SetCategories(
         Guid groupId, SetCategoriesRequest request, CancellationToken ct)
         => Ok(await categories.SetForGroupAsync(UserId, groupId, request, ct));
 
-    /// <summary>
-    /// The names this group keeps out of its totals. Any member: it changes what a
-    /// screen reads and not a penny of what anybody owes.
-    /// </summary>
     [HttpPut("{groupId:guid}/ignored-names")]
     public async Task<ActionResult<GroupDto>> SetIgnoredNames(
         Guid groupId, SetIgnoredNamesRequest request, CancellationToken ct)
         => Ok(await groups.SetIgnoredNamesAsync(UserId, groupId, request, ct));
 
-    /// <summary>
-    /// Changes one member's colour. Your own is yours; anyone else's is an admin
-    /// decision, because it changes what everybody in the group sees.
-    /// </summary>
     [HttpPatch("{groupId:guid}/members/{memberId:guid}/color")]
     public async Task<ActionResult<GroupMemberDto>> SetMemberColor(
         Guid groupId, Guid memberId, SetMemberColorRequest request, CancellationToken ct)
         => Ok(await groups.SetMemberColorAsync(UserId, groupId, memberId, request, ct));
 
-    /// <summary>Folds one member into another. Cannot be undone.</summary>
     [HttpPost("{groupId:guid}/members/merge")]
     public async Task<ActionResult<GroupDto>> MergeMembers(
         Guid groupId, MergeMembersRequest request, CancellationToken ct)
@@ -94,10 +77,6 @@ public sealed class GroupsController(
         Guid groupId, AddUserMemberRequest request, CancellationToken ct)
         => Ok(await groups.AddUserMemberAsync(UserId, groupId, request, ct));
 
-    /// <summary>
-    /// People with an account who are not in the group yet, so the add-someone
-    /// field can search them instead of asking for a name to be typed exactly.
-    /// </summary>
     [HttpGet("/api/users/addable")]
     public async Task<ActionResult<IReadOnlyList<AddableUserDto>>> AddableUsers(
         [FromQuery] Guid? groupId, CancellationToken ct)
@@ -119,8 +98,6 @@ public sealed class GroupsController(
         Guid groupId, CancellationToken ct)
         => Ok(await groups.GetLineageAsync(UserId, groupId, ct));
 
-    // ---- invites ---------------------------------------------------------
-
     [HttpGet("{groupId:guid}/invites")]
     public async Task<ActionResult<IReadOnlyList<InviteDto>>> ListInvites(
         Guid groupId, CancellationToken ct)
@@ -131,7 +108,6 @@ public sealed class GroupsController(
         Guid groupId, CreateInviteRequest request, CancellationToken ct)
         => Ok(await invites.CreateAsync(UserId, groupId, request, ct));
 
-    /// <summary>The same invite as a scannable PNG.</summary>
     [HttpGet("invites/{inviteId:guid}/qr")]
     public async Task<IActionResult> InviteQrCode(
         Guid inviteId, [FromQuery] int size = 10, CancellationToken ct = default)
@@ -144,7 +120,6 @@ public sealed class GroupsController(
         return NoContent();
     }
 
-    /// <summary>Unauthenticated peek, so the sign-in page can name the group.</summary>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpGet("/api/invites/{token}")]
@@ -155,8 +130,6 @@ public sealed class GroupsController(
     [HttpPost("/api/invites/{token}/redeem")]
     public async Task<ActionResult<RedeemInviteResult>> RedeemInvite(string token, CancellationToken ct)
         => Ok(await invites.RedeemAsync(UserId, token, ct));
-
-    // ---- lifecycle -------------------------------------------------------
 
     [HttpPost("merge")]
     public async Task<ActionResult<MergeGroupsResult>> Merge(MergeGroupsRequest request, CancellationToken ct)

@@ -25,11 +25,9 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.HasIndex(e => new { e.GroupId, e.SpentAt });
         builder.HasIndex(e => new { e.GroupId, e.ServerSeq });
         builder.HasIndex(e => e.PaidByMemberId);
-        // Import dedupe looks up by fingerprint across the user's groups.
         builder.HasIndex(e => e.ImportFingerprint);
         builder.HasIndex(e => e.ImportBatchId);
         builder.HasIndex(e => e.RecurringExpenseId);
-        // The stats screen totals a group's spending by category.
         builder.HasIndex(e => new { e.GroupId, e.CategoryKey });
 
         builder.HasOne(e => e.Group)
@@ -99,8 +97,6 @@ public class ExpensePayerConfiguration : IEntityTypeConfiguration<ExpensePayer>
         builder.Property(p => p.VectorClockJson).HasColumnType("jsonb").IsRequired();
         builder.Property(p => p.LastWriterDeviceId).HasMaxLength(64);
 
-        // One row per member per expense: a member who paid twice at the same till
-        // paid one amount as far as this is concerned.
         builder.HasIndex(p => new { p.ExpenseId, p.MemberId }).IsUnique();
         builder.HasIndex(p => p.MemberId);
         builder.HasIndex(p => p.GroupId);
@@ -231,7 +227,6 @@ public class RecurringExpenseConfiguration : IEntityTypeConfiguration<RecurringE
         builder.Property(r => r.VectorClockJson).HasColumnType("jsonb").IsRequired();
         builder.Property(r => r.LastWriterDeviceId).HasMaxLength(64);
 
-        // The worker scans for what is due; keep that lookup cheap.
         builder.HasIndex(r => new { r.IsPaused, r.NextRunAt });
         builder.HasIndex(r => r.GroupId);
 
@@ -262,9 +257,6 @@ public class SettlementConfiguration : IEntityTypeConfiguration<Settlement>
         builder.HasIndex(s => new { s.GroupId, s.SettledAt });
         builder.HasIndex(s => new { s.GroupId, s.ServerSeq });
 
-        // Plain column, no foreign key: the two halves of an offset point at each
-        // other, so whichever is written first would point at a row that does not
-        // exist yet.
         builder.Property(s => s.OffsetSettlementId);
 
         builder.HasOne(s => s.Group)
@@ -303,7 +295,6 @@ public class ReceiptConfiguration : IEntityTypeConfiguration<Receipt>
         builder.Property(r => r.OriginalFileName).HasMaxLength(260);
         builder.Property(r => r.ContentHash).HasMaxLength(64).IsRequired();
 
-        // Same photo uploaded twice reuses one blob.
         builder.HasIndex(r => r.ContentHash).IsUnique();
     }
 }

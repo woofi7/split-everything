@@ -2,14 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub, mount } from '@vue/test-utils'
 import BottomNav from '@/components/layout/BottomNav.vue'
 
-/**
- * Which tab is lit.
- *
- * Decided by route name rather than by the router's path matching. A group opened
- * by its own URL is the dashboard, rendered by the same component, so coming back
- * to it from an expense or the settle screen left every tab unlit: the path was
- * /groups/<id> while the tab points at /dashboard.
- */
 let routeName = 'dashboard'
 
 vi.mock('vue-router', () => ({
@@ -22,7 +14,6 @@ function mountNav(name: string) {
   return mount(BottomNav, { global: { stubs: { RouterLink: RouterLinkStub } } })
 }
 
-/** The tabs marked active, by their data-tab name. */
 function litTabs(wrapper: ReturnType<typeof mountNav>): string[] {
   return wrapper
     .findAll('[data-tab]')
@@ -36,7 +27,6 @@ describe('BottomNav', () => {
   })
 
   it('lights the dashboard on a group opened by its own URL', () => {
-    // The reported bug: back from an expense lands here, and nothing was lit.
     expect(litTabs(mountNav('group'))).toEqual(['dashboard'])
   })
 
@@ -59,8 +49,6 @@ describe('BottomNav', () => {
   })
 
   it('lights nothing on a screen no tab owns', () => {
-    // Settling up and group settings are reached from a tab, not by one, and the
-    // way back out of them is the back button rather than the bar.
     for (const name of ['settle', 'group-settings', 'expense', 'import', 'sign-in']) {
       expect(litTabs(mountNav(name))).toEqual([])
     }

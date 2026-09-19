@@ -2,17 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 
-/**
- * Pull down at the top of a screen to sync.
- *
- * The app syncs on its own, but there was no way to ask, and watching a stale figure
- * wondering whether anything is happening is a bad place to leave somebody.
- *
- * The page is what scrolls here, not the window, so the gesture watches the page:
- * only from the very top, and only when the pull is more down than across, which is
- * what keeps it out of the way of the swipe that changes group.
- */
-
 const mounted: VueWrapper[] = []
 
 function mountPull() {
@@ -21,7 +10,6 @@ function mountPull() {
   return wrapper
 }
 
-/** The shell's page, which is the thing that scrolls and the thing that moves. */
 function pageElement(scrollTop = 0): HTMLElement {
   const page = document.createElement('main')
   page.setAttribute('data-app-page', '')
@@ -44,7 +32,6 @@ function touch(type: string, points: Point[], target: EventTarget = window): Eve
   return event
 }
 
-/** A finger going down, in the stages a browser reports them. */
 function pull(from: Point, ...path: Point[]): void {
   touch('touchstart', [from])
   for (const point of path) touch('touchmove', [point])
@@ -78,8 +65,6 @@ describe('PullToRefresh', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="pull-indicator"]').exists()).toBe(true)
-    // Half the distance: a page that tracks a finger exactly reads as dragged
-    // rather than stretched, and there is nothing underneath to drag it to.
     expect(page.style.transform).toBe('translateY(20px)')
   })
 
@@ -95,7 +80,6 @@ describe('PullToRefresh', () => {
     await flushPromises()
     const enough = wrapper.find('[data-testid="pull-arrow"]').attributes('style')
 
-    // Pointing up is a promise about what release will do, not decoration.
     expect(early).toContain('rotate(')
     expect(early).not.toContain('rotate(180deg)')
     expect(enough).toContain('rotate(180deg)')
@@ -108,7 +92,6 @@ describe('PullToRefresh', () => {
     pull({ x: 200, y: 100 }, { x: 200, y: 200 })
     await flushPromises()
 
-    // That gesture belongs to the list.
     expect(wrapper.find('[data-testid="pull-indicator"]').exists()).toBe(false)
     expect(page.style.transform).toBe('')
   })
@@ -122,7 +105,6 @@ describe('PullToRefresh', () => {
     await flushPromises()
 
     expect(wrapper.emitted('refresh')).toHaveLength(1)
-    // Held, so the spinner reads as doing it rather than as done.
     expect(wrapper.find('[data-testid="pull-indicator"]').exists()).toBe(true)
   })
 
@@ -134,9 +116,6 @@ describe('PullToRefresh', () => {
     release()
     await flushPromises()
 
-    // An arrow means a direction; a whole turn of one means nothing. Once the pull
-    // has been let go the only question left is whether it is finished, and that is
-    // what a ring going round answers.
     expect(wrapper.find('[data-testid="pull-spinner"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="pull-arrow"]').exists()).toBe(false)
   })
@@ -154,8 +133,6 @@ describe('PullToRefresh', () => {
     await vi.advanceTimersByTimeAsync(400)
 
     expect(wrapper.find('[data-testid="pull-indicator"]').exists()).toBe(false)
-    // And the page is handed back as it was found: a lasting transform changes
-    // what everything fixed inside it is positioned against.
     expect(page.style.transform).toBe('')
   })
 
@@ -187,7 +164,6 @@ describe('PullToRefresh', () => {
     pageElement()
     const wrapper = mountPull()
 
-    // More across than down: the swipe's business, not this one's.
     pull({ x: 300, y: 100 }, { x: 180, y: 130 })
     release()
     await flushPromises()
@@ -272,7 +248,6 @@ describe('PullToRefresh', () => {
     release()
     await flushPromises()
 
-    // A window listener outlives its component unless it is taken back down.
     expect(page.style.transform).toBe('')
   })
 })

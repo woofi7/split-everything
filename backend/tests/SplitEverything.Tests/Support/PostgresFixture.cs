@@ -4,14 +4,6 @@ using Testcontainers.PostgreSql;
 
 namespace SplitEverything.Tests.Support;
 
-/// <summary>
-/// One throwaway Postgres for the whole run.
-///
-/// A real database rather than the in-memory provider, because the schema leans on
-/// jsonb columns, partial unique indexes and identity sequences - none of which
-/// the in-memory provider enforces, so tests would pass against behaviour Postgres
-/// does not actually have.
-/// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
@@ -28,7 +20,6 @@ public sealed class PostgresFixture : IAsyncLifetime
         await _container.StartAsync();
         ConnectionString = _container.GetConnectionString();
 
-        // Create the schema once from the model, then every test class truncates.
         await using var db = CreateContext();
         await db.Database.EnsureCreatedAsync();
     }

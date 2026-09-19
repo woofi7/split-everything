@@ -16,8 +16,6 @@ describe('local database', () => {
     const first = await getDeviceId()
     const second = await getDeviceId()
 
-    // The device id is the key in every vector clock. A new one per session would
-    // make each launch look like a brand new peer and conflict with itself.
     expect(second).toBe(first)
   })
 
@@ -35,7 +33,6 @@ describe('local database', () => {
     await setCursor('group-1', 42)
     await setCursor('group-1', 7)
 
-    // Replaying history the device already applied would resurrect deleted rows.
     expect(await getCursor('group-1')).toBe(42)
   })
 

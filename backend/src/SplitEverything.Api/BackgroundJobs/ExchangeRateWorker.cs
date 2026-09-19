@@ -4,10 +4,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Api.BackgroundJobs;
 
-/// <summary>
-/// Warms the daily rate cache for the currencies actually in use, so the first
-/// expense of the day does not wait on Frankfurter.
-/// </summary>
 public sealed class ExchangeRateWorker(
     IServiceScopeFactory scopes,
     ILogger<ExchangeRateWorker> logger,
@@ -30,8 +26,6 @@ public sealed class ExchangeRateWorker(
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 var currency = scope.ServiceProvider.GetRequiredService<ICurrencyConverter>();
 
-                // Only the currencies this install actually uses: no point fetching
-                // the whole table for a handful of groups.
                 var codes = await db.Groups.Select(g => g.BaseCurrency)
                     .Union(db.Users.Select(u => u.DefaultCurrency))
                     .Union(db.Expenses.Where(e => !e.IsDeleted).Select(e => e.Currency))

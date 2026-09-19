@@ -15,7 +15,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
     [Migration("20260921071238_AddCategories")]
     partial class AddCategories
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -20,11 +20,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Api;
 
-/// <summary>
-/// The three schedulers. What matters is that each one does its work on a tick,
-/// survives a failing run without dying, and stops cleanly on shutdown - a worker
-/// that exits on the first exception would silently stop generating rent.
-/// </summary>
 public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private ServiceProvider BuildProvider(Action<ServiceCollection>? configure = null)
@@ -52,19 +47,6 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
         return services.BuildServiceProvider();
     }
 
-    /// <summary>
-    /// Runs a worker until it has done the thing, or gives up.
-    ///
-    /// It used to start the worker, sleep three hundred milliseconds and stop it.
-    /// That is a guess about how long a tick takes on a machine doing something
-    /// else at the time, and it is the kind of guess that passes for months and
-    /// then fails in CI - or, worse, passes while quietly executing less of the
-    /// worker than it did yesterday, which is how the coverage floor started
-    /// moving on its own.
-    ///
-    /// Waiting for the outcome instead is both faster in the ordinary case and
-    /// honest about what it is waiting for.
-    /// </summary>
     private static async Task RunUntilAsync(
         BackgroundService worker, Func<bool> done, TimeSpan? limit = null)
     {
@@ -82,7 +64,6 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
         }
     }
 
-    /// <summary>For the two tests about stopping, where there is nothing to wait for.</summary>
     private static async Task RunTicksAsync(BackgroundService worker, TimeSpan? window = null)
     {
         await worker.StartAsync(CancellationToken.None);
@@ -107,9 +88,6 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
             provider.GetRequiredService<IServiceScopeFactory>(), Clock,
             NullLogger<RecurringExpenseWorker>.Instance, WorkerSchedule.Immediate);
 
-        // Two runs, not one: surviving a failure means coming back for the next
-        // tick, and a worker that died on the first would silently stop generating
-        // rent. Waiting for the second is what makes this test say that.
         await RunUntilAsync(worker, () => recurring.ReceivedCalls().Count() >= 2);
 
         await recurring.Received(Quantity.Within(2, int.MaxValue))
@@ -155,8 +133,6 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
         await worker.StartAsync(CancellationToken.None);
         await worker.StopAsync(CancellationToken.None);
 
-        // StopAsync completing means the loop observed cancellation and returned,
-        // rather than the host being left waiting on a worker that ignores it.
         (worker.ExecuteTask is not null).ShouldBeTrue();
     }
 
@@ -174,7 +150,6 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
         await RunUntilAsync(worker, () => Currency.ReceivedCalls().Any(
             call => call.GetMethodInfo().Name == nameof(ICurrencyConverter.RefreshCacheAsync)));
 
-        // Only the currencies this install actually uses, not the whole table.
         await Currency.Received().RefreshCacheAsync(
             Arg.Is<IEnumerable<string>>(codes => codes.Contains("EUR") && codes.Contains("CAD")),
             Arg.Any<CancellationToken>());
@@ -233,8 +208,6 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
     [Fact]
     public async Task The_compaction_worker_survives_a_failing_run()
     {
-        // The worker only calls out when a group actually has stale history, so the
-        // failing path is only reachable once there is something to compact.
         var user = await TestData.SeedUserAsync(Db);
         var group = await Groups.CreateAsync(user.Id,
             new CreateGroupRequest("Long lived", "CAD", null, null, null, null));
@@ -268,8 +241,6 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
     [Fact]
     public async Task The_exchange_rate_worker_survives_a_failing_run()
     {
-        // A single currency needs no conversion, so there has to be a second one for
-        // the refresh to be attempted at all.
         var user = await TestData.SeedUserAsync(Db);
         await Groups.CreateAsync(user.Id, new CreateGroupRequest("Euro trip", "EUR", null, null, null, null));
 

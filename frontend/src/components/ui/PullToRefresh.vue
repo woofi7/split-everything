@@ -1,45 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
-/**
- * Pull down at the top of a screen to sync.
- *
- * The app syncs on its own - when it starts, when it comes back online, when a
- * change arrives - but there was no way to ask. Watching a stale figure and
- * wondering whether the thing is doing anything is a bad place to leave somebody,
- * and every phone has taught the same gesture for exactly this question.
- *
- * The page is what scrolls here, not the window, so this watches the page: a pull
- * only counts when it is already at the top, which is what keeps it from firing
- * halfway down a list. The horizontal swipe that changes group decides its axis on
- * the first few pixels and gives up on anything vertical, so the two never both
- * claim a gesture.
- *
- * Renders the indicator only. What refreshing means belongs to the screen, which
- * says so by handling the event.
- */
-
 const emit = defineEmits<{ refresh: [] }>()
 
-/** How far the finger travels before letting go actually refreshes. */
 const THRESHOLD_PX = 64
 
-/** How far the page can follow it, however hard it is pulled. */
 const MAX_PULL_PX = 96
 
-/**
- * How much of the finger's movement the page takes.
- *
- * Half, so the pull feels like it is against something. A page that tracks a finger
- * exactly reads as dragged rather than stretched, and there is nothing underneath
- * to drag it to.
- */
 const RESISTANCE = 0.5
 
-/** When a drag is one: past the slop, and more down than across. */
 const DECIDE_PX = 8
 
-/** How long the page takes to settle back. */
 const SETTLE_MS = 220
 
 const distance = ref(0)
@@ -51,12 +22,6 @@ let phase: Phase = 'idle'
 let origin: { x: number; y: number } | null = null
 let page: HTMLElement | null = null
 
-/**
- * How far the arrow has turned, as a promise about what letting go will do.
- *
- * It finishes its turn exactly when the pull becomes far enough, so pointing up is
- * not decoration: it means release now and this will sync.
- */
 const turned = computed(() => Math.min(distance.value / (THRESHOLD_PX * RESISTANCE), 1) * 180)
 
 function pageElement(): HTMLElement | null {
@@ -70,7 +35,6 @@ function onStart(event: TouchEvent): void {
   const touch = event.touches[0]
   if (event.touches.length !== 1 || !touch || overlaid(event.target)) return
 
-  // Only from the very top. Anywhere else the gesture belongs to the list.
   const scroller = pageElement()
   if (!scroller || scroller.scrollTop > 0) return
 
@@ -93,8 +57,6 @@ function onMove(event: TouchEvent): void {
   if (phase === 'tracking') {
     if (Math.max(Math.abs(dx), Math.abs(dy)) < DECIDE_PX) return
 
-    // Up, or mostly sideways: not this gesture. Given up on rather than watched,
-    // so a finger that wanders back down cannot start a pull mid-scroll.
     if (dy <= 0 || Math.abs(dx) >= dy) {
       give()
       return
@@ -104,10 +66,6 @@ function onMove(event: TouchEvent): void {
     isPulling.value = true
   }
 
-  /*
-   * The scroller is at the top and has nowhere to go, so without this the browser
-   * spends the gesture on its own overscroll bounce and the page never moves.
-   */
   if (event.cancelable) event.preventDefault()
 
   distance.value = Math.min(dy * RESISTANCE, MAX_PULL_PX)
@@ -125,10 +83,6 @@ function onEnd(): void {
     return
   }
 
-  /*
-   * Held at the threshold while it works, which is what makes the spinner read as
-   * "doing it" rather than "done". Released by the screen finishing, not by a timer.
-   */
   phase = 'refreshing'
   isPulling.value = false
   isRefreshing.value = true
@@ -138,7 +92,6 @@ function onEnd(): void {
   emit('refresh')
 }
 
-/** Called by the screen when its refresh is over, whichever way it went. */
 function done(): void {
   if (phase !== 'refreshing') return
   spring()
@@ -157,7 +110,6 @@ function spring(): void {
   window.setTimeout(release, SETTLE_MS)
 }
 
-/** Drops a gesture that turned out to be a scroll, with nothing to undo. */
 function give(): void {
   if (phase === 'refreshing') return
 
@@ -170,11 +122,6 @@ function give(): void {
   phase = 'idle'
 }
 
-/**
- * Moves the page itself, written straight onto the element: it belongs to the shell
- * around this component, and a transform per frame through a binding is a re-render
- * per frame for one style.
- */
 function hold(offset: number, ms: number): void {
   const scroller = pageElement()
   if (!scroller) return
@@ -183,7 +130,6 @@ function hold(offset: number, ms: number): void {
   scroller.style.transform = offset > 0 ? `translateY(${offset}px)` : 'translateY(0px)'
 }
 
-/** Hands the page back as it was found: a lasting transform changes what is fixed. */
 function release(): void {
   if (!page) return
 
@@ -211,13 +157,7 @@ onUnmounted(() => {
   release()
 })
 </script>
-
 <template>
-  <!--
-    Over the top of the page, where the pull comes from. Teleported so it is not
-    inside the thing being moved: an indicator that travels with the page would sit
-    still relative to it and never appear to arrive.
-  -->
   <Teleport to="body">
     <div
       v-if="isPulling || isRefreshing"
@@ -231,15 +171,6 @@ onUnmounted(() => {
         class="flex h-9 w-9 items-center justify-center rounded-full border shadow-lg"
         style="background: var(--surface-raised); border-color: var(--border)"
       >
-        <!--
-          A ring while it works, an arrow while it is being pulled.
-
-          The arrow used to stay and spin, which read as an arrow pointing every
-          which way rather than as waiting: an arrow means a direction, and a whole
-          turn of one means nothing. Its half turn is the promise ("let go and this
-          syncs"); once it has been let go the question is only whether it is done,
-          which is what a ring going round says.
-        -->
         <svg
           v-if="isRefreshing"
           data-testid="pull-spinner"
@@ -253,7 +184,6 @@ onUnmounted(() => {
           <circle cx="12" cy="12" r="9" class="opacity-25" />
           <path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round" />
         </svg>
-
         <svg
           v-else
           data-testid="pull-arrow"
@@ -271,7 +201,6 @@ onUnmounted(() => {
     </div>
   </Teleport>
 </template>
-
 <style scoped>
 .pull-spin {
   animation: pull-spin 900ms linear infinite;

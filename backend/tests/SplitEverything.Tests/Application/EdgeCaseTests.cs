@@ -19,10 +19,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// The branches the happy-path suites do not reach: filters, optional fields,
-/// unusual inputs and the error paths of the outbound adapters.
-/// </summary>
 public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
@@ -163,7 +159,6 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var comment = await Expenses.AddCommentAsync(member.Id,
             new CreateCommentRequest(expense.Id, "Theirs", null, null));
 
-        // Moderation has to be possible, or an owner cannot clean up their own group.
         await Expenses.DeleteCommentAsync(owner.Id, comment.Id);
 
         (await Expenses.GetCommentsAsync(owner.Id, expense.Id)).ShouldBeEmpty();
@@ -182,7 +177,6 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var nested = await Expenses.AddCommentAsync(userId,
             new CreateCommentRequest(expense.Id, "Follow-up", reply.Id, null));
 
-        // Threading is deliberately one level deep, so it flattens rather than nests.
         nested.ParentCommentId.ShouldBe(parent.Id);
     }
 
@@ -239,7 +233,6 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 
         group.IconName.ShouldBe("mountain");
         group.ColorHex.ShouldBe("#00ff00");
-        // Duplicate and blank placeholder names are dropped rather than creating junk.
         group.Members.Count.ShouldBe(2);
     }
 
@@ -295,7 +288,6 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
             new AuthOptions { AppBaseUrl = "https://split.test" }, Clock);
         var invite = await invites.CreateAsync(userId, group.Id, new CreateInviteRequest(null, null, 1, 72));
 
-        // The QR form carries the id, since the plaintext token is never stored.
         var preview = await invites.PreviewAsync(invite.Id.ToString("N"));
 
         preview.GroupId.ShouldBe(group.Id);
@@ -425,8 +417,6 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var receipts = new ReceiptService(Db,
             new LocalDiskReceiptStorage(new ReceiptStorageOptions { RootPath = root }), Clock);
 
-        // A request stream does not report its length, so the size check can only
-        // happen after the bytes have been read.
         var stream = new NonSeekableStream(new byte[ReceiptService.MaxBytes + 16]);
 
         await Should.ThrowAsync<ValidationException>(
@@ -443,8 +433,6 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
             new HttpClient(handler) { BaseAddress = new Uri("https://api.frankfurter.dev/") },
             Db, Clock, NullLogger<FrankfurterCurrencyConverter>.Instance);
 
-        // Best effort: a failed warm-up must not throw, since the on-demand path
-        // still works.
         await converter.RefreshCacheAsync(["CAD", "EUR"]);
     }
 
@@ -568,7 +556,6 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         Directory.Delete(root, recursive: true);
     }
 
-    /// <summary>Mimics a request body: readable once, with no length.</summary>
     private sealed class NonSeekableStream(byte[] bytes) : Stream
     {
         private readonly MemoryStream _inner = new(bytes);

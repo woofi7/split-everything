@@ -18,7 +18,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<GroupInvite> GroupInvites => Set<GroupInvite>();
     public DbSet<GroupLineageLink> GroupLineageLinks => Set<GroupLineageLink>();
 
-
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<ExpensePayer> ExpensePayers => Set<ExpensePayer>();
     public DbSet<ExpenseSplit> ExpenseSplits => Set<ExpenseSplit>();
@@ -46,13 +45,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         base.OnModelCreating(builder);
     }
 
-    /// <summary>
-    /// Npgsql refuses to write a DateTimeOffset that carries a non-zero offset to
-    /// timestamptz, and clients legitimately post local offsets ("spent at 18:30
-    /// -04:00"). Normalising every timestamp on the way in makes that a non-issue
-    /// everywhere at once, instead of one forgotten ToUniversalTime() away from a
-    /// write that throws in production.
-    /// </summary>
     private static void ForceUtcTimestamps(ModelBuilder builder)
     {
         var toUtc = new ValueConverter<DateTimeOffset, DateTimeOffset>(

@@ -27,7 +27,6 @@ vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
 }))
 
-/** One instance, so a test can see what the back button did. */
 const routerStub = { push: vi.fn(), replace: vi.fn(), back: vi.fn() }
 
 vi.mock('@/import/statementWorkerClient', () => ({
@@ -64,11 +63,6 @@ const api = () =>
     '/auth/capabilities': () => ({ googleConfigured: true, developmentSignIn: false }),
   })
 
-/**
- * The tab bar is how people get anywhere. A screen that hides it is a dead end
- * they have to use the browser back button to escape, so only the two screens
- * reached before signing in are allowed to.
- */
 const inApp: Array<[string, Component]> = [
   ['Dashboard', DashboardView],
   ['Group settings', GroupSettingsView],
@@ -89,11 +83,6 @@ const preAuth: Array<[string, Component]> = [
   ['Join', JoinView],
 ]
 
-/**
- * Screens the tab bar cannot reach. A tab is the way back to a top-level screen,
- * but nothing in the bar leads to a group, an expense or a settings page, so
- * without a back button the only way out is the browser's own.
- */
 const subScreens: Array<[string, Component, string]> = [
   ['Group settings', GroupSettingsView, 'Roommates'],
   ['New group', NewGroupView, 'Dashboard'],
@@ -104,12 +93,6 @@ const subScreens: Array<[string, Component, string]> = [
   ['Not found', NotFoundView, 'Dashboard'],
 ]
 
-/**
- * The expense form is left out on purpose. The route mock above hands every view
- * the same params, which puts the form into edit mode, where it does have a back
- * button. Both of its modes are covered in its own spec, where the route can be
- * set per test.
- */
 const tabScreens: Array<[string, Component]> = [
   ['Dashboard', DashboardView],
   ['Activity', ActivityView],
@@ -133,7 +116,6 @@ describe('the back button', () => {
       expenses: [testExpense()],
     })
 
-    // Named, so the label reads as a destination rather than just "back".
     expect(wrapper.find('[data-testid="back"]').attributes('aria-label')).toBe(`Back to ${parent}`)
   })
 
@@ -148,8 +130,6 @@ describe('the back button', () => {
 
     await wrapper.find('[data-testid="back"]').trigger('click')
 
-    // A screen opened from a notification or a shared URL has nothing to go back
-    // to, and pressing back there must not leave the app.
     expect(routerStub.back).not.toHaveBeenCalled()
     const to = routerStub.push.mock.calls[0]?.[0] as { name?: string }
     expect(to?.name).toBeTruthy()
@@ -167,8 +147,6 @@ describe('the back button', () => {
 
     await wrapper.find('[data-testid="back"]').trigger('click')
 
-    // An expense opened from the activity feed returns to the feed, not to the
-    // group the expense happens to belong to.
     expect(routerStub.back).toHaveBeenCalled()
     expect(routerStub.push).not.toHaveBeenCalled()
 
@@ -181,7 +159,6 @@ describe('the back button', () => {
       expenses: [testExpense()],
     })
 
-    // The tab is already lit; a back button here would compete with it.
     expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
   })
 
@@ -205,7 +182,6 @@ describe('the bottom tab bar', () => {
   it.each(preAuth)('is not on the %s screen, which is reached before signing in', async (_name, component) => {
     const { wrapper } = await mountView(component, { api: api(), signedIn: false })
 
-    // Every tab would bounce straight back to sign-in.
     expect(wrapper.find('nav[aria-label="Main"]').exists()).toBe(false)
   })
 
@@ -215,8 +191,6 @@ describe('the bottom tab bar', () => {
       expenses: [testExpense()],
     })
 
-    // The bar is a row of the frame now rather than something over the page, so
-    // this is only clearance for the raised centre button.
     expect(wrapper.find('main').classes()).toContain('pb-10')
   })
 })

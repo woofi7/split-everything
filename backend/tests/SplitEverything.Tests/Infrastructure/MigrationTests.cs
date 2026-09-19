@@ -9,11 +9,6 @@ using Testcontainers.PostgreSql;
 
 namespace SplitEverything.Tests.Infrastructure;
 
-/// <summary>
-/// The rest of the suite builds its schema from the model. These tests check the
-/// other path, the one production actually uses: applying the migrations to an
-/// empty database, and confirming the result still matches the model.
-/// </summary>
 public class MigrationTests : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
@@ -48,8 +43,6 @@ public class MigrationTests : IAsyncLifetime
         await using var db = CreateContext();
         await db.Database.MigrateAsync();
 
-        // A pending model change means someone edited an entity without adding a
-        // migration, and the next deploy would run against the wrong schema.
         db.Database.HasPendingModelChanges().ShouldBeFalse();
     }
 
@@ -80,5 +73,4 @@ public class MigrationTests : IAsyncLifetime
             (await command.ExecuteScalarAsync()).ShouldNotBeNull();
         }
     }
-
 }

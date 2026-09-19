@@ -15,7 +15,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
     [Migration("20260902121605_AddExpensePayers")]
     partial class AddExpensePayers
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

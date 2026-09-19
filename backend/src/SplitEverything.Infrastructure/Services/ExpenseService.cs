@@ -29,8 +29,6 @@ public sealed class ExpenseService(
         var group = await GroupAccess.RequireGroupAsync(db, request.GroupId, ct);
         GroupAccess.RequireWritable(group);
 
-        // An offline client retries its queued creates; the client id makes the
-        // replay a no-op instead of a second charge.
         if (request.ClientId is { } clientId)
         {
             var existing = await db.Expenses
@@ -178,8 +176,6 @@ public sealed class ExpenseService(
         var group = await GroupAccess.RequireGroupAsync(db, expense.GroupId, ct);
         GroupAccess.RequireWritable(group);
 
-        // The client tells us which revision it edited. If ours has moved on
-        // concurrently, we refuse rather than silently dropping the other edit.
         if (request.BaseVectorClock is not null)
         {
             var incoming = VectorClock.From(request.BaseVectorClock);
@@ -224,8 +220,6 @@ public sealed class ExpenseService(
         if (request.ReceiptId is not null) expense.ReceiptId = request.ReceiptId;
         if (request.Notes is not null) expense.Notes = request.Notes.Trim();
 
-        // Null leaves the filing alone; an empty string is the explicit "not filed
-        // under anything", which is what the picker's blank option sends.
         if (request.CategoryKey is not null)
         {
             var wanted = CleanCategoryKey(request.CategoryKey);
@@ -236,9 +230,6 @@ public sealed class ExpenseService(
         var splitType = request.SplitType ?? expense.SplitType;
         var members = await LoadMemberIdsAsync(expense.GroupId, ct);
 
-        // Who paid, in whichever way the caller said it: a list of payers, a single
-        // payer id, or neither - in which case whoever is on the expense already
-        // stays there, apportioned to its amount if that changed.
         var payers = request.Payers is { Count: > 0 }
             ? ResolvePayers(request.Payers, null, expense.Amount, expense.Currency, members)
             : request.PaidByMemberId is { } singlePayer
@@ -314,8 +305,6 @@ public sealed class ExpenseService(
         var seq = await writer.RecordAsync(expense, SyncEntityType.Expense, expense.GroupId,
             SyncOperation.Delete, deviceId, userId, ExpensePayload(expense), ct: ct);
 
-        // Tombstone the splits too, so a peer replaying the delete does not keep a
-        // dangling share that would skew its local balance.
         foreach (var split in expense.Splits.Where(s => !s.IsDeleted))
         {
             split.IsDeleted = true;
@@ -374,7 +363,6 @@ public sealed class ExpenseService(
             var parent = await db.ExpenseComments
                              .FirstOrDefaultAsync(c => c.Id == parentId && c.ExpenseId == request.ExpenseId, ct)
                          ?? throw new NotFoundException($"Comment {parentId}");
-            // One level of threading only: a reply to a reply attaches to the top.
             if (parent.ParentCommentId is not null)
                 request = request with { ParentCommentId = parent.ParentCommentId };
         }
@@ -467,24 +455,12 @@ public sealed class ExpenseService(
         db.ChangeTracker.Clear();
     }
 
-    // ---- internals -------------------------------------------------------
-
     private async Task<HashSet<Guid>> LoadMemberIdsAsync(Guid groupId, CancellationToken ct)
         => (await db.GroupMembers
             .Where(m => m.GroupId == groupId && !m.IsDeleted)
             .Select(m => m.Id)
             .ToListAsync(ct)).ToHashSet();
 
-    /// <summary>
-    /// Who paid, as a list, however the caller chose to say it.
-    ///
-    /// One payer is the ordinary case and says so with an id alone; the amount is
-    /// then the whole expense by definition. Several payers have to add up to the
-    /// expense, and a request where they do not is refused rather than reconciled:
-    /// the two numbers came from the same screen, so a disagreement means one of
-    /// them is not what the person typed, and quietly picking a winner is how a
-    /// total ends up wrong with nothing on screen to say why.
-    /// </summary>
     private static IReadOnlyList<PayerInputDto> ResolvePayers(
         IReadOnlyList<PayerInputDto>? payers,
         Guid? paidByMemberId,
@@ -523,14 +499,6 @@ public sealed class ExpenseService(
         return payers;
     }
 
-    /// <summary>
-    /// The payers already on an expense, apportioned if its amount has changed.
-    ///
-    /// An edit that only moves the amount says nothing about who paid, and the old
-    /// figures would no longer add up to the new total. One payer takes the new
-    /// amount whole; several keep their proportions, with the rounding going to the
-    /// largest so the parts still sum exactly.
-    /// </summary>
     private static IReadOnlyList<PayerInputDto> KeepPayers(Expense expense, decimal amount, string currency)
     {
         var existing = expense.Payers.Where(p => !p.IsDeleted).ToList();
@@ -557,10 +525,6 @@ public sealed class ExpenseService(
         return scaled;
     }
 
-    /// <summary>
-    /// The payer whose name goes on the expense: the largest, and the lowest id of
-    /// them when two paid the same, so the answer does not depend on ordering.
-    /// </summary>
     private static Guid MainPayer(IReadOnlyList<PayerInputDto> payers)
         => payers.OrderByDescending(p => p.Amount).ThenBy(p => p.MemberId).First().MemberId;
 
@@ -612,8 +576,6 @@ public sealed class ExpenseService(
             }
             else
             {
-                // Kept as a deleted row rather than removed, so a device that has the
-                // old version can tell the payer left rather than never existing.
                 existing.IsDeleted = true;
                 existing.DeletedAt = clock.UtcNow;
                 existing.Amount = 0m;
@@ -640,11 +602,6 @@ public sealed class ExpenseService(
         RebalancePayerBaseAmounts(expense, payers, baseCurrency);
     }
 
-    /// <summary>
-    /// The converted contributions have to add up to the converted expense, the same
-    /// way the converted shares do: each is rounded on its own, and a rate that is
-    /// not 1 leaves the sum a cent out often enough to matter.
-    /// </summary>
     private void RebalancePayerBaseAmounts(
         Expense expense, IReadOnlyList<PayerInputDto> payers, string baseCurrency)
     {
@@ -714,8 +671,6 @@ public sealed class ExpenseService(
         }
         catch (ArgumentException ex)
         {
-            // The calculator guards the arithmetic; surfacing it as a validation
-            // failure keeps a bad split a 400 rather than a 500.
             throw new ValidationException(ex.Message);
         }
         catch (InvalidOperationException ex)
@@ -795,11 +750,6 @@ public sealed class ExpenseService(
         RebalanceBaseAmounts(expense, shares, baseCurrency);
     }
 
-    /// <summary>
-    /// Converting each share separately can leave the base-currency shares off the
-    /// converted total by a cent. Balances are computed from the base amounts, so
-    /// that cent would surface later as a debt nobody owes.
-    /// </summary>
     private static void RebalanceBaseAmounts(Expense expense, IReadOnlyList<SplitShare> shares, string baseCurrency)
     {
         var live = expense.Splits.Where(s => !s.IsDeleted).ToList();
@@ -933,14 +883,6 @@ public sealed class ExpenseService(
             comment.Body, comment.CreatedAt, comment.EditedAt, []);
     }
 
-    /// <summary>
-    /// The key as it is stored: trimmed, lower case, or null for unfiled.
-    ///
-    /// Not checked against the group's list. A category can be removed while an
-    /// expense filed under it is still there, and an expense arriving from a device
-    /// that has not pulled the new list yet is not a reason to refuse the expense -
-    /// it reads as unfiled until somebody says otherwise.
-    /// </summary>
     internal static string? CleanCategoryKey(string? key)
     {
         var trimmed = key?.Trim().ToLowerInvariant();
@@ -956,9 +898,6 @@ public sealed class ExpenseService(
         expense.SpentAt, SplitType = (int)expense.SplitType,
         expense.ReceiptId, expense.Notes, expense.CategoryKey, expense.Revision, expense.IsDeleted,
         expense.OriginGroupId, expense.OriginLineageId,
-        // Who paid rides inside the expense payload rather than syncing as an entity
-        // of its own: it is part of what an expense is, and a device that had one
-        // without the other would compute a balance from half an expense.
         Payers = expense.Payers.Where(y => !y.IsDeleted)
             .Select(y => new { y.MemberId, y.Amount, y.AmountInBaseCurrency })
             .ToList(),

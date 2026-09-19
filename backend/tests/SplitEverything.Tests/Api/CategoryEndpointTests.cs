@@ -10,14 +10,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Api;
 
-/// <summary>
-/// The two category lists, over HTTP.
-///
-/// Who may touch which is the design: a group's own list is any member's, because
-/// it files spending and moves no money, and the server's list belongs to whoever
-/// runs the server. That is three things agreeing - the route, the access check
-/// and the configuration - so they are exercised together.
-/// </summary>
 public class CategoryEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 {
     private async Task SeedGlobalAsync()
@@ -101,7 +93,6 @@ public class CategoryEndpointTests(PostgresFixture fixture) : ApiTestBase(fixtur
                 new CategoryInputDto("ski"),
             ]), Json);
 
-        // Two rows answering to one key would silently share their expenses.
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
@@ -111,8 +102,6 @@ public class CategoryEndpointTests(PostgresFixture fixture) : ApiTestBase(fixtur
         await SeedGlobalAsync();
         await SignInAsync("Admin", "admin@example.com");
 
-        // A second account, on its own device: signed in perfectly legitimately,
-        // and still not the person who runs this server.
         var emma = await SignInAsAnotherUserAsync("Emma");
 
         (await emma.GetAsync("/api/admin/categories")).StatusCode

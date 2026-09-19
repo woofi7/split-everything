@@ -11,12 +11,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// Google is the only identity provider; we store no passwords. A verified Google
-/// token is exchanged for our own short-lived access token plus a rotating refresh
-/// token, so the app can enforce its own session policy without depending on
-/// Google's token lifetimes.
-/// </summary>
 public sealed class AuthService(
     AppDbContext db,
     IJwtTokenService tokens,
@@ -33,8 +27,6 @@ public sealed class AuthService(
 
         if (!identity.EmailVerified || string.IsNullOrWhiteSpace(identity.Email))
         {
-            // An unverified address could belong to someone else, and invites are
-            // matched on email.
             throw new ForbiddenException("Your Google account email is not verified.");
         }
 
@@ -55,7 +47,6 @@ public sealed class AuthService(
         }
         else
         {
-            // The subject is the identity; email and profile are just current values.
             user.Email = identity.Email.Trim().ToLowerInvariant();
             if (!string.IsNullOrWhiteSpace(identity.Name)) user.DisplayName = identity.Name.Trim();
             if (!string.IsNullOrWhiteSpace(identity.PictureUrl)) user.AvatarUrl = identity.PictureUrl;
@@ -68,8 +59,6 @@ public sealed class AuthService(
 
         var issued = await IssueAsync(user, request.DeviceId, ct);
 
-        // A magic link pinned to this address is the whole point of the invite flow:
-        // sign in with Google and land straight in the group.
         var autoJoined = await RedeemPendingInvitesAsync(user, ct);
 
         db.ChangeTracker.Clear();
@@ -82,8 +71,6 @@ public sealed class AuthService(
     {
         if (!options.AllowDevelopmentSignIn)
         {
-            // Checked here rather than only in the controller, so calling the
-            // service directly is no way around it.
             throw new ForbiddenException("Development sign-in is not enabled.");
         }
 
@@ -91,9 +78,6 @@ public sealed class AuthService(
         if (email.Length == 0 || !email.Contains('@') || email.StartsWith('@') || email.EndsWith('@'))
             throw new ValidationException("A valid email address is required.");
 
-        // Namespaced subject: a development account can never collide with a real
-        // Google subject, and matching on email would let this take over somebody's
-        // actual account.
         var subject = $"dev:{email}";
 
         var user = await db.Users.FirstOrDefaultAsync(u => u.GoogleSubject == subject, ct);
@@ -151,15 +135,10 @@ public sealed class AuthService(
         {
             if (stored.ReplacedByTokenId is not null)
             {
-                // Replay of a token that was rotated: the client already exchanged it,
-                // so a second presentation means it leaked. Kill every live token for
-                // the account rather than let a thief keep the chain alive.
                 await RevokeAllAsync(stored.UserId, ct);
                 throw new ForbiddenException("That session was already used. Sign in again.");
             }
 
-            // Revoked without a successor: the user signed this device out
-            // deliberately. Refuse it, but leave their other devices signed in.
             throw new ForbiddenException("That session was signed out.");
         }
 
@@ -219,8 +198,6 @@ public sealed class AuthService(
             if (name != user.DisplayName)
             {
                 user.DisplayName = name;
-                // Group rows carry their own display name so placeholders can exist;
-                // keep the claimed ones in step or a rename would look like it failed.
                 await db.GroupMembers
                     .Where(m => m.UserId == userId)
                     .ExecuteUpdateAsync(s => s.SetProperty(m => m.DisplayName, name), ct);
@@ -235,9 +212,6 @@ public sealed class AuthService(
         {
             var wanted = request.ThemeName.Trim();
 
-            // Empty means back to the default, as with the colour above. Anything
-            // else has to be a theme this app offers, or a client would be told to
-            // wear something it cannot draw.
             if (wanted.Length == 0) user.ThemeName = null;
             else if (AppThemes.IsKnown(wanted)) user.ThemeName = AppThemes.Normalize(wanted);
             else throw new ValidationException("That is not one of the themes to choose from.");
@@ -247,9 +221,6 @@ public sealed class AuthService(
         {
             var wanted = request.Locale.Trim();
 
-            // Empty puts it back to the default, as everywhere else on this API.
-            // Anything the app has no strings for is refused rather than stored:
-            // a screen half in a language nobody asked for has no way out of it.
             if (wanted.Length == 0) user.Locale = AppLocales.Default;
             else if (wanted.Length <= 10 && AppLocales.Resolve(wanted) is { } language)
                 user.Locale = language;
@@ -290,8 +261,6 @@ public sealed class AuthService(
                 })
                 .ToListAsync(ct),
             expenses = await db.Expenses
-                // Paid by one of mine, or owed by one of mine. The payer id is a
-                // Guid and was also being checked for null, which no Guid ever is.
                 .Where(e => groupIds.Contains(e.GroupId)
                             && (memberIds.Contains(e.PaidByMemberId)
                                 || e.Payers.Any(y => memberIds.Contains(y.MemberId))
@@ -326,9 +295,6 @@ public sealed class AuthService(
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
                    ?? throw new NotFoundException($"User {userId}");
 
-        // Detach the identity but leave the group rows standing as placeholders:
-        // other members' balances are computed from those rows, and erasing them
-        // would silently rewrite what everyone else is owed.
         await db.GroupMembers
             .Where(m => m.UserId == userId)
             .ExecuteUpdateAsync(s => s
@@ -345,12 +311,6 @@ public sealed class AuthService(
         db.ChangeTracker.Clear();
     }
 
-    // ---- internals -------------------------------------------------------
-
-    /// <summary>
-    /// Records the device the sign-in came from. Its id keys every vector clock, so
-    /// a device already claimed by another account is refused rather than moved.
-    /// </summary>
     private async Task RegisterDeviceAsync(
         User user,
         string? deviceId,
@@ -422,7 +382,6 @@ public sealed class AuthService(
             }
             catch (AppException)
             {
-                // A stale or already-claimed invite must not block the sign-in itself.
             }
         }
 

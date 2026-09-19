@@ -155,7 +155,6 @@ public class SettlementServiceTests(PostgresFixture fixture) : ServiceTestBase(f
     public async Task The_group_balance_offers_a_simplified_plan()
     {
         var (userId, group, alice, bob, carol) = await SetupAsync();
-        // Alice pays 90 for everyone, Bob pays 30 for everyone.
         await AddExpenseAsync(userId, group.Id, alice, 90m, alice, bob, carol);
         await AddExpenseAsync(userId, group.Id, bob, 30m, alice, bob, carol);
 

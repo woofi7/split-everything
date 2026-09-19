@@ -2,17 +2,6 @@
 import { t } from '@/i18n'
 import { onUnmounted, ref, watch } from 'vue'
 
-/**
- * A thin bar across the top while a screen is on its way.
- *
- * Screens are loaded on demand and a guard may have to bring a session back
- * first, so a tap can take a moment on a phone. With nothing on screen to say so,
- * the tap reads as ignored and people tap again.
- *
- * Held back for a beat on purpose: most navigations are instant, and a bar that
- * flashes on every tap is noise. It only appears once a navigation has taken long
- * enough to be worth mentioning.
- */
 const props = withDefaults(defineProps<{ active: boolean; delayMs?: number }>(), {
   delayMs: 150,
 })
@@ -39,7 +28,6 @@ watch(
 
 onUnmounted(() => clearTimeout(timer))
 </script>
-
 <template>
   <div
     v-if="visible"
@@ -51,7 +39,6 @@ onUnmounted(() => clearTimeout(timer))
     <div class="nav-progress-bar" />
   </div>
 </template>
-
 <style scoped>
 .nav-progress {
   position: fixed;
@@ -64,11 +51,6 @@ onUnmounted(() => clearTimeout(timer))
   background: color-mix(in oklab, var(--color-brand-600) 20%, transparent);
 }
 
-/*
-  Indeterminate, because there is no progress to report: the wait is a request
-  that has not answered yet. It sweeps rather than fills, so it never implies a
-  position it does not know.
-*/
 .nav-progress-bar {
   width: 40%;
   height: 100%;

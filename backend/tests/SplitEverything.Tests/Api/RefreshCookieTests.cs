@@ -8,14 +8,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Api;
 
-/// <summary>
-/// The refresh cookie, which is what lets a device come back without being asked.
-///
-/// It was marked Secure whatever the request, and a browser silently drops a
-/// Secure cookie over plain HTTP. A phone reaching a development machine by its
-/// LAN address therefore never held a session, and no amount of client work could
-/// resume one that was never stored.
-/// </summary>
 public class RefreshCookieTests(PostgresFixture fixture) : ApiTestBase(fixture)
 {
     private async Task<HttpResponseMessage> SignInResponseAsync()
@@ -45,7 +37,6 @@ public class RefreshCookieTests(PostgresFixture fixture) : ApiTestBase(fixture)
     [Fact]
     public async Task The_cookie_is_not_marked_secure_over_plain_http()
     {
-        // The test host speaks http, the same as a phone on a LAN address.
         var response = await SignInResponseAsync();
 
         CookieHeader(response)!.ShouldNotContain("secure", Case.Insensitive);
@@ -56,7 +47,6 @@ public class RefreshCookieTests(PostgresFixture fixture) : ApiTestBase(fixture)
     {
         var response = await SignInResponseAsync();
 
-        // Whatever the scheme, script must never read it.
         CookieHeader(response)!.ShouldContain("httponly", Case.Insensitive);
     }
 
@@ -86,8 +76,6 @@ public class RefreshCookieTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var response = await Client.SendAsync(request);
 
-        // The client probes this on every cold start, so it has to be an ordinary
-        // refusal rather than a 500.
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 }

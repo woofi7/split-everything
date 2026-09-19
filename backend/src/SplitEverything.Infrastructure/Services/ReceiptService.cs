@@ -33,13 +33,10 @@ public sealed class ReceiptService(
 
         if (stored.SizeBytes > MaxBytes)
         {
-            // Non-seekable streams only reveal their size after the copy.
             await storage.DeleteAsync(stored.StorageKey, ct);
             throw new ValidationException($"A receipt must be smaller than {MaxBytes / (1024 * 1024)} MB.");
         }
 
-        // The blob store keys by content hash, so the same photo uploaded twice is
-        // one file and one row.
         var existing = await db.Receipts.FirstOrDefaultAsync(r => r.ContentHash == stored.ContentHash, ct);
         if (existing is not null) return Map(existing);
 
@@ -75,11 +72,6 @@ public sealed class ReceiptService(
         return new ReceiptContent(content, receipt.ContentType, receipt.OriginalFileName);
     }
 
-    /// <summary>
-    /// A receipt is readable by whoever uploaded it, and by any member of a group it
-    /// is attached to. Attachment is the grant: an orphan receipt stays private to
-    /// its uploader.
-    /// </summary>
     private async Task<bool> CanReadAsync(Guid userId, Receipt receipt, CancellationToken ct)
     {
         if (receipt.UploadedByUserId == userId) return true;

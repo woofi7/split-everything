@@ -15,7 +15,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
     [Migration("20260902194933_AddGroupIgnoredNamePatterns")]
     partial class AddGroupIgnoredNamePatterns
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

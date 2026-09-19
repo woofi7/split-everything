@@ -10,13 +10,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// The accent colour the whole application wears.
-///
-/// A name rather than a colour, because a theme is three shades and the client is
-/// what knows them. On the account rather than on the device: someone who picks a
-/// colour means it wherever they sign in.
-/// </summary>
 public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private static readonly AuthOptions Options = new()
@@ -52,8 +45,6 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 
         var me = await Auth.GetMeAsync(user.Id);
 
-        // Nothing said, which the client reads as the default rather than as an
-        // absence it has to handle.
         me.ThemeName.ShouldBeNull();
     }
 
@@ -77,8 +68,6 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var updated = await Auth.UpdateProfileAsync(user.Id,
             new UpdateProfileRequest(null, null, null, ThemeName: "  Rose "));
 
-        // Case and whitespace must not fork the value, or a client comparing names
-        // would not recognise its own choice.
         updated.ThemeName.ShouldBe("rose");
     }
 
@@ -87,7 +76,6 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     {
         var user = await TestData.SeedUserAsync(Db);
 
-        // Anything else would be a colour the client cannot draw.
         await Should.ThrowAsync<ValidationException>(() => Auth.UpdateProfileAsync(
             user.Id, new UpdateProfileRequest(null, null, null, ThemeName: "chartreuse")));
     }
@@ -102,7 +90,6 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         var cleared = await Auth.UpdateProfileAsync(user.Id,
             new UpdateProfileRequest(null, null, null, ThemeName: ""));
 
-        // Empty clears it, as with every other clearable field on this API.
         cleared.ThemeName.ShouldBeNull();
     }
 
@@ -122,8 +109,6 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     [Fact]
     public void The_themes_are_the_eight_the_client_offers()
     {
-        // themes.ts, in the same order. A name one side has and the other refuses
-        // is a colour that cannot be saved.
         AppThemes.Names.ShouldBe(new[]
         {
             "indigo", "violet", "sky", "teal", "green", "amber", "rose", "slate"
@@ -165,7 +150,6 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     {
         var user = await TestData.SeedUserAsync(Db);
 
-        // A browser offering fr-CA means French, and refusing it would be pedantry.
         var updated = await Auth.UpdateProfileAsync(user.Id,
             new UpdateProfileRequest(null, null, null, Locale: "fr-CA"));
 
@@ -177,7 +161,6 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     {
         var user = await TestData.SeedUserAsync(Db);
 
-        // Half a screen in a language nobody asked for has no way out of it.
         await Should.ThrowAsync<ValidationException>(() => Auth.UpdateProfileAsync(
             user.Id, new UpdateProfileRequest(null, null, null, Locale: "de")));
     }
@@ -204,7 +187,6 @@ public class AppThemeTests(PostgresFixture fixture) : ServiceTestBase(fixture)
         AppLocales.IsKnown(null).ShouldBeFalse();
         AppLocales.Resolve("fr_CA").ShouldBe("fr");
         AppLocales.Resolve("de").ShouldBeNull();
-        // Reading a stored value never leaves a screen with no language at all.
         AppLocales.Normalize("es").ShouldBe("en");
     }
 }

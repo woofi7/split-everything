@@ -6,27 +6,13 @@ namespace SplitEverything.Domain.Sync;
 
 public enum SyncDecision
 {
-    /// <summary>Incoming revision causally follows what is stored: write it.</summary>
     Apply = 0,
-    /// <summary>Stored state already contains this revision: nothing to do.</summary>
     AlreadyApplied = 1,
-    /// <summary>Concurrent edits: hold both and ask a human.</summary>
     Conflict = 2
 }
 
-/// <summary>
-/// Decides what to do with an incoming revision, and works out which fields a
-/// human actually has to choose between.
-///
-/// Pure and side-effect free on purpose: this is the rule the entire offline story
-/// rests on, so it is testable without a database, a clock or a network.
-/// </summary>
 public static class SyncArbiter
 {
-    /// <summary>
-    /// Fields that change on every write and carry no user intent. Reporting them
-    /// as conflicts would bury the one field the user actually needs to resolve.
-    /// </summary>
     private static readonly HashSet<string> BookkeepingFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "updatedAt", "createdAt", "serverSeq", "vectorClockJson", "vectorClock",
@@ -38,18 +24,11 @@ public static class SyncArbiter
         {
             ClockOrdering.After => SyncDecision.Apply,
             ClockOrdering.Equal => SyncDecision.AlreadyApplied,
-            // An older revision arriving late is not an error: some other device
-            // already carried the group past it, so dropping it is correct.
             ClockOrdering.Before => SyncDecision.AlreadyApplied,
             ClockOrdering.Concurrent => SyncDecision.Conflict,
             _ => SyncDecision.Conflict
         };
 
-    /// <summary>
-    /// Names of the top-level fields that differ between two payload snapshots.
-    /// Returns ["*"] when either side cannot be read as a JSON object, since then
-    /// the only honest answer is "the whole thing differs".
-    /// </summary>
     public static IReadOnlyList<string> ConflictingFields(string storedJson, string incomingJson)
     {
         var stored = TryParseObject(storedJson);
@@ -91,8 +70,6 @@ public static class SyncArbiter
         if (left is null && right is null) return true;
         if (left is null || right is null) return false;
 
-        // 50.00 and 50 are the same amount; comparing the raw text would report a
-        // conflict every time two clients serialise a decimal differently.
         if (left is JsonValue leftValue && right is JsonValue rightValue
             && leftValue.TryGetValue<decimal>(out var leftNumber)
             && rightValue.TryGetValue<decimal>(out var rightNumber))

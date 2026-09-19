@@ -5,10 +5,6 @@ using WebPush;
 
 namespace SplitEverything.Infrastructure.Notifications;
 
-/// <summary>
-/// Browser Web Push over VAPID. The fallback channel for anyone using the PWA
-/// rather than the Capacitor shells.
-/// </summary>
 public sealed class WebPushSender(PushOptions options, ILogger<WebPushSender> logger) : IPushSender
 {
     public PushChannel Channel => PushChannel.WebPush;
@@ -24,7 +20,6 @@ public sealed class WebPushSender(PushOptions options, ILogger<WebPushSender> lo
 
         if (string.IsNullOrWhiteSpace(target.P256dh) || string.IsNullOrWhiteSpace(target.Auth))
         {
-            // Without the keys the subscription can never be encrypted to; prune it.
             logger.LogWarning("Dropping a Web Push subscription with no encryption keys");
             return false;
         }
@@ -40,7 +35,6 @@ public sealed class WebPushSender(PushOptions options, ILogger<WebPushSender> lo
         }
         catch (WebPushException ex)
         {
-            // 404 and 410 mean the browser dropped the subscription for good.
             var gone = ex.StatusCode is System.Net.HttpStatusCode.NotFound
                 or System.Net.HttpStatusCode.Gone;
 

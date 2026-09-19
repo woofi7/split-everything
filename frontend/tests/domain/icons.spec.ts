@@ -31,7 +31,6 @@ describe('the icon catalogue', () => {
     for (const icon of ICONS) {
       expect(icon.definition, icon.name).toBeDefined()
       expect(icon.definition.iconName, icon.name).toBe(icon.name)
-      // A definition carries the path data the renderer needs.
       expect(icon.definition.icon.length, icon.name).toBeGreaterThan(4)
     }
   })
@@ -49,7 +48,6 @@ describe('the icon catalogue', () => {
   })
 
   it('keeps every stored name short enough for the column', () => {
-    // The database column is 48 characters; a longer name would be truncated.
     for (const icon of ICONS) {
       expect(icon.name.length, icon.name).toBeLessThanOrEqual(48)
     }
@@ -76,7 +74,6 @@ describe('resolving a stored icon', () => {
   })
 
   it('falls back rather than throwing for an unknown name', () => {
-    // A name written by a newer version of the app must not break a group list.
     expect(resolveIcon('removed-in-a-later-release')).toBe(FALLBACK_ICON)
   })
 
@@ -102,7 +99,6 @@ describe('searching the catalogue', () => {
   })
 
   it('finds an icon by a keyword rather than its name', () => {
-    // The whole reason keywords exist: nobody searches "bolt" for a power bill.
     expect(search('hydro')).toContain('bolt')
     expect(search('electricity')).toContain('bolt')
   })
@@ -148,7 +144,6 @@ describe('searching the catalogue', () => {
     const results = fuzzySearch('hydro', ICONS, iconSearchFields)
     const bolt = results.find((result) => result.item.name === 'bolt')
 
-    // Matched a keyword, not the label, so the label must not be highlighted.
     expect(bolt!.fieldIndex).toBeGreaterThan(0)
   })
 

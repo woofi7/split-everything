@@ -2,17 +2,6 @@ using SplitEverything.Domain.Entities;
 
 namespace SplitEverything.Infrastructure.Persistence.Seed;
 
-/// <summary>
-/// The list a fresh server starts with, and the words that file an expense without
-/// anybody choosing.
-///
-/// Written for where this is used - Metro and IGA are groceries, Hydro and
-/// Videotron are bills, Tim Hortons is not a restaurant anybody calls a
-/// restaurant - because a keyword list that knows none of the local names is a
-/// keyword list that never fires. It is a starting point and nothing more: the
-/// person who runs the server can rewrite the lot, and any group can take a copy
-/// and make it theirs.
-/// </summary>
 public static class CategorySeed
 {
     public sealed record SeedCategory(
@@ -61,12 +50,9 @@ public static class CategorySeed
         new("other", "Other", "ellipsis", "#94a3b8", 999, []),
     ];
 
-    /// <summary>The server's own list, as rows. No group: this is what groups start from.</summary>
     public static IEnumerable<Category> BuildGlobalCategories()
         => Categories.Select(category => new Category
         {
-            // Deterministic, so re-running this cannot make a second copy of a row
-            // that is already there.
             Id = DeterministicId(category.Key),
             Key = category.Key,
             Name = category.Name,

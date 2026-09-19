@@ -1,15 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeStats, type LocalStatsInput } from '@/domain/localStats'
 
-/**
- * The stats screen, worked out from the local replica.
- *
- * Every number on that screen is arithmetic over rows the device already holds, so
- * refusing to show them offline was refusing to add up what it had. These tests
- * pin the rules to the server's: the same totals, the same order of payers in a
- * bucket, and the rounding residue in the same place.
- */
-
 const ALICE = 'member-alice'
 const BOB = 'member-bob'
 
@@ -61,7 +52,6 @@ describe('the stats worked out on this device', () => {
   })
 
   it('counts every membership that is you', () => {
-    // One person can be in several groups, so "me" is a set of memberships.
     const stats = computeStats(input({ myMemberIds: [ALICE, BOB] }))
 
     expect(stats.myPaid).toBe(160)
@@ -82,7 +72,6 @@ describe('the stats worked out on this device', () => {
     const daily = computeStats(input({ granularity: 'day' }))
     expect(daily.spendOverTime[0].bucket).toBe('2026-01-10')
 
-    // The tenth of January 2026 is a Saturday, so its week starts on the fifth.
     const weekly = computeStats(input({ granularity: 'week' }))
     expect(weekly.spendOverTime[0].bucket).toBe('2026-01-05')
   })
@@ -109,7 +98,6 @@ describe('the stats worked out on this device', () => {
       }),
     )
 
-    // Largest first, so a stack does not reshuffle its colours between buckets.
     expect(stats.spendOverTime[0].byMember.map((payer) => payer.memberName)).toEqual([
       'Bob',
       'Alice',
@@ -118,8 +106,6 @@ describe('the stats worked out on this device', () => {
   })
 
   it('keeps the parts of a bucket summing to its total', () => {
-    // Thirds of a cent: rounding each share on its own leaves the parts short, and
-    // a stacked bar whose parts do not sum to its total is a lie about both.
     const third = 10 / 3
     const stats = computeStats(
       input({
@@ -154,7 +140,6 @@ describe('the stats worked out on this device', () => {
       }),
     )
 
-    // Bob paid Alice the 20 he was behind by, so both are level.
     expect(stats.byMember.find((row) => row.memberId === ALICE)!.net).toBe(0);
     expect(stats.byMember.find((row) => row.memberId === BOB)!.net).toBe(0)
   })
@@ -170,7 +155,6 @@ describe('the stats worked out on this device', () => {
       }),
     )
 
-    // An empty row per placeholder member is noise, not information.
     expect(stats.byMember.map((row) => row.memberName)).not.toContain('Chloe')
   })
 
@@ -199,19 +183,10 @@ describe('the stats worked out on this device', () => {
       }),
     )
 
-    // Yen has no minor unit, so a fractional total is not a total.
     expect(yen.totalSpend).toBe(100)
   })
 })
 
-/**
- * The rounding residue in a bucket's payer split.
- *
- * The mirror of the rule the category split follows, and it had no test of its
- * own: rounding each share independently can leave the parts a cent off the
- * whole, and a stacked bar whose parts do not sum to its total is a lie about
- * both. The largest share absorbs it.
- */
 describe('a bucket whose shares do not divide evenly', () => {
   it('puts the odd cent on the largest payer, so the stack fills its bar', () => {
     const stats = computeStats(
@@ -237,20 +212,12 @@ describe('a bucket whose shares do not divide evenly', () => {
 
     const bucket = stats.spendOverTime[0]
     expect(bucket.amount).toBe(20.01)
-    // Rounded on their own these come to 20.00, a cent short of the bar above them.
     expect(bucket.byMember.map((member) => member.amount)).toEqual([10.01, 10])
     expect(bucket.byMember.reduce((sum, member) => sum + member.amount, 0))
       .toBeCloseTo(bucket.amount, 2)
   })
 })
 
-/**
- * Where the money went, computed on the device.
- *
- * The same shape and the same order the server answers with: the two replace each
- * other on one screen, and a figure that moves when the network arrives is a
- * figure nobody trusts.
- */
 describe('spending by category', () => {
   const filed = (categoryKey: string | null, amount: number) => ({
     groupId: 'group-1',
@@ -287,8 +254,6 @@ describe('spending by category', () => {
   it('keeps what nobody filed rather than dropping it', () => {
     const stats = statsOf([filed('groceries', 60), filed(null, 10)])
 
-    // A breakdown that quietly omits part of the spending is worse than one that
-    // admits to it.
     expect(stats.byCategory).toContainEqual({ key: null, amount: 10, expenseCount: 1 })
   })
 
@@ -296,11 +261,6 @@ describe('spending by category', () => {
     expect(statsOf([]).byCategory).toEqual([])
   })
 
-  /**
-   * The same cut, bucket by bucket, which is what the line over the bars is drawn
-   * from. Without it a category is one number for the whole window, and nobody can
-   * tell a category that is creeping up from one that always cost that much.
-   */
   describe('inside each bucket', () => {
     const on = (categoryKey: string | null, amount: number, spentAt: string) => ({
       ...filed(categoryKey, amount),
@@ -330,10 +290,6 @@ describe('spending by category', () => {
       expect(stats.spendOverTime[0].byCategory).toContainEqual({ key: null, amount: 10 })
     })
 
-    /**
-     * The line is drawn against the bar's own height, so a category that was the
-     * whole bucket has to reach the top of it rather than stopping a cent short.
-     */
     it('adds up to the bucket, to the cent', () => {
       const stats = statsOf([
         on('groceries', 10.005, '2026-03-02T12:00:00Z'),
@@ -343,9 +299,6 @@ describe('spending by category', () => {
       const bucket = stats.spendOverTime[0]
       const parts = bucket.byCategory.reduce((sum, row) => sum + row.amount, 0)
 
-      // Rounded each on its own, these two would come to a cent more than the
-      // bucket they are inside. Closeness rather than equality only because
-      // adding the parts back up in the test is itself floating point.
       expect(parts).toBeCloseTo(bucket.amount, 2)
       expect(bucket.byCategory.map((row) => row.amount)).toEqual([10.01, 10])
     })

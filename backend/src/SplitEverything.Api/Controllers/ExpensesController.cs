@@ -63,13 +63,10 @@ public sealed class ExpensesController(
         return NoContent();
     }
 
-    /// <summary>Moves an expense to another group with its full history.</summary>
     [HttpPost("{expenseId:guid}/transfer")]
     public async Task<ActionResult<TransferExpenseResult>> Transfer(
         Guid expenseId, TransferExpenseRequest request, CancellationToken ct)
         => Ok(await lifecycle.TransferExpenseAsync(UserId, request with { ExpenseId = expenseId }, ct));
-
-    // ---- recurring -------------------------------------------------------
 
     [HttpGet("recurring")]
     public async Task<ActionResult<IReadOnlyList<RecurringExpenseDto>>> ListRecurring(

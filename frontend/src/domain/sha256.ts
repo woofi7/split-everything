@@ -1,17 +1,4 @@
-/**
- * SHA-256, for when the platform will not do it.
- *
- * crypto.subtle exists only in a secure context, so it is missing when the app is
- * served over plain HTTP on a LAN address, which is how it gets used on a phone.
- * The statement importer fingerprints every row with SHA-256 and compares those
- * hashes with the server's, so there is no room for a different hash here: an
- * approximation would make duplicate detection quietly disagree.
- *
- * Straight from FIPS 180-4. Tested against the published vectors and, for a range
- * of inputs including random ones, against crypto.subtle itself.
- */
 
-/** First thirty-two bits of the fractional parts of the cube roots of the first 64 primes. */
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -28,8 +15,6 @@ const rotr = (value: number, bits: number) => (value >>> bits) | (value << (32 -
 export function sha256Hex(text: string): string {
   const message = new TextEncoder().encode(text)
 
-  // Padded to a whole number of 64-byte blocks: a single 1 bit, zeroes, then the
-  // length in bits as a 64-bit big-endian integer.
   const blockCount = Math.floor((message.length + 8) / 64) + 1
   const padded = new Uint8Array(blockCount * 64)
   padded.set(message)
@@ -37,13 +22,9 @@ export function sha256Hex(text: string): string {
 
   const bits = message.length * 8
   const view = new DataView(padded.buffer)
-  // Written as two 32-bit halves, because a JS number cannot hold 64 bits exactly
-  // and the high half only matters above 512MB of input.
   view.setUint32(padded.length - 8, Math.floor(bits / 0x100000000))
   view.setUint32(padded.length - 4, bits >>> 0)
 
-  // First thirty-two bits of the fractional parts of the square roots of the first
-  // eight primes.
   const h = new Uint32Array([
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,

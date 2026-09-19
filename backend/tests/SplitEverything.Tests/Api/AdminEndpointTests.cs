@@ -7,15 +7,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Api;
 
-/// <summary>
-/// The endpoints for whoever runs the server.
-///
-/// Configuration says who that is, so these run against a host where one address
-/// administers and every other account - signed in perfectly legitimately - is
-/// refused. That refusal is the point of most of what follows: this is the one
-/// route in the application that reads across groups and the only one that destroys
-/// anything.
-/// </summary>
 public class AdminEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 {
     private async Task<GroupDto> AGroupSomebodyElseOwnsAsync()
@@ -59,7 +50,6 @@ public class AdminEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
     {
         var theirs = await AGroupSomebodyElseOwnsAsync();
 
-        // Signed in, and the owner of that group: this route is still not theirs.
         await SignInAsync("Emma", "emma@example.com");
 
         (await Client.GetAsync("/api/admin/groups")).StatusCode
@@ -85,7 +75,6 @@ public class AdminEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         var theirs = await AGroupSomebodyElseOwnsAsync();
         await SignInAsync("Admin", "admin@example.com");
 
-        // Archiving is the reversible step, and it comes first.
         (await Client.DeleteAsync($"/api/admin/groups/{theirs.Id}")).StatusCode
             .ShouldBe(HttpStatusCode.BadRequest);
 
@@ -110,10 +99,6 @@ public class AdminEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
             .ShouldBe(HttpStatusCode.NotFound);
     }
 
-    /// <summary>
-    /// The one group setting that is not an owner's or an admin's: it changes what
-    /// a total reads and nothing about what anybody owes.
-    /// </summary>
     [Fact]
     public async Task Any_member_can_set_the_names_left_out_of_the_totals()
     {

@@ -64,15 +64,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         dashboard.ExpenseCount.ShouldBe(1);
     }
 
-    /// <summary>
-    /// Each bucket cut by what it went on, not only by who paid.
-    ///
-    /// This is what the chart draws a category's line from. It is held to the same
-    /// rules as the payer split beside it - largest first, nothing for a category
-    /// that spent nothing, and the parts adding up to the bucket - because the line
-    /// is drawn against the bar's own height and a category that was the whole
-    /// bucket has to reach the top of it.
-    /// </summary>
     [Fact]
     public async Task Each_bucket_says_what_it_went_on()
     {
@@ -88,9 +79,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         january.ShouldBe([
             new SpendPointCategoryDto("groceries", 60m),
             new SpendPointCategoryDto("dining", 25m),
-            // What nobody filed is in the bucket too, for the same reason it is in
-            // the breakdown: a line that quietly omits part of the money is worse
-            // than one that admits to it.
             new SpendPointCategoryDto(null, 10m),
         ]);
 
@@ -160,7 +148,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
 
         var aliceTrend = dashboard.DebtTrends.Where(t => t.MemberId == alice).OrderBy(t => t.Bucket).ToList();
         aliceTrend.Count.ShouldBe(2);
-        // The trend is cumulative: 50 up after January, 20 up after February.
         aliceTrend[0].Net.ShouldBe(50m);
         aliceTrend[1].Net.ShouldBe(20m);
     }
@@ -203,7 +190,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var dashboard = await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id));
 
         dashboard.TotalSpend.ShouldBe(100m);
-        // The member view is a ledger though, so settling shows up there.
         dashboard.ByMember.First(m => m.MemberId == alice).Net.ShouldBe(0m);
     }
 
@@ -250,15 +236,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         dashboard.TotalSpend.ShouldBe(148m);
     }
 
-    /// <summary>
-    /// The odd cent in a bucket's category split.
-    ///
-    /// It only shows up once amounts have been converted, which is the one place
-    /// a stored amount stops being a round number of cents. The line for a
-    /// category is drawn against the bar's own height, so the parts have to come
-    /// to the whole: a cent adrift is a line that misses the top of a bar that it
-    /// was the entirety of. The largest absorbs it, as everywhere else here.
-    /// </summary>
     [Fact]
     public async Task A_bucket_that_does_not_divide_evenly_still_adds_up()
     {
@@ -267,7 +244,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
             new CreateGroupRequest("Euro trip", "EUR", null, null, null, null));
         var me = group.Members.Single().Id;
 
-        // 6.67 at 1.5 is 10.005 - half a cent, twice, in one month.
         foreach (var category in new[] { "groceries", "dining" })
         {
             await Expenses.CreateAsync(user.Id, new CreateExpenseRequest(
@@ -283,7 +259,6 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var bucket = dashboard.SpendOverTime.ShouldHaveSingleItem();
         bucket.Amount.ShouldBe(20.01m);
 
-        // Rounded on their own these come to 20.00, a cent short of the bar.
         bucket.ByCategory!.Sum(c => c.Amount).ShouldBe(bucket.Amount);
         bucket.ByCategory!.Select(c => c.Amount).ShouldBe([10.01m, 10.00m]);
     }

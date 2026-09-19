@@ -13,10 +13,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Api;
 
-/// <summary>
-/// The endpoints the main suite does not reach: sign-out, account deletion, the
-/// full CSV wizard over multipart, conflicts, and the smaller read endpoints.
-/// </summary>
 public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
 {
     [Fact]
@@ -25,9 +21,6 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
         var response = await Client.PostAsJsonAsync("/api/auth/dev",
             new DevelopmentSignInRequest("attacker@example.com", "Attacker", null), Json);
 
-        // The environment variable asks for it to be on; startup forces it off
-        // because the host is not Development. Without that, setting one variable
-        // on a production box would be a complete authentication bypass.
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
@@ -208,12 +201,6 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
             .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    /// <summary>
-    /// The guards on the upload itself, before a single row is read.
-    ///
-    /// An import that says nothing when the file is missing looks like an import
-    /// that ran and found nothing, which is a very different thing.
-    /// </summary>
     [Fact]
     public async Task An_upload_with_no_file_says_so()
     {
@@ -231,8 +218,6 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
     {
         await SignInAsync();
 
-        // Ten megabytes of commas. The limit exists so a mis-picked file cannot be
-        // read into memory on the server.
         using var content = new MultipartFormDataContent();
         var csv = new StringContent(new string(',', 11 * 1024 * 1024));
         csv.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
@@ -241,8 +226,6 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         var response = await Client.PostAsync("/api/import/csv/preview", content);
 
-        // Either the controller's own limit or the host's: both are the file being
-        // refused rather than read.
         ((int)response.StatusCode).ShouldBeGreaterThanOrEqualTo(400);
     }
 
@@ -283,7 +266,6 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
             [new SplitInputDto(alice, null)], null, null, null, null, null, null), Json);
         var expense = await created.Content.ReadFromJsonAsync<ExpenseDto>(Json);
 
-        // Two divergent offline edits, both branching from the stored revision.
         foreach (var (device, description) in new[] { ("device-x", "Edit X"), ("device-y", "Edit Y") })
         {
             var clock = new Dictionary<string, long>(expense!.VectorClock) { [device] = 9 };
@@ -429,9 +411,6 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
                 "1.2.3"),
             Json);
 
-        // The errors worth reading most are the ones that happen instead of signing
-        // in, and a client that is already broken must not have to deal with a
-        // response either.
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 

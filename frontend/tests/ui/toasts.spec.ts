@@ -1,13 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearToasts, dismiss, notify, report, toasts } from '@/ui/toasts'
 
-/**
- * What the app has to say, and how long it says it for.
- *
- * Every screen used to keep its own line of red text somewhere down the page, so a
- * failure announced itself wherever that screen happened to put it - often below
- * the fold, and always somewhere the eye had no reason to be.
- */
 describe('what the app says', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -39,8 +32,6 @@ describe('what the app says', () => {
     notify('Could not save.', 'error')
     vi.advanceTimersByTime(3500)
 
-    // Still there when a confirmation would already have gone: it often arrives
-    // while somebody is still looking at the button they pressed.
     expect(texts()).toEqual(['Could not save.'])
 
     vi.advanceTimersByTime(4500)
@@ -52,7 +43,6 @@ describe('what the app says', () => {
     vi.advanceTimersByTime(6000)
     notify('Could not reach the server.', 'error')
 
-    // One problem, retried. Three identical cards say no more than one.
     expect(texts()).toEqual(['Could not reach the server.'])
 
     vi.advanceTimersByTime(6000)
@@ -68,7 +58,6 @@ describe('what the app says', () => {
     notify('Three')
     notify('Four')
 
-    // A screenful of stacked notices is a wall, not a message.
     expect(texts()).toEqual(['Two', 'Three', 'Four'])
   })
 
@@ -94,7 +83,6 @@ describe('what the app says', () => {
 
     expect(texts()).toEqual([])
 
-    // The timer for a card that is already gone must not fire against the next one.
     notify('Something else')
     vi.advanceTimersByTime(3500)
     expect(texts()).toEqual(['Something else'])

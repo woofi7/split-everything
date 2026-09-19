@@ -28,9 +28,6 @@ public class SplitCalculatorTests
 
         shares.Sum(s => s.Amount).ShouldBe(10m);
 
-        // Worked out two decimals finer than the currency shows, so a share is the
-        // real fraction rather than a cent somebody has to be handed. All three
-        // still read as 3.33 on screen.
         shares.Select(s => s.Amount).OrderBy(a => a).ShouldBe(new[] { 3.3333m, 3.3333m, 3.3334m });
     }
 
@@ -40,7 +37,6 @@ public class SplitCalculatorTests
         var first = SplitCalculator.Calculate(10m, "CAD", SplitType.Equal, Members(Alice, Bob, Carol));
         var second = SplitCalculator.Calculate(10m, "CAD", SplitType.Equal, Members(Carol, Bob, Alice));
 
-        // Offline devices computing the same split must agree to the cent.
         first.OrderBy(s => s.MemberId).Select(s => s.Amount)
             .ShouldBe(second.OrderBy(s => s.MemberId).Select(s => s.Amount));
     }
@@ -50,12 +46,6 @@ public class SplitCalculatorTests
     {
         var shares = SplitCalculator.Calculate(10m, "CAD", SplitType.Equal, Members(Alice, Bob, Carol));
 
-        // Pinned deliberately: the offline client runs the same algorithm, and both
-        // sides must agree on who receives the extra unit or a synced expense would
-        // be rewritten into different amounts than the person was shown.
-        //
-        // A hundredth of a cent now rather than a cent: still a tie broken the same
-        // way every time, but no longer worth anything to whoever wins it.
         shares.Single(s => s.MemberId == Alice).Amount.ShouldBe(3.3334m);
         shares.Single(s => s.MemberId == Bob).Amount.ShouldBe(3.3333m);
         shares.Single(s => s.MemberId == Carol).Amount.ShouldBe(3.3333m);
@@ -64,10 +54,6 @@ public class SplitCalculatorTests
     [Fact]
     public void An_even_split_of_an_odd_number_of_cents_is_actually_even()
     {
-        // The whole reason shares are worked out finer than the currency: half of
-        // 66.13 is 33.065, and rounding that to a cent hands the same member the
-        // extra half-cent on every expense of its kind. Four hundred expenses into a
-        // real group that came to 71 cents of drift.
         var shares = SplitCalculator.Calculate(66.13m, "CAD", SplitType.Equal, Members(Alice, Bob));
 
         shares.Select(s => s.Amount).ShouldAllBe(amount => amount == 33.065m);
@@ -95,7 +81,6 @@ public class SplitCalculatorTests
 
         shares.Sum(s => s.Amount).ShouldBe(1m);
 
-        // Capped at four decimals, which is what the amount columns hold.
         shares.Select(s => s.Amount).OrderBy(a => a).ShouldBe(new[] { 0.3333m, 0.3333m, 0.3334m });
     }
 
@@ -246,7 +231,6 @@ public class SplitCalculatorTests
     [Fact]
     public void Itemized_spreads_tax_and_tip_in_proportion_to_what_each_person_ordered()
     {
-        // 30 of items, 36 charged: the 6 of tax and tip follows the order sizes 2:1.
         var shares = SplitCalculator.CalculateItemized(36m, "CAD", [
             new ItemizedLine(20m, 1, [Alice]),
             new ItemizedLine(10m, 1, [Bob])

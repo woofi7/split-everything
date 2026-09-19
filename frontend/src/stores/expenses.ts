@@ -20,12 +20,7 @@ import { useGroupsStore } from '@/stores/groups'
 
 export interface ExpenseDraft {
   groupId: string
-  /** The only payer, or the largest of them when `payers` is given. */
   paidByMemberId: string
-  /**
-   * Who paid, when more than one person did. Their amounts have to add up to
-   * `amount`; leave it out for the ordinary expense one person paid for.
-   */
   payers?: Array<{ memberId: string; amount: number }>
   description: string
   amount: number
@@ -33,26 +28,21 @@ export interface ExpenseDraft {
   spentAt: Date
   splitType: SplitType
   participantIds: string[]
-  /** Per-member input for percentage, shares and exact splits. */
   splitValues?: Record<string, number>
   items?: LocalItem[]
   receiptId?: string | null
   notes?: string | null
-  /** What it was for. The form guesses it from the description; this is the answer. */
   categoryKey?: string | null
 }
 
-/** One group two people share, seen from the caller's side. */
 export interface CrossGroupGroup {
   groupId: string
   groupName: string
   currency: string
-  /** Positive: the other person owes you this much here. */
   net: number
   canSettle: boolean
 }
 
-/** One cancelling pair: this much of one group's debt is met by another's. */
 export interface PlannedOffset {
   owedGroupId: string
   owedGroupName: string
@@ -94,18 +84,6 @@ export interface SettlementDraft {
   receiptId?: string | null
 }
 
-/**
- * Expenses, settlements and comments, all written locally first.
- *
- * Every mutation follows the same shape: validate, compute the real amounts with
- * the same algorithm the server uses, write to the local replica, and queue the
- * operation. Nothing waits on the network, and the balances on screen are computed
- * from local rows so they are correct offline.
- *
- * Currency conversion is the one thing deliberately left to the server: the client
- * has no rate, so a foreign-currency expense carries rate 1 until the server
- * freezes the real one and the row comes back through sync.
- */
 export const useExpensesStore = defineStore('expenses', () => {
   const expenses = ref<LocalExpense[]>([])
   const settlements = ref<LocalSettlement[]>([])
@@ -120,13 +98,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     engine = syncEngine
   }
 
-  /**
-   * The client for the one thing here that is not a queued local write.
-   *
-   * Moving an expense between groups rewrites both groups' logs at once, which no
-   * outbox operation can describe, so it is asked for directly and needs a
-   * connection.
-   */
   function attachApi(client: ApiClient): void {
     api = client
   }
@@ -189,8 +160,6 @@ export const useExpensesStore = defineStore('expenses', () => {
 
     const shares = computeShares(draft)
 
-    // The client has no exchange rate. Storing the entered amount and letting the
-    // server freeze the real rate keeps a single source of truth for FX.
     const isBaseCurrency = draft.currency === group.baseCurrency
     const expense: LocalExpense = {
       id: newId(),
@@ -236,8 +205,6 @@ export const useExpensesStore = defineStore('expenses', () => {
       payload: toWirePayload(expense),
     })
 
-    // Keep the local clock in step with what was queued, so a follow-up edit
-    // builds on it rather than looking like a concurrent write.
     await patch(expense.id, { vectorClock: operation.vectorClock })
     await refreshPendingCount()
     syncSoon()
@@ -252,8 +219,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     const existing = await db.expenses.get(expenseId)
     if (!existing) throw new Error('That expense is not on this device.')
 
-    // Guard only: editing an expense in a group this device no longer has would
-    // leave the split unverifiable.
     await requireGroup(existing.groupId)
 
     const description = (changes.description ?? existing.description).trim()
@@ -268,9 +233,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     const group = await requireGroup(existing.groupId)
     const roster = new Set(group.members.map((member) => member.id))
 
-    // Who paid, in whichever way the edit said it: a list, a single payer, or
-    // neither - in which case whoever is on the expense stays, apportioned to the
-    // amount if that moved.
     const contributions = changes.payers
       ? readPayers(
           {
@@ -320,8 +282,6 @@ export const useExpensesStore = defineStore('expenses', () => {
       splitType: changes.splitType ?? existing.splitType,
       receiptId: changes.receiptId ?? existing.receiptId,
       notes: changes.notes ?? existing.notes,
-      // Undefined leaves the filing alone; null is the picker's blank option,
-      // which unfiles it.
       categoryKey: changes.categoryKey === undefined ? existing.categoryKey : changes.categoryKey,
       items: changes.items ?? existing.items,
       splits: shares.map((share) => ({
@@ -352,27 +312,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     return (await db.expenses.get(updated.id))!
   }
 
-  /**
-   * Files many expenses at once, under one category.
-   *
-   * The reason this exists: categories arrived after the expenses did. A group
-   * that has been running a year has nine hundred rows filed under nothing, and
-   * the only honest way to catch them up is to fix a hundred at a time - every
-   * Metro run at once, then every bus fare - rather than opening nine hundred
-   * forms. The same job comes back every time a keyword is added, because the
-   * keywords only ever apply to what comes next.
-   *
-   * It touches one field and recomputes nothing. An edit through `edit` rebuilds
-   * the split, the payers and the rounding from a draft, which is exactly right
-   * when somebody is editing an expense and exactly wrong for a thousand rows
-   * where nobody said anything about the money: a rounding rule that changed in
-   * the meantime would quietly rewrite a year of splits.
-   *
-   * Rows already filed there are skipped rather than re-sent, so selecting the
-   * whole month to fix the three that are wrong queues three operations.
-   *
-   * Returns how many actually changed, which is what the screen reports.
-   */
   async function refile(expenseIds: string[], categoryKey: string | null): Promise<number> {
     const next = categoryKey ?? null
     const touched: LocalExpense[] = []
@@ -383,8 +322,6 @@ export const useExpensesStore = defineStore('expenses', () => {
       if (!existing || existing.isDeleted) continue
       if ((existing.categoryKey ?? null) === next) continue
 
-      // The same guard as an ordinary edit, asked once per group rather than
-      // once per expense: a thousand rows is a thousand reads otherwise.
       if (!known.has(existing.groupId)) {
         await requireGroup(existing.groupId)
         known.add(existing.groupId)
@@ -412,9 +349,6 @@ export const useExpensesStore = defineStore('expenses', () => {
 
     if (touched.length === 0) return 0
 
-    // Written and announced in one go. Going through `patch` per row would put
-    // the whole list through a fresh copy for every expense, which on a bulk of
-    // several hundred is the difference between instant and a locked screen.
     await db.expenses.bulkPut(touched)
 
     const byId = new Map(touched.map((expense) => [expense.id, expense]))
@@ -435,21 +369,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     return touched.length
   }
 
-  /**
-   * Moves an expense into another group, carrying its history.
-   *
-   * The one write here that is not queued: the server rewrites the expense, its
-   * revisions, its comments and both groups' logs together, and half of that
-   * applied locally would be a replica that disagrees with itself. So it needs a
-   * connection, and the result comes back through an ordinary sync rather than
-   * being patched in here - the row this device ends up with is the one the server
-   * wrote, member ids and all.
-   *
-   * Refused while anything is still waiting to be sent for this expense, because
-   * the queued change names the group it was written in: sent after the move, the
-   * server would be asked to update an expense that is no longer where the change
-   * says it is.
-   */
   async function transfer(
     expenseId: string,
     targetGroupId: string,
@@ -469,22 +388,15 @@ export const useExpensesStore = defineStore('expenses', () => {
       throw new Error('This expense has changes that have not been sent yet. Try again once it has synced.')
     }
 
-    // Asked for before the request rather than inside it, so a store with nothing
-    // attached says so instead of being reported as a connection problem.
     const client = requireApi()
 
     try {
       await client.post(`/expenses/${expenseId}/transfer`, {
         targetGroupId,
-        // Only the people the two groups could not match up on their own, so an
-        // empty map is sent as nothing at all.
         memberMapping:
           memberMapping && Object.keys(memberMapping).length > 0 ? memberMapping : undefined,
       })
     } catch (caught) {
-      // Worth saying plainly, because this is the one write here that cannot be
-      // queued: everything else in this store is already saved by the time anyone
-      // reads an error, and this is not.
       if ((caught instanceof ApiError && caught.isOffline) || looksOffline(caught)) {
         throw new Error('Moving an expense between groups needs a connection.', {
           cause: caught,
@@ -493,29 +405,14 @@ export const useExpensesStore = defineStore('expenses', () => {
       throw caught
     }
 
-    // Both logs moved, so this is what brings the expense across on this device,
-    // and the balances either side of the move belong to the groups.
     await sync()
     await useGroupsStore().loadAll()
   }
 
-/** What two people owe each other in a group they share. */
   async function crossGroupBalance(withUserId: string): Promise<CrossGroupBalance> {
     return requireApi().get<CrossGroupBalance>('/settlements/cross-group', { withUserId })
   }
 
-  /**
-   * Cancels the debts two people hold against each other in different groups.
-   *
-   * A thousand owed one way in the flat and nine hundred the other way on a trip
-   * is really a hundred: the server writes a settlement in each group, facing
-   * opposite ways, so the two cancel and what is left sits in one place. No money
-   * moves, and the total between the two people does not change - only where it is
-   * recorded does.
-   *
-   * Online only, like moving an expense: it writes in two groups at once, which no
-   * queued local operation can describe.
-   */
   async function offsetAcrossGroups(withUserId: string, note?: string): Promise<OffsetResult> {
     const client = requireApi()
 
@@ -532,7 +429,6 @@ export const useExpensesStore = defineStore('expenses', () => {
       throw caught
     }
 
-    // Both groups' ledgers moved, so both replicas and both balances are stale.
     await sync()
     await useGroupsStore().loadAll()
 
@@ -543,7 +439,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     const existing = await db.expenses.get(expenseId)
     if (!existing) throw new Error('That expense is not on this device.')
 
-    // A tombstone, not a delete: peers still offline have to learn of it.
     const tombstoned = { ...existing, isDeleted: true, pending: true }
     await db.expenses.put(tombstoned)
     replaceExpense(tombstoned)
@@ -596,12 +491,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     return entity
   }
 
-  /**
-   * Removes a comment. The server allows only its author, or an admin.
-   *
-   * A tombstone rather than a delete, like everything else here: a device still
-   * offline has to learn the comment is gone rather than keep showing it.
-   */
   async function removeComment(commentId: string): Promise<void> {
     const existing = await db.comments.get(commentId)
     if (!existing || existing.isDeleted) {
@@ -675,15 +564,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     return entity
   }
 
-  /**
-   * Takes back a settlement.
-   *
-   * Recorded money can be recorded wrongly - the same transfer entered twice, or a
-   * payment that never happened - and until now the app could write one and never
-   * show it again, which left the balance wrong with nothing to press. A tombstone
-   * like any other delete, so the other phone learns of it rather than holding a
-   * payment this one has forgotten.
-   */
   async function unsettle(settlementId: string): Promise<void> {
     const existing = await db.settlements.get(settlementId)
     if (!existing) throw new Error('That settlement is not on this device.')
@@ -711,13 +591,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     settlements.value = [...settlements.value]
   }
 
-  /**
-   * Who paid an expense, in base currency, whatever shape the stored row is in.
-   *
-   * A row saved by a build that only knew one payer has no payers field, and the
-   * member it names paid the whole amount. Falling back rather than skipping: an
-   * expense with no payer would silently leave the balances.
-   */
   function payersOf(expense: LocalExpense): Array<{ memberId: string; amount: number }> {
     if (expense.payers && expense.payers.length > 0) {
       return expense.payers.map((payer) => ({
@@ -779,24 +652,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     return pairwiseDebts(groupExpenses, groupSettlements)
   }
 
-  /**
-   * Repairs a replica whose queue and pending markers have drifted apart.
-   *
-   * Two ordinary things strand a change, and both leave a row reading "waiting to
-   * sync" with no way out:
-   *
-   * - A parked operation. It was refused once and nothing retries it, yet a
-   *   refusal describes the server as it was, not as it is: a fixed server
-   *   accepts what it used to reject.
-   * - A row marked unsent with nothing queued for it. A conflict drops the
-   *   operation, and an accepted operation can leave the marker behind when a
-   *   later operation for the same row is refused in the same push. Nothing will
-   *   send it, and a pull skips it because it looks like unsent local work, so
-   *   the row is invisible in both directions.
-   *
-   * Run once at startup. A change that really is unacceptable is simply parked
-   * again, which costs one push.
-   */
   async function reconcile(): Promise<void> {
     const parked = await db.outbox.where('status').equals('rejected').toArray()
     for (const operation of parked) await requireSync().retry(operation.operationId)
@@ -843,15 +698,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     syncSoon()
   }
 
-  /**
-   * Abandons a change the server refused.
-   *
-   * The marker has to go with it. Leaving a row marked unsent with nothing queued
-   * puts it straight back into the state reconcile exists to repair, so discarding
-   * would appear to do nothing. A refused creation never existed on the server, so
-   * there is nothing to fall back to and the row goes; anything else keeps the row
-   * and lets the next pull replace it with the server's version.
-   */
   async function discardRejected(operationId: string): Promise<void> {
     const operation = await db.outbox.get(operationId)
     if (!operation) return
@@ -895,27 +741,12 @@ export const useExpensesStore = defineStore('expenses', () => {
     }
   }
 
-  /**
-   * Drains the queue in the background, without blocking the caller.
-   *
-   * Every mutation ends with this. A write is finished the moment it is in the
-   * outbox and on screen, so the person never waits on the network; but something
-   * has to actually send it, or the row stays marked as waiting until the app is
-   * reloaded. Pulling afterwards brings back the server's canonical row, which is
-   * how a foreign-currency expense picks up the real exchange rate.
-   */
   function syncSoon(): void {
     void sync().catch(() => {
-      // Offline or unreachable. The operation is still queued and the pending
-      // indicator already says so, so there is nothing to report here.
     })
   }
 
   async function sync(): Promise<void> {
-    // Nobody to sync as. Every request would be refused, and asked here rather
-    // than at each caller because this is the only place that talks to the
-    // server: startup repairs the outbox and ends with a drain, the tab becoming
-    // visible asks for one, and both happen on the sign-in page.
     if (!useAuthStore().isSignedIn) return
 
     isSyncing.value = true
@@ -928,30 +759,14 @@ export const useExpensesStore = defineStore('expenses', () => {
     }
   }
 
-  /**
-   * Throws the local replica away and takes the server's version of everything.
-   *
-   * The escape hatch for a device whose replica has diverged: rows the server no
-   * longer has, changes that will never send, a cursor past something that was
-   * missed. Every screen reads from the replica, so when it is wrong there is
-   * nothing else to look at and no way to argue with it.
-   *
-   * Destructive on purpose, and only where the caller has said so: unsent local
-   * work goes with it, because unsent work is the thing that cannot be recovered
-   * from the server.
-   */
   async function resetToServer(): Promise<void> {
     await clearReplica()
     await hydrate()
 
-    // Groups come from their own endpoint rather than from the sync log, so a
-    // pull alone brings back every expense and no group to hang them on. Asked
-    // for first, because an expense whose group is missing has nowhere to show.
     await useGroupsStore().loadAll()
     await sync()
   }
 
-  /** How much would be lost by starting over: work the server has never seen. */
   async function unsentCount(): Promise<number> {
     return db.outbox.count()
   }
@@ -1045,7 +860,6 @@ function computeShares(draft: ExpenseDraft) {
   )
 }
 
-/** The shape the server's sync endpoint expects for an expense operation. */
 function toSettlementPayload(entity: LocalSettlement) {
   return {
     id: entity.id,
@@ -1070,14 +884,6 @@ function toCommentPayload(entity: LocalComment) {
   }
 }
 
-/**
- * Who paid, checked against the group and against the total.
- *
- * The amounts have to add up to the expense, and a draft where they do not is
- * refused rather than reconciled: both numbers came off the same screen, so a
- * disagreement means one of them is not what was typed, and quietly picking a
- * winner is how a total ends up wrong with nothing on screen to say why.
- */
 function readPayers(
   draft: Pick<ExpenseDraft, 'payers' | 'paidByMemberId' | 'amount' | 'currency'>,
   members: Set<string>,
@@ -1114,13 +920,6 @@ function readPayers(
   }))
 }
 
-/**
- * The payers already on an expense, apportioned if the amount has changed.
- *
- * An edit that only moves the amount says nothing about who paid, and the old
- * figures would no longer add up. One payer takes the new amount whole; several
- * keep their proportions, the rounding going to the largest so the parts still sum.
- */
 function keepPayers(
   expense: LocalExpense,
   amount: number,
@@ -1156,7 +955,6 @@ function keepPayers(
   return scaled
 }
 
-/** The payer whose name goes on the expense: the largest, ties by id. */
 function mainPayer(payers: Array<{ memberId: string; amount: number }>): string {
   return [...payers].sort(
     (left, right) => right.amount - left.amount || left.memberId.localeCompare(right.memberId),

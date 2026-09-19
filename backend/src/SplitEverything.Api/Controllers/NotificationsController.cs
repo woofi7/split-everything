@@ -10,7 +10,6 @@ public sealed class NotificationsController(
     ICurrentUser currentUser,
     INotificationService notifications) : ApiControllerBase(currentUser)
 {
-    /// <summary>Public: the browser needs this before it can subscribe.</summary>
     [AllowAnonymous]
     [HttpGet("vapid-key")]
     public ActionResult<VapidPublicKeyDto> VapidKey() => Ok(notifications.GetVapidPublicKey());

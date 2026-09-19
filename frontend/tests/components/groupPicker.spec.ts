@@ -6,14 +6,6 @@ import GroupPicker from '@/components/groups/GroupPicker.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { resetDatabase } from '@/offline/db'
 
-/**
- * Choosing the group the whole app is on.
- *
- * The app shows one group at a time, so this is the only place the others are
- * reachable. It has to be findable with one group as well as ten: with one, it is
- * still how you get to creating the next.
- */
-
 const group = (id: string, name: string, balance = 0, archived = false) => ({
   id,
   name,
@@ -73,8 +65,6 @@ describe('GroupPicker', () => {
       await wrapper.findAll('[data-testid="group-option"]')[1].trigger('click')
       await nextTick()
 
-      // Left alone the screen opens wherever the last group was being read, which
-      // is nowhere in this one.
       expect(page.scrollTop).toBe(0)
     } finally {
       page.remove()
@@ -135,7 +125,6 @@ describe('GroupPicker', () => {
 
     const wrapper = mountPicker()
 
-    // Frozen, not gone: you still need to read the history.
     expect(wrapper.text()).toContain('Old flat')
     expect(wrapper.text()).toContain('Archived')
   })
@@ -145,7 +134,6 @@ describe('GroupPicker', () => {
 
     const wrapper = mountPicker()
 
-    // This list is where attention gets directed, so the group needing it leads.
     const names = wrapper.findAll('[data-testid="group-option"]').map((row) => row.text())
     expect(names[0]).toContain('Owing')
   })
@@ -179,7 +167,6 @@ describe('GroupPicker', () => {
     withGroups(group('g1', 'Roommates'))
     const wrapper = mountPicker()
 
-    // Tapping outside a sheet is how a sheet is dismissed on a phone.
     await wrapper.find('.fixed.inset-0').trigger('click')
 
     expect(wrapper.emitted('close')).toBeTruthy()
@@ -202,7 +189,6 @@ describe('GroupPicker', () => {
       .find((l) => JSON.stringify(l.props().to).includes('new-group'))
     await link!.trigger('click')
 
-    // Otherwise it sits over the screen it navigated to.
     expect(wrapper.emitted('close')).toBeTruthy()
   })
 
@@ -214,7 +200,6 @@ describe('GroupPicker', () => {
       .find((row) => row.text().includes('Old flat'))
     await archivedRow!.trigger('click')
 
-    // Frozen, not gone: reading the history is the reason to go there.
     expect(store.mainGroupId).toBe('g2')
   })
 

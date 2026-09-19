@@ -12,15 +12,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// A colour per member, stored on the group.
-///
-/// Derived from the member id before, which meant every screen computed it from
-/// whatever list it happened to have, and they disagreed. Stored, a group can also
-/// change it. It belongs to the group rather than to the person: a wish rather
-/// than a guarantee, because two people the same colour in one group defeats the
-/// point of having colours at all.
-/// </summary>
 public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private static readonly string First = MemberPalette.Colors[0];
@@ -63,8 +54,6 @@ public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture
     [Fact]
     public void The_palette_repeats_rather_than_refusing_when_it_runs_out()
     {
-        // A group can hold more people than there are colours, and a member with no
-        // colour at all would be worse than a repeat.
         var everything = MemberPalette.Colors.ToList();
 
         MemberPalette.Colors.ShouldContain(MemberPalette.Assign(everything));
@@ -103,7 +92,6 @@ public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var added = await Groups.AddUserMemberAsync(owner.Id, group.Id,
             new AddUserMemberRequest(joiner.Id));
 
-        // Two people the same colour in one group defeats the point of having them.
         added.ColorHex.ShouldNotBeNull();
         added.ColorHex.ShouldNotBe(taken);
     }
@@ -136,7 +124,6 @@ public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture
         await Groups.SetMemberColorAsync(user.Id, group.Id, me.Id,
             new SetMemberColorRequest(bob.ColorHex!));
 
-        // Swapped rather than refused, so everybody still has one of their own.
         var after = await Groups.GetAsync(user.Id, group.Id);
         after.Members.First(m => m.Id == me.Id).ColorHex.ShouldBe(bob.ColorHex);
         after.Members.First(m => m.Id == bob.Id).ColorHex.ShouldBe(me.ColorHex);
@@ -156,7 +143,6 @@ public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture
         fresh.GroupMembers.Add(TestData.Member(group.Id, other.Id, "Mallory"));
         await fresh.SaveChangesAsync();
 
-        // It changes what everybody in the group sees.
         await Should.ThrowAsync<ForbiddenException>(() => Groups.SetMemberColorAsync(
             other.Id, group.Id, bob.Id, new SetMemberColorRequest(First)));
     }
@@ -173,7 +159,6 @@ public class MemberColorTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var before = await NewContext().SyncLog.CountAsync(e => e.EntityId == mine.Id);
         await Groups.SetMemberColorAsync(user.Id, group.Id, mine.Id, new SetMemberColorRequest(wanted));
 
-        // Otherwise the other phone keeps drawing the old colour for good.
         var after = await NewContext().SyncLog.CountAsync(e => e.EntityId == mine.Id);
         after.ShouldBeGreaterThan(before);
     }

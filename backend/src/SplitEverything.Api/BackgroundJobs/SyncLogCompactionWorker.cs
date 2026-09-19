@@ -5,14 +5,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Api.BackgroundJobs;
 
-/// <summary>
-/// Yearly sync-log compaction, as the spec requires: settled history older than a
-/// year is collapsed into a snapshot and trimmed from the live log, so the log does
-/// not grow without bound.
-///
-/// Checked daily but only acts on a group whose last snapshot is over a year old,
-/// which makes the schedule idempotent and cheap.
-/// </summary>
 public sealed class SyncLogCompactionWorker(
     IServiceScopeFactory scopes,
     IClock clock,

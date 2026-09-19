@@ -173,29 +173,10 @@ import {
   faEllipsis,
 } from '@fortawesome/free-solid-svg-icons'
 
-/**
- * The icons a group can be given.
- *
- * A curated set rather than all two thousand Font Awesome solid icons, for two
- * reasons: importing them all costs about a megabyte of JavaScript in an app that
- * has to work offline, and a picker showing two thousand results is harder to use
- * than one showing the hundred and seventy that mean something for shared costs.
- *
- * Every icon carries a human label and keywords, because people search for what a
- * thing is rather than what it is called: "home" has to find the house, and
- * "hydro" has to find the electricity bolt.
- *
- * The stored value is the Font Awesome name, so it is stable, readable in the
- * database, and independent of this list.
- */
 export interface IconChoice {
-  /** Font Awesome name. This is what gets stored. */
   name: string
-  /** What it means here, which is not always what Font Awesome calls it. */
   label: string
-  /** Other words someone might search for. */
   keywords: readonly string[]
-  /** Section heading in the picker. */
   group: string
   definition: IconDefinition
 }
@@ -388,7 +369,6 @@ export const ICONS: readonly IconChoice[] = [
   { name: faEllipsis.iconName, label: 'Other', keywords: ['more', 'misc', 'miscellaneous'], group: 'Other', definition: faEllipsis },
 ]
 
-/** The icon used when a group has none, so the UI never renders a hole. */
 export const FALLBACK_ICON = ICONS.find((icon) => icon.label === 'Group') ?? ICONS[0]
 
 const byName = new Map(ICONS.map((icon) => [icon.name, icon]))
@@ -398,17 +378,10 @@ export function findIcon(name: string | null | undefined): IconChoice | null {
   return byName.get(name) ?? null
 }
 
-/**
- * Resolves a stored name to something renderable.
- *
- * Falls back rather than throwing: a name saved by a newer version of the app, or
- * removed from this list, must not break a group list.
- */
 export function resolveIcon(name: string | null | undefined): IconChoice {
   return findIcon(name) ?? FALLBACK_ICON
 }
 
-/** The searchable fields of an icon, name last since it is the least human. */
 export function iconSearchFields(icon: IconChoice): readonly string[] {
   return [icon.label, ...icon.keywords, icon.name]
 }

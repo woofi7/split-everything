@@ -26,7 +26,6 @@ from datetime import datetime, timedelta, timezone
 
 DEFAULT_API = "http://localhost:5080/api"
 
-# Fixed, so a re-run produces the same figures and a screenshot stays comparable.
 random.seed(20260901)
 
 
@@ -91,8 +90,6 @@ def spread(months_ago, day, hour=19):
     return min(when, now - timedelta(hours=1)).isoformat()
 
 
-# Enough variety that the stacked chart has something to show, with amounts that
-# read as real money rather than round numbers.
 FLAT_EXPENSES = [
     ("Rent", 1450.00, 3, 1),
     ("Hydro", 96.42, 3, 4),
@@ -182,8 +179,6 @@ def seed_group(api, name, currency, people, expenses):
     print(f"  {name}: created with {len(members)} people")
 
     for index, (description, amount, months_ago, day) in enumerate(expenses):
-        # Rotated rather than random, so every person pays a fair share of the
-        # months and the stacked chart has more than one colour in each bar.
         payer = members[index % len(members)]
         add_expense(
             api, group["id"], payer, members, description, amount, spread(months_ago, day),

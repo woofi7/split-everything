@@ -44,15 +44,6 @@ public sealed record GroupNetDto(Guid GroupId, string GroupName, string Currency
 
 public sealed record NudgeRequest(Guid GroupId, Guid MemberId, string? Message);
 
-/// <summary>
-/// What two people owe each other across every group they share, and what
-/// cancelling the opposing halves would do.
-///
-/// A debt in one group and the opposite debt in another are the same two people,
-/// so paying both in full is two transfers where none is needed. This is the
-/// picture that says so: every shared group with something outstanding between
-/// them, the pairs that cancel, and what is left when they have.
-/// </summary>
 public sealed record CrossGroupBalanceDto(
     Guid WithUserId,
     string WithName,
@@ -60,23 +51,14 @@ public sealed record CrossGroupBalanceDto(
     IReadOnlyList<PlannedOffsetDto> Offsets,
     IReadOnlyList<CrossGroupRemainderDto> Remaining);
 
-/// <summary>
-/// One shared group. Net is from the caller's side: positive means the other
-/// person owes them that much here.
-/// </summary>
 public sealed record CrossGroupGroupDto(
     Guid GroupId, string GroupName, string Currency, decimal Net, bool CanSettle);
 
-/// <summary>
-/// One cancelling pair: this much of what is owed in one group is met by what is
-/// owed the other way in another, so a settlement goes in each and no money moves.
-/// </summary>
 public sealed record PlannedOffsetDto(
     Guid OwedGroupId, string OwedGroupName,
     Guid OwingGroupId, string OwingGroupName,
     decimal Amount, string Currency);
 
-/// <summary>What is still outstanding once the pairs have cancelled, per currency.</summary>
 public sealed record CrossGroupRemainderDto(
     string Currency, decimal Net, Guid? GroupId, string? GroupName);
 

@@ -46,13 +46,6 @@ const groupDto = {
   expenseCount: 0,
 }
 
-/**
- * What the list endpoint really returns.
- *
- * A summary carries no roster and no lineage: those come from a detail read.
- * Handing the list a full detail object here would hide every bug in the merge
- * that fills the gaps from the cached copy.
- */
 const summaryDto = {
   id: groupId,
   name: 'Roommates',
@@ -111,7 +104,6 @@ describe('groups store', () => {
 
     await offlineStore.loadAll()
 
-    // The whole point of the local replica: the group list still renders.
     expect(offlineStore.groups).toHaveLength(1)
     expect(offlineStore.isOffline).toBe(true)
   })
@@ -155,8 +147,6 @@ describe('groups store', () => {
 
     await store.update(groupId, { iconName: null })
 
-    // Sending null would mean "leave it alone", so the remove button would appear
-    // to do nothing.
     expect(api.patch).toHaveBeenCalledWith(`/groups/${groupId}`, { iconName: '' })
   })
 
@@ -211,7 +201,6 @@ describe('groups store', () => {
   it('lists members of a group', async () => {
     const store = useGroupsStore()
     store.attachApi(fakeApi() as never)
-    // The roster comes from a detail read; the list endpoint only counts members.
     await store.get(groupId)
 
     expect(store.membersOf(groupId).map((m) => m.displayName)).toEqual(['Alice', 'Bob'])
@@ -232,7 +221,6 @@ describe('groups store', () => {
 
     await store.loadAll()
 
-    // All a cold start knows about who is in the group.
     expect(store.groups[0].members).toEqual([])
     expect(store.groups[0].memberCount).toBe(2)
   })
@@ -242,10 +230,6 @@ describe('groups store', () => {
     store.attachApi(fakeApi() as never)
     await store.get(groupId)
 
-    // The second pass merges the cached roster into a summary that has none. The
-    // cached copy is read back through a reactive ref, and a reactive value cannot
-    // be written to IndexedDB: it throws DataCloneError, which the offline catch
-    // would swallow as an unreachable server.
     await store.loadAll()
 
     expect(store.isOffline).toBe(false)
@@ -308,25 +292,12 @@ describe('groups store', () => {
   })
 })
 
-/**
- * A loading flag has to be cleared by the same path that sets it.
- *
- * The cached read sat outside the try, so a replica that would not answer left
- * "Loading your groups" on screen for the life of the page: not an error, not a
- * retry, just a spinner. That is what a phone holding the local data open in
- * another tab looks like from here.
- */
 describe('a group the server no longer lists', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
     await resetDatabase()
   })
 
-  /**
-   * Every other deletion arrives as a tombstone through the sync log. A group
-   * deleted outright cannot send one - it is gone, and so is its log - so the list
-   * not mentioning it is the only news this device will ever get.
-   */
   it('goes from the replica, with what was in it', async () => {
     const store = useGroupsStore()
     store.attachApi(fakeApi() as never)
@@ -358,8 +329,6 @@ describe('a group the server no longer lists', () => {
     )
     await store.loadAll()
 
-    // Offline is not "your groups are gone", and a device that cleared its replica
-    // on a dropped connection would be unusable on a train.
     expect(await db.groups.count()).toBe(1)
     expect(store.groups).toHaveLength(1)
   })

@@ -15,23 +15,6 @@ import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import type { LocalExpense } from '@/offline/db'
 
-/**
- * Where somebody stands, everywhere.
- *
- * The dashboard answers "how is this group doing", and answers it well; nothing
- * answered "which groups am I in, and where do I stand in each", which is the
- * question you have when you are not in a group at all. So this screen is every
- * group you are in, with your balance in each. The same figures added up across
- * the lot are on the stats screen, under that group's own.
- *
- * The settings that used to be this screen are behind the gear. They are the things
- * you set once and then leave, and they had pushed the only page that could have
- * answered this out of existence.
- *
- * Computed from the local replica, like the stats screen: it is arithmetic over
- * rows this device already holds, so it works on a train.
- */
-
 const auth = useAuthStore()
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
@@ -41,14 +24,12 @@ onMounted(async () => {
   await expenses.hydrate()
 })
 
-/** The same expenses the group screen totals: what a group leaves out, this leaves out. */
 function everyday(group: { id: string; ignoredNamePatterns?: string[] | null }): LocalExpense[] {
   return expenses
     .forGroup(group.id)
     .filter((expense) => !matchesAnyNamePattern(expense.description, group.ignoredNamePatterns ?? []))
 }
 
-/** Who paid an expense, however the row was stored: an older one names one payer. */
 function payersOf(expense: LocalExpense) {
   return expense.payers && expense.payers.length > 0
     ? expense.payers
@@ -97,8 +78,6 @@ const rows = computed<GroupRow[]>(() =>
         )
       : 0
 
-    // The balance as the group screen states it, settlements and all, rather than
-    // paid less share: money handed over is exactly what the difference leaves out.
     const net = mine
       ? (expenses.balanceFor(group.id).find((entry) => entry.memberId === mine)?.net ?? 0)
       : 0
@@ -124,7 +103,6 @@ const liveGroups = computed(() => rows.value.filter((row) => !row.isArchived))
 const archivedGroups = computed(() => rows.value.filter((row) => row.isArchived))
 
 </script>
-
 <template>
   <AppShell
     :title="auth.user?.displayName ?? t('Profile')"
@@ -145,10 +123,8 @@ const archivedGroups = computed(() => rows.value.filter((row) => row.isArchived)
         <FontAwesomeIcon :icon="faGear" class="h-4 w-4" />
       </RouterLink>
     </template>
-
     <section class="mb-4">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Your groups') }}</h2>
-
       <ul v-if="liveGroups.length > 0" class="flex flex-col gap-2">
         <li v-for="row in liveGroups" :key="row.id">
           <RouterLink
@@ -165,7 +141,6 @@ const archivedGroups = computed(() => rows.value.filter((row) => row.isArchived)
             >
               <FontAwesomeIcon :icon="row.icon.definition" class="h-4 w-4" />
             </span>
-
             <span class="flex min-w-0 flex-1 flex-col">
               <span class="truncate font-medium">{{ row.name }}</span>
               <span class="truncate text-xs text-[var(--text-muted)]">
@@ -174,24 +149,16 @@ const archivedGroups = computed(() => rows.value.filter((row) => row.isArchived)
                 {{ t('{amount} spent', { amount: formatMoney(row.spend, row.currency) }) }}
               </span>
             </span>
-
             <MoneyAmount :amount="row.net" :currency="row.currency" signed size="sm" />
           </RouterLink>
         </li>
       </ul>
-
       <p v-else class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
         {{ t('No groups yet') }}
       </p>
     </section>
-
-    <!--
-      Closed groups, quieter and last. They are still here because a balance in one
-      is still owed: archiving a group ends the spending, not the debt.
-    -->
     <section v-if="archivedGroups.length > 0" class="mb-4">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Archived') }}</h2>
-
       <ul class="flex flex-col gap-2">
         <li v-for="row in archivedGroups" :key="row.id">
           <RouterLink
@@ -208,14 +175,12 @@ const archivedGroups = computed(() => rows.value.filter((row) => row.isArchived)
             >
               <FontAwesomeIcon :icon="row.icon.definition" class="h-4 w-4" />
             </span>
-
             <span class="flex min-w-0 flex-1 flex-col">
               <span class="truncate font-medium">{{ row.name }}</span>
               <span class="truncate text-xs text-[var(--text-muted)]">
                 {{ t('{amount} spent', { amount: formatMoney(row.spend, row.currency) }) }}
               </span>
             </span>
-
             <MoneyAmount :amount="row.net" :currency="row.currency" signed size="sm" />
           </RouterLink>
         </li>

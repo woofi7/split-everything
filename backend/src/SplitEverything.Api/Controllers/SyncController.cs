@@ -5,11 +5,6 @@ using SplitEverything.Application.Services;
 
 namespace SplitEverything.Api.Controllers;
 
-/// <summary>
-/// The delta-batch transport offline clients fall back to when they reconnect.
-/// SignalR carries the same operations live; this is what makes a dropped
-/// connection harmless.
-/// </summary>
 public sealed class SyncController(
     ICurrentUser currentUser,
     ISyncService sync) : ApiControllerBase(currentUser)

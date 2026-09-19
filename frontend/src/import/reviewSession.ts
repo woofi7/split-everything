@@ -49,9 +49,7 @@ export interface ReviewRow {
   duplicateOf: DuplicateMatch | null
   isForeignCurrency: boolean
   notes: string | null
-  /** What it will be filed under, guessed from the line on the statement. */
   categoryKey: string | null
-  /** True once a person has said, which stops the guessing for this row. */
   categoryChosen: boolean
 }
 
@@ -59,13 +57,6 @@ export interface ReviewContext {
   suggestions: SplitSuggestion[]
   duplicates: DuplicateMatch[]
   statementCurrency?: string
-  /**
-   * Each group's categories, for filing a row the moment it is assigned.
-   *
-   * A statement is where categorising pays for itself: two hundred lines that
-   * nobody will ever file by hand, and every one of them a merchant name the
-   * keywords already know.
-   */
   categoriesByGroup?: Record<string, Category[]>
 }
 
@@ -89,19 +80,8 @@ export interface CommitPayload {
   sourceLabel: string | null
 }
 
-/** Keys under which parsing staged anything on-device during the session. */
 const STAGING_KEYS = ['statement:staging', 'statement:ocr', 'statement:text']
 
-/**
- * The review wizard's state.
- *
- * Two things it is careful about. First, nothing is charged to a group unless the
- * user says so: rows default to "personal, not split" and a suggestion only
- * pre-fills what the user can still change. Second, the commit payload carries
- * only confirmed expense records - never the raw line, the extracted text or the
- * file - and the staged parsing data is cleared whether the session commits or
- * is cancelled.
- */
 export class StatementReviewSession {
   readonly rows: ReviewRow[]
 
@@ -129,8 +109,6 @@ export class StatementReviewSession {
       amount: row.amount,
       currency: row.currency,
       problems: [...row.problems],
-      // A merchant previously split with a group is pre-filled; everything else
-      // stays personal until the user decides.
       action: suggestion ? 'split' : 'personal',
       groupId: suggestion?.groupId ?? null,
       paidByMemberId: suggestion?.paidByMemberId ?? null,
@@ -141,8 +119,6 @@ export class StatementReviewSession {
       duplicateOf: null,
       isForeignCurrency,
       notes: null,
-      // A row that arrives already assigned to a group - a merchant split there
-      // before - is filed straight away; the rest wait for a group.
       categoryKey: suggestion
         ? categoriseByKeywords(
             row.description,
@@ -166,10 +142,6 @@ export class StatementReviewSession {
     return row
   }
 
-  /**
-   * Attaches the fingerprint computed for a row and marks it as already recorded
-   * when the server reported a match.
-   */
   setFingerprint(rowNumber: number, fingerprint: string): void {
     const row = this.require(rowNumber)
     row.fingerprint = fingerprint
@@ -190,7 +162,6 @@ export class StatementReviewSession {
     for (const rowNumber of rowNumbers) this.setAction(rowNumber, action)
   }
 
-
   assignGroup(
     rowNumber: number,
     groupId: string,
@@ -205,9 +176,6 @@ export class StatementReviewSession {
     row.splitType = splitType
     row.action = 'split'
 
-    // Filed as soon as there is a list to file it against, and re-filed if the
-    // row moves to a group that keeps different categories. Not once somebody
-    // has said themselves: their answer outranks every guess after it.
     if (!row.categoryChosen) {
       row.categoryKey = categoriseByKeywords(
         row.description,
@@ -216,13 +184,11 @@ export class StatementReviewSession {
     }
   }
 
-  /** What a person said this row was for, which stops the guessing. */
   setCategory(rowNumber: number, categoryKey: string | null): void {
     const row = this.require(rowNumber)
     row.categoryKey = categoryKey
     row.categoryChosen = true
   }
-
 
   summary(): { toCommit: number; ignored: number; personal: number; duplicates: number; problems: number } {
     return {
@@ -244,10 +210,6 @@ export class StatementReviewSession {
     )
   }
 
-  /**
-   * The only thing that ever goes to the server: confirmed expense records. The
-   * raw line, extracted text and file are deliberately absent from this shape.
-   */
   async buildCommitPayload(skipDuplicates = true): Promise<CommitPayload> {
     const rows: CommitRow[] = []
 
@@ -258,9 +220,6 @@ export class StatementReviewSession {
         throw new Error(`Row ${row.rowNumber} has no payer selected.`)
       }
 
-      // Computed here rather than required from the caller: the session already
-      // holds every input, and a forgotten step would silently disable duplicate
-      // detection on the server.
       const currency = row.currency ?? this.context.statementCurrency ?? 'CAD'
       const fingerprint =
         row.fingerprint ??
@@ -284,14 +243,12 @@ export class StatementReviewSession {
     return { rows, skipDuplicates, sourceLabel: this.sourceLabel }
   }
 
-  /** Clears everything the parsing staged on-device. Safe to call twice. */
   async dispose(): Promise<void> {
     this.rows.length = 0
     this.sourceLabel = null
     await db.meta.bulkDelete(STAGING_KEYS)
   }
 
-  /** Cancelling has to leave no trace either, not just a successful commit. */
   async cancel(): Promise<void> {
     await this.dispose()
   }

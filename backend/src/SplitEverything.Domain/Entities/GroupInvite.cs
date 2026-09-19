@@ -1,10 +1,5 @@
 namespace SplitEverything.Domain.Entities;
 
-/// <summary>
-/// A magic link. Rendered either as an emailed URL or as a QR code - same token,
-/// two presentations. Redeeming it requires a Google sign-in, so the link alone
-/// never grants access.
-/// </summary>
 public class GroupInvite
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
@@ -12,13 +7,10 @@ public class GroupInvite
     public Guid GroupId { get; set; }
     public Group? Group { get; set; }
 
-    /// <summary>SHA-256 of the token. The plaintext exists only in the link we hand out.</summary>
     public string TokenHash { get; set; } = string.Empty;
 
-    /// <summary>Optional: pins the invite to one address, so a leaked link is useless to anyone else.</summary>
     public string? InvitedEmail { get; set; }
 
-    /// <summary>Optional: the placeholder member this invite claims on redemption.</summary>
     public Guid? ClaimsMemberId { get; set; }
 
     public Guid CreatedByUserId { get; set; }
@@ -30,14 +22,6 @@ public class GroupInvite
 
     public DateTimeOffset? RevokedAt { get; set; }
 
-    /// <summary>
-    /// Whether this invite can still be used, as of a given moment.
-    ///
-    /// The moment is handed in rather than read off the wall clock here: every
-    /// other time in this app comes from the injected clock, and an entity that
-    /// quietly disagrees with it is an invite that is live to the service that
-    /// wrote it and expired to the one that reads it.
-    /// </summary>
     public bool IsRedeemableAt(DateTimeOffset now)
         => RevokedAt is null && UseCount < MaxUses && ExpiresAt > now;
 }

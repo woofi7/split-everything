@@ -9,21 +9,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// The server's own administration.
-///
-/// Everything else in this application is scoped by membership: you see a group
-/// because you are in it, and no endpoint will tell you a group exists otherwise.
-/// That is right, and it leaves the person whose machine this is unable to answer
-/// the questions only they can be asked - what is taking up the disk, what is left
-/// of the group that was split in two by mistake, which of these six abandoned
-/// groups can go.
-///
-/// So this is deliberately narrow. It reads anything and it deletes a group that
-/// has already been archived. It does not write into a group, and it does not put
-/// the administrator into one: an account appearing in a household's balances
-/// because somebody looked at it would be a worse bug than the one it solves.
-/// </summary>
 public sealed class AdminService(
     AppDbContext db,
     AdminOptions options,
@@ -70,8 +55,6 @@ public sealed class AdminService(
             .ToListAsync(ct);
 
         return rows
-            // In use first, then by whatever happened last: the ones worth acting
-            // on are the quiet ones at the bottom.
             .OrderBy(row => row.Group.IsArchived)
             .ThenByDescending(row => row.LastActivityAt ?? row.Group.CreatedAt)
             .Select(row => Map(row.Group, row.CreatedByName, row.MemberCount, row.ExpenseCount,
@@ -151,8 +134,6 @@ public sealed class AdminService(
 
         if (!group.IsArchived)
         {
-            // Archiving is the reversible step and the one everybody can take. This
-            // is the other kind, so it only ever finishes something already stopped.
             throw new ValidationException("Archive this group before deleting it.");
         }
 
@@ -166,9 +147,6 @@ public sealed class AdminService(
             .Select(i => i.Id)
             .ToListAsync(ct);
 
-        // Receipt rows outlive the expense that points at them - the column is set
-        // null rather than cascaded, and one photo can be shared - so the ones to
-        // take with the group are those nothing else refers to.
         var orphanedReceipts = await db.Receipts
             .Where(r =>
                 (db.Expenses.Any(e => e.GroupId == groupId && e.ReceiptId == r.Id)
@@ -180,15 +158,6 @@ public sealed class AdminService(
 
         var receiptIds = orphanedReceipts.Select(r => r.Id).ToList();
 
-        // In dependency order, in one transaction. Postgres would cascade from the
-        // group, but the constraints from a member to what they paid for restrict
-        // rather than cascade: leaving the order to the database means the delete
-        // sometimes works and sometimes stops half way with a foreign key error.
-        //
-        // Through the execution strategy, because the connection retries: a
-        // transaction opened around a retriable operation has to be retriable
-        // itself, and every statement in here is a delete, so running the block
-        // twice ends where running it once does.
         var strategy = db.Database.CreateExecutionStrategy();
 
         await strategy.ExecuteAsync(async () =>
@@ -222,14 +191,10 @@ public sealed class AdminService(
             await transaction.CommitAsync(ct);
         });
 
-        // Said out loud: this is the one action in the application that destroys
-        // data, and a self-hosted install has no other record of it having happened.
         logger.LogWarning(
             "Administrator {UserId} deleted group {GroupId} ({GroupName}): {Expenses} expenses, {Receipts} receipts",
             userId, groupId, group.Name, expenseIds.Count, orphanedReceipts.Count);
 
-        // After the commit, because the bytes are not part of the transaction and a
-        // file that fails to go is a tidying problem, not a reason to keep the group.
         foreach (var receipt in orphanedReceipts)
         {
             try

@@ -4,19 +4,6 @@ import { computed, ref, watch } from 'vue'
 import { fuzzySearch } from '@/domain/fuzzySearch'
 import type { AddableUser } from '@/api/types'
 
-/**
- * Adding someone to a group.
- *
- * Two ways in, and this field is the first: pick a person who already has an
- * account. The second is an invite link, for someone who has never opened the
- * app. There is no third: a name typed here used to create a member with no
- * account behind it, which put a person in the group who could never open it,
- * see what they owed, or be told about it.
- *
- * Matching is fuzzy over name and email, so finding someone does not depend on
- * guessing how their name is spelled or capitalised.
- */
-
 const props = defineProps<{
   candidates: readonly AddableUser[]
   label?: string
@@ -33,22 +20,18 @@ const activeIndex = ref(0)
 
 const trimmed = computed(() => query.value.trim())
 
-// Nothing until something is typed: a bare directory listing is noise, and on a
-// phone it pushes the rest of the form off screen.
 const results = computed(() =>
   trimmed.value.length === 0
     ? []
     : fuzzySearch(trimmed.value, props.candidates, searchFields, RESULT_LIMIT),
 )
 
-/** Name first, so a name match outranks an email match on the same person. */
 function searchFields(person: AddableUser): readonly string[] {
   return [person.displayName, person.email]
 }
 
 const isOpen = computed(() => results.value.length > 0)
 
-/** Nobody matched. Said rather than left blank, so the field does not look broken. */
 const hasNoMatch = computed(() => trimmed.value.length > 0 && results.value.length === 0)
 
 watch(results, () => {
@@ -67,7 +50,6 @@ function pick(person: AddableUser): void {
   reset()
 }
 
-/** Cleared after picking someone, ready for the next person. */
 function reset(): void {
   query.value = ''
   activeIndex.value = 0
@@ -78,7 +60,6 @@ function onEnter(): void {
   if (active) pick(active.item)
 }
 
-/** Splits a value around the matched positions, so a fuzzy hit is legible. */
 function segments(value: string, indices: number[]): Array<{ text: string; matched: boolean }> {
   const matched = new Set(indices)
   const parts: Array<{ text: string; matched: boolean }> = []
@@ -106,7 +87,6 @@ function emailSegments(result: { item: AddableUser; indices: number[]; fieldInde
     : [{ text: result.item.email, matched: false }]
 }
 </script>
-
 <template>
   <div class="relative">
     <input
@@ -124,7 +104,6 @@ function emailSegments(result: { item: AddableUser; indices: number[]; fieldInde
       @keydown.enter.prevent="onEnter"
       @keydown.esc.prevent="reset"
     />
-
     <ul
       v-if="isOpen"
       id="person-picker-results"
@@ -157,7 +136,6 @@ function emailSegments(result: { item: AddableUser; indices: number[]; fieldInde
         </span>
       </li>
     </ul>
-
     <p
       v-if="hasNoMatch"
       data-testid="no-match"

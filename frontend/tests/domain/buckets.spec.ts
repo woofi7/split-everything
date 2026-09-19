@@ -10,21 +10,12 @@ import {
   toBucket,
 } from '@/domain/buckets'
 
-/**
- * The time buckets the stats endpoint hands over.
- *
- * A bucket is a date on a calendar rather than an instant, and the endpoint only
- * answers with the ones something happened in. A chart needs the ones in between
- * as well, or its axis is not time at all.
- */
-
 const point = (bucket: string, amount = 0) => ({ bucket, amount })
 
 describe('time buckets', () => {
   it('reads a bucket as a calendar date, not as an instant', () => {
     const date = parseBucket('2026-01-01')
 
-    // Parsed as midnight UTC and read west of it, this was the last of December.
     expect(date.getFullYear()).toBe(2026)
     expect(date.getMonth()).toBe(0)
     expect(date.getDate()).toBe(1)
@@ -38,7 +29,6 @@ describe('time buckets', () => {
     expect(nextBucket('2026-01-31', 'day')).toBe('2026-02-01')
     expect(nextBucket('2026-05-11', 'week')).toBe('2026-05-18')
     expect(nextBucket('2026-01-01', 'month')).toBe('2026-02-01')
-    // Across a year, which is where naive arithmetic gives up.
     expect(nextBucket('2026-12-01', 'month')).toBe('2027-01-01')
   })
 
@@ -50,8 +40,6 @@ describe('time buckets', () => {
 
   describe('what a bar is called', () => {
     it('names a month and nothing else', () => {
-      // The year is the same for every bar beside it, and a chart of twelve
-      // "Sep 26"s reads as a table.
       expect(formatBucket('2026-09-01', 'month')).toBe('September')
       expect(formatBucket('2026-10-01', 'month')).toBe('October')
     })
@@ -62,7 +50,6 @@ describe('time buckets', () => {
     })
 
     it('spells out what a week covers, when asked about one', () => {
-      // A bar labelled by its Monday says nothing about where it ends.
       const range = formatBucketRange('2026-05-11', 'week')
 
       expect(range).toMatch(/11/)
@@ -84,8 +71,6 @@ describe('time buckets', () => {
     })
 
     it('says the year of any other', () => {
-      // Two Januaries in one list, told apart by the only thing that separates
-      // them. A chart has an axis for this; a list has nothing.
       expect(formatMonthHeading('2025-01-01', today)).toContain('2025')
       expect(formatMonthHeading('2025-01-01', today)).toContain('January')
     })
@@ -128,15 +113,12 @@ describe('time buckets', () => {
     })
 
     it('keeps what it was given rather than drawing a year of hairlines', () => {
-      // A decade of days is three and a half thousand bars, which is not a chart.
       const sparse = [point('2016-01-01', 10), point('2026-01-01', 20)]
 
       expect(fillBuckets(sparse, 'day', (b) => point(b))).toEqual(sparse)
     })
 
     it('keeps what it was given rather than losing a bucket off its grid', () => {
-      // A week bucket that is not a Monday would fall between the steps, and a
-      // wrong chart is worse than a gappy one.
       const odd = [point('2026-05-11', 10), point('2026-05-13', 5), point('2026-05-25', 20)]
 
       expect(fillBuckets(odd, 'week', (b) => point(b))).toEqual(odd)

@@ -18,7 +18,6 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.DefaultCurrency).HasMaxLength(3).IsRequired();
         builder.Property(u => u.Locale).HasMaxLength(16).IsRequired();
 
-        // Google subject is the identity key; email can change on the Google side.
         builder.HasIndex(u => u.GoogleSubject).IsUnique();
         builder.HasIndex(u => u.Email);
     }

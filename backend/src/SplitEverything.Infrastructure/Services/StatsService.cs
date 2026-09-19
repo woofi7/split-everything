@@ -9,14 +9,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// Dashboard aggregates: spend over time, spend by category, who paid what, and
-/// how the debts moved.
-///
-/// A single-group view reports in that group's base currency. A cross-group view
-/// converts into the user's own currency, because adding a CAD group to a EUR group
-/// raw would be meaningless.
-/// </summary>
 public sealed class StatsService(
     AppDbContext db,
     ICurrencyConverter currency) : IStatsService
@@ -55,8 +47,6 @@ public sealed class StatsService(
                 e.AmountInBaseCurrency,
                 e.PaidByMemberId,
                 e.CategoryKey,
-                // Every payer, not only the name on the expense: an expense two
-                // people paid for credits each of them what they put in.
                 Payers = e.Payers.Where(y => !y.IsDeleted)
                     .Select(y => new { y.MemberId, y.AmountInBaseCurrency }).ToList(),
                 Splits = e.Splits.Where(s => !s.IsDeleted)
@@ -79,8 +69,6 @@ public sealed class StatsService(
         var myMemberIds = members.Where(m => m.UserId == userId).Select(m => m.Id).ToHashSet();
         var names = members.ToDictionary(m => m.Id, m => m.DisplayName);
 
-        // Each group's amounts are in its own base currency, so everything is
-        // normalised once, up front, before any aggregate is computed.
         var factors = await BuildFactorsAsync(scope, ct);
         decimal Normalise(Guid groupId, decimal amount) => amount * factors[groupId];
 
@@ -111,15 +99,10 @@ public sealed class StatsService(
                         names.GetValueOrDefault(payer.Key, "Someone"),
                         CurrencyPrecision.Round(payer.Sum(y => y.Amount), scope.Currency)))
                     .Where(member => member.Amount != 0m)
-                    // Largest first, so a stack does not reshuffle its colours from
-                    // one bucket to the next.
                     .OrderByDescending(member => member.Amount)
                     .ThenBy(member => member.MemberName)
                     .ToList();
 
-                // Rounding each share independently can leave the parts a cent off
-                // the whole, and a stacked bar whose parts do not sum to its total is
-                // a lie about both. The largest share absorbs it, as everywhere else.
                 var residue = CurrencyPrecision.Round(
                     total - byMember.Sum(member => member.Amount), scope.Currency);
 
@@ -128,10 +111,6 @@ public sealed class StatsService(
                     byMember[0] = byMember[0] with { Amount = byMember[0].Amount + residue };
                 }
 
-                // The same bucket cut the other way: what it went on rather than
-                // who paid. Held to the same rules, because the chart draws one of
-                // these as a line against the bar's own height, and a category that
-                // was the whole bucket has to reach the top of it.
                 var byCategory = g
                     .GroupBy(e => e.CategoryKey)
                     .Select(c => new SpendPointCategoryDto(
@@ -250,11 +229,6 @@ public sealed class StatsService(
         return factors;
     }
 
-    /// <summary>
-    /// Cumulative net position per member at the end of each bucket, which is what
-    /// makes the trend readable: it answers "how much was I up at that point",
-    /// not "how much moved that week".
-    /// </summary>
     private static List<DebtTrendPointDto> BuildDebtTrends(
         List<(Guid GroupId, DateTimeOffset SpentAt,
             List<(Guid MemberId, decimal Amount)> Payers,
@@ -312,7 +286,6 @@ public sealed class StatsService(
         return granularity.ToLowerInvariant() switch
         {
             "day" => date,
-            // Weeks start Monday, which is what a bill-splitting week looks like.
             "week" => date.AddDays(-(((int)date.DayOfWeek + 6) % 7)),
             _ => new DateOnly(date.Year, date.Month, 1)
         };

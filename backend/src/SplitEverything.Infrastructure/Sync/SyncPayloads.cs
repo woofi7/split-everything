@@ -4,23 +4,8 @@ using SplitEverything.Domain.Common;
 
 namespace SplitEverything.Infrastructure.Sync;
 
-/// <summary>
-/// Wire shapes for the operation payloads a client pushes. Deliberately separate
-/// from the entities: a client sends what the user changed, not our storage layout,
-/// and every field is nullable so a partial payload is a validation failure rather
-/// than a silent default.
-/// </summary>
 public static class SyncPayloads
 {
-    /// <summary>
-    /// The one wire format for payload JSON, used to read what a client pushes and
-    /// to write what the sync log hands back. Shared deliberately: when the two
-    /// differ, a client can push a shape the server cannot read.
-    ///
-    /// Enums travel as names, because the client holds a split type as a string.
-    /// Names and numbers are both readable, so payloads already in the log stay
-    /// readable too.
-    /// </summary>
     public static readonly JsonSerializerOptions Options = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -63,19 +48,11 @@ public static class SyncPayloads
         public Guid? ReceiptId { get; set; }
         public string? Notes { get; set; }
 
-        /// <summary>
-        /// What it was for. Absent from a client that predates categories, which
-        /// leaves the expense unfiled rather than clearing one somebody set.
-        /// </summary>
         public string? CategoryKey { get; set; }
 
         public List<SplitPayload> Splits { get; set; } = [];
         public List<ItemPayload> Items { get; set; } = [];
 
-        /// <summary>
-        /// Who put money in. Empty from a client that predates several payers, which
-        /// means the one named in PaidByMemberId paid for the lot.
-        /// </summary>
         public List<PayerPayload> Payers { get; set; } = [];
     }
 

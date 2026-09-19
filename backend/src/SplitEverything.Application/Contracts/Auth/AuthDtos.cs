@@ -15,16 +15,8 @@ public sealed record AuthenticatedUser(
     string? AvatarUrl,
     string DefaultCurrency,
     bool PrefersLightTheme,
-    /// <summary>The accent the whole application wears for them, if they said.</summary>
     string? ThemeName,
-    /// <summary>Which language they read the app in: en or fr.</summary>
     string Locale,
-    /// <summary>
-    /// Whether this account runs the server, which is configured on the server and
-    /// can never be granted from inside the application. The client only uses it to
-    /// decide whether to offer the screen; every administrative call is checked
-    /// again where it lands.
-    /// </summary>
     bool IsAdmin = false);
 
 public sealed record SignInResult(AuthenticatedUser User, AuthTokens Tokens, bool IsNewUser, IReadOnlyList<Guid> AutoJoinedGroupIds);
@@ -35,19 +27,9 @@ public sealed record UpdateProfileRequest(
     string? DisplayName,
     string? DefaultCurrency,
     bool? PrefersLightTheme,
-    // Null leaves these alone; an empty string puts one back to its default,
-    // which is the convention across this API.
     string? Locale = null,
     string? ThemeName = null);
 
-/// <summary>
-/// Signs in without Google, for local development only. Refused unless it has been
-/// deliberately enabled outside production.
-/// </summary>
 public sealed record DevelopmentSignInRequest(string Email, string? DisplayName, string? DeviceId);
 
-/// <summary>
-/// What the sign-in page needs to know before it renders anything, so it can tell
-/// "not configured" apart from "broken".
-/// </summary>
 public sealed record AuthCapabilities(bool GoogleConfigured, bool DevelopmentSignIn);

@@ -5,15 +5,6 @@ import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
 import { settle, signInForTests, waitFor } from '../support/viewHarness'
 
-/**
- * Repairing a replica whose queue and pending markers have drifted apart.
- *
- * A row marked unsent with nothing queued for it is stranded in both directions:
- * no push will ever send it, and a pull skips it precisely because it looks like
- * unsent local work. It reads "waiting to sync" forever. Two ordinary things get
- * a replica into that state, so it needs repairing rather than avoiding.
- */
-
 const groupId = 'group-1'
 const alice = 'member-alice'
 const bob = 'member-bob'
@@ -121,10 +112,8 @@ const draft = {
 
 describe('reconcile', () => {
   let api: ReturnType<typeof fakeSyncApi>
-
   beforeEach(async () => {
     setActivePinia(createPinia())
-    // The sync path refuses to talk to the server as nobody.
     signInForTests()
     await resetDatabase()
     await seedGroup()
@@ -150,28 +139,18 @@ describe('reconcile', () => {
   })
 
   it('retries a change the server refused earlier', async () => {
-    // Exactly the state a server-side fix leaves behind: parked, and nothing
-    // retries it, so the change never goes anywhere.
     const store = storeWith({ rejectAll: true })
     await store.add(draft)
-    // The store's own counter, not the queue: the queue changes first and the
-    // store catches up when the drain rehydrates it.
     await waitFor(() => store.rejectedCount === 1)
 
     expect(await db.outbox.where('status').equals('rejected').count()).toBe(1)
 
-    // The server now accepts what it refused before.
     api = fakeSyncApi()
     store.attachSync(new SyncEngine(api, () => true))
 
     await store.reconcile()
-    // Waiting on the send itself: the status flips to pending first, and asserting
-    // then catches the queue before anything has drained it.
     await waitFor(() => api.push.mock.calls.length > 0 && store.rejectedCount === 0)
 
-    // The queue is the durable record, and it is what the retry sends. The row
-    // itself comes back with the next pull, as the server's version rather than
-    // as a local one nobody else has.
     await waitFor(async () => (await db.outbox.count()) === 0)
     expect(await db.outbox.count()).toBe(0)
   })
@@ -183,11 +162,8 @@ describe('reconcile', () => {
 
     const pushesBefore = api.push.mock.calls.length
     await store.reconcile()
-    // The retry has to reach the server, and the store has to hear the verdict,
-    // before its fate means anything.
     await waitFor(() => api.push.mock.calls.length > pushesBefore && store.rejectedCount === 1)
 
-    // Not lost, and not looping: still parked, still visible for attention.
     expect(await db.outbox.where('status').equals('rejected').count()).toBe(1)
   })
 
@@ -303,24 +279,17 @@ describe('reconcile with nobody signed in', () => {
     await store.reconcile()
     await settle(3)
 
-    // Startup runs this on every load, sign-in page included, and it ends by
-    // draining the queue. That drain was an unauthorized pull in the console
-    // before anyone had signed in.
     expect(api.push).not.toHaveBeenCalled()
     expect(api.pull).not.toHaveBeenCalled()
 
-    // The repair itself is local, so it still happens: the operation is queued
-    // and waiting for a session.
     expect(await db.outbox.count()).toBe(1)
   })
 })
 
 describe('discarding a refused change', () => {
   let api: ReturnType<typeof fakeSyncApi>
-
   beforeEach(async () => {
     setActivePinia(createPinia())
-    // The sync path refuses to talk to the server as nobody.
     signInForTests()
     await resetDatabase()
     await seedGroup()
@@ -337,8 +306,6 @@ describe('discarding a refused change', () => {
     const parked = await db.outbox.where('status').equals('rejected').first()
     await store.discardRejected(parked!.operationId)
 
-    // Nothing on the server ever held this expense, so there is nothing to fall
-    // back to: leaving it would strand a row that claims to be waiting.
     expect(await db.expenses.get(expense.id)).toBeUndefined()
     expect(store.forGroup(groupId)).toHaveLength(0)
     expect(store.rejectedCount).toBe(0)
@@ -352,7 +319,6 @@ describe('discarding a refused change', () => {
     const expense = await store.add(draft)
     await waitFor(() => store.pendingCount === 0)
 
-    // The edit is refused, the create was not.
     api = fakeSyncApi({ rejectAll: true })
     store.attachSync(new SyncEngine(api, () => true))
     await store.edit(expense.id, { description: 'Late dinner' })
@@ -361,8 +327,6 @@ describe('discarding a refused change', () => {
     const parked = await db.outbox.where('status').equals('rejected').first()
     await store.discardRejected(parked!.operationId)
 
-    // The row stays, so the person keeps seeing the expense; the next pull
-    // replaces it with the server's version.
     const stored = await db.expenses.get(expense.id)
     expect(stored).toBeDefined()
     expect(stored!.pending).toBe(false)

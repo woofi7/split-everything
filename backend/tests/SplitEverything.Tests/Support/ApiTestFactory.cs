@@ -10,14 +10,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Tests.Support;
 
-/// <summary>
-/// The real API, over a real Postgres, with only the outbound network faked.
-///
-/// Everything in between - routing, JSON, model binding, JWT validation,
-/// authorization, the exception handler, the DI graph - is exercised as deployed.
-/// That is the point: most of what an integration test can catch lives in those
-/// seams, not in the services the unit tests already cover.
-/// </summary>
 public sealed class ApiTestFactory(string connectionString) : WebApplicationFactory<Program>
 {
     public IGoogleTokenVerifier Google { get; } = Substitute.For<IGoogleTokenVerifier>();
@@ -25,12 +17,6 @@ public sealed class ApiTestFactory(string connectionString) : WebApplicationFact
     public IPushDispatcher Push { get; } = Substitute.For<IPushDispatcher>();
     public ICurrencyConverter Currency { get; } = Substitute.For<ICurrencyConverter>();
 
-    /// <summary>
-    /// Settings are pushed through environment variables rather than an in-memory
-    /// source: the app's own appsettings.json is added after anything the factory
-    /// registers on the web host builder, and would otherwise win and point the
-    /// tests at the development database.
-    /// </summary>
     private static readonly Dictionary<string, string> Settings = new()
     {
         ["Auth__JwtSigningKey"] = "integration-test-signing-key-long-enough-for-hmac",
@@ -38,17 +24,9 @@ public sealed class ApiTestFactory(string connectionString) : WebApplicationFact
         ["Auth__JwtAudience"] = "split-everything",
         ["Auth__GoogleClientId"] = "test-client-id",
         ["Auth__AppBaseUrl"] = "https://split.test",
-        // The API layer is under test, not the schedulers.
         ["Database__MigrateOnStartup"] = "false",
-        // A real uncompressed P-256 point. A made-up string used to do, until the
-        // API stopped serving a public key that is not one: a malformed key only
-        // fails once it reaches the browser, inside atob.
         ["Push__VapidPublicKey"] = "BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw",
-        // Deliberately on, to prove the startup guard forces it off outside
-        // Development. The factory runs as "Testing".
         ["Auth__AllowDevelopmentSignIn"] = "true",
-        // Somebody runs this server, so the administration endpoints have a caller
-        // to admit and everybody else has one to be refused against.
         ["Admin__Emails__0"] = "admin@example.com"
     };
 
@@ -69,13 +47,11 @@ public sealed class ApiTestFactory(string connectionString) : WebApplicationFact
             Replace(services, Push);
             Replace(services, Currency);
 
-            // Drop the background workers: their tick would interleave with tests.
             foreach (var hosted in services.Where(s => s.ServiceType == typeof(IHostedService)).ToList())
                 services.Remove(hosted);
         });
     }
 
-    /// <summary>Creates the schema and seeds it, once per factory.</summary>
     public async Task InitializeDatabaseAsync()
     {
         using var scope = Services.CreateScope();

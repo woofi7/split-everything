@@ -4,11 +4,6 @@ using SplitEverything.Application.Common;
 
 namespace SplitEverything.Api.Infrastructure;
 
-/// <summary>
-/// The caller, read from the validated JWT. The device id comes from a header
-/// rather than the token, because one signed-in account legitimately syncs from
-/// several devices with the same access token lifetime.
-/// </summary>
 public sealed class CurrentUserAccessor(IHttpContextAccessor accessor) : ICurrentUser
 {
     public const string DeviceHeader = "X-Device-Id";

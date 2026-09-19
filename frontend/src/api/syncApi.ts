@@ -6,7 +6,6 @@ import type {
   SyncPushResult,
 } from '@/offline/syncEngine'
 
-/** The sync engine's transport, over the HTTP API. */
 export class HttpSyncApi implements SyncApi {
   private readonly api: ApiClient
 

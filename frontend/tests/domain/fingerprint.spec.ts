@@ -3,15 +3,6 @@ import { computeFingerprint, normalizeMerchant } from '@/domain/fingerprint'
 
 const day = new Date('2026-08-31T12:00:00Z')
 
-/**
- * This is a cross-boundary contract, not just a helper. The statement importer
- * runs entirely in the browser and asks the server "have I already got these?"
- * by fingerprint alone. If the two implementations disagree by one character,
- * duplicate detection silently stops working and people get double-charged.
- *
- * The expected hashes below are the values the C# implementation produces for the
- * same inputs, so a drift on either side fails here.
- */
 describe('expense fingerprint', () => {
   it('matches the value the server computes for a known transaction', async () => {
     const fingerprint = await computeFingerprint(day, 42.5, 'CAD', 'Uber Eats')

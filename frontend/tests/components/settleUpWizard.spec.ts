@@ -9,15 +9,6 @@ import { useGroupsStore } from '@/stores/groups'
 import { useAuthStore } from '@/stores/auth'
 import { resetDatabase } from '@/offline/db'
 
-/**
- * The Settle Up import, as a person walks it.
- *
- * The server has done this work for a while with no way to reach it. The shape
- * comes from a real export: the purpose of each row is the thing worth reading,
- * the people are names rather than accounts, and a row can be a transfer rather
- * than an expense.
- */
-
 const analysis = {
   analysisId: 'analysis-1',
   headers: [
@@ -130,17 +121,12 @@ async function choose(wrapper: ReturnType<typeof mount>, named = file()) {
   await flushPromises()
 }
 
-/**
- * What the screen says: the wizard's own text plus anything announced at the top
- * of the screen, which is where failures go now.
- */
 function said(wrapper: { text: () => string }): string {
   return `${wrapper.text()} ${toasts.value.map((toast) => toast.text).join(' ')}`
 }
 
 describe('SettleUpWizard', () => {
   let client: ReturnType<typeof fakeClient>
-
   beforeEach(async () => {
     setActivePinia(createPinia())
     clearToasts()
@@ -171,15 +157,11 @@ describe('SettleUpWizard', () => {
 
   const mountWizard = () => mount(SettleUpWizard)
 
-
-
-  /** The commit request, which travels as JSON alongside the file. */
   function committedRequest() {
     const call = client.upload.mock.calls.find(([path]) => path.endsWith('/commit'))
     return JSON.parse((call![1] as { request: string }).request)
   }
 
-  /** A group the wizard can import into, put where the wizard reads them from. */
   function existingGroup(name: string) {
     const group = {
       id: `group-${name.toLowerCase()}`,
@@ -200,7 +182,6 @@ describe('SettleUpWizard', () => {
     return group
   }
 
-  /** Mounted, given a file, and moved on to the rows. */
   async function previewed() {
     const wrapper = mountWizard()
     await choose(wrapper)
@@ -224,8 +205,6 @@ describe('SettleUpWizard', () => {
 
     await choose(wrapper)
 
-    // An export is one group's history, and the reason to import it is that the
-    // group is not here yet.
     const newGroup = wrapper.find('input[value="new"]')
     expect((newGroup.element as HTMLInputElement).checked).toBe(true)
     expect((wrapper.find('[data-testid="new-group-name"]').element as HTMLInputElement).value)
@@ -288,7 +267,6 @@ describe('SettleUpWizard', () => {
     await wrapper.findAll('[data-testid="toggle-row"]')[0].trigger('click')
     await flushPromises()
 
-    // The whole box, faint enough to skip over while still readable.
     const first = wrapper.findAll('[data-testid="row"]')[0]
     expect(first.classes()).toContain('opacity-25')
   })
@@ -303,8 +281,6 @@ describe('SettleUpWizard', () => {
     const first = wrapper.findAll('[data-testid="row"]')[0]
     await first.find('[data-testid="toggle-row"]').trigger('click')
 
-    // Struck through and dimmed, not merely a changed button label: the state has
-    // to be readable at a glance down a list of twenty eight rows.
     expect(first.attributes('data-ignored')).toBe('true')
     expect(first.find('.line-through').exists()).toBe(true)
   })
@@ -316,8 +292,6 @@ describe('SettleUpWizard', () => {
     await flushPromises()
     await flushPromises()
 
-    // Two of the three, because the duplicate starts ignored: importing something
-    // already recorded is the one outcome nobody wants, and it is one tap to undo.
     expect(wrapper.find('[data-testid="commit"]').text()).toContain('2')
 
     await wrapper.findAll('[data-testid="row"]')[0]
@@ -385,7 +359,6 @@ describe('SettleUpWizard', () => {
     const request = JSON.parse((form as Record<string, string>).request)
     expect(request.groupId).toBeNull()
     expect(request.newGroupName).toBe('World tour')
-    // The row just ignored, plus the duplicate that started that way.
     expect(request.skipRowNumbers).toEqual([1, 3])
     expect(request.createMissingMembers).toBe(true)
   })
@@ -475,8 +448,6 @@ describe('SettleUpWizard', () => {
 
     await wrapper.find('input[value="existing"]').setValue()
     await flushPromises()
-    // The value says which kind of answer it is: a member of this group, an
-    // account anywhere here, or nobody yet.
     await wrapper.findAll('[data-testid="name-map"]')[0].find('select').setValue('member:m1')
     await wrapper.find('[data-testid="to-preview"]').trigger('click')
     await flushPromises()
@@ -499,16 +470,11 @@ describe('SettleUpWizard', () => {
     const [, form] = client.upload.mock.calls.at(-1)!
     const request = JSON.parse((form as Record<string, string>).request)
 
-    // Two shapes, because they are not the same thing: one is already in the
-    // group, the other has to be made a member as the import runs.
     expect(request.memberUserMapping.Emma).toBe('user-7')
     expect(request.memberNameMapping.Emma).toBeNull()
   })
 
   it('offers you, whom the addable list leaves out', async () => {
-    // That endpoint answers "who could I add to this group", which never includes
-    // you. This question is "who is this name in the export", which very often is
-    // you: your own name is in the file.
     client.get = vi.fn(async () => []) as never
 
     const auth = useAuthStore()
@@ -559,8 +525,6 @@ describe('SettleUpWizard', () => {
       .findAll('option')
       .map((option) => option.text())
 
-    // One of these names is almost always yours, in a list of a dozen accounts
-    // where two are called Alice.
     expect(options[1]).toBe('Alice (alice@example.com) - you')
     expect(options[2]).toBe('Emma (emma@example.com)')
   })
@@ -574,8 +538,6 @@ describe('SettleUpWizard', () => {
       .findAll('option')
       .map((option) => option.text())
 
-    // An export is another group's history: the people in it usually have
-    // accounts here and only their names came across.
     expect(options[0]).toBe('Add as a new person')
     expect(options.some((text) => text.includes('accounts@example.com'))).toBe(true)
   })
@@ -590,7 +552,6 @@ describe('SettleUpWizard', () => {
     const [, form] = client.upload.mock.calls.at(-1)!
     const request = JSON.parse((form as Record<string, string>).request)
 
-    // The three the wizard cannot work without on a real export.
     expect(request.mapping.participantsColumn).toBe(3)
     expect(request.mapping.splitAmountsColumn).toBe(4)
     expect(request.mapping.typeColumn).toBe(11)
@@ -668,13 +629,6 @@ describe('SettleUpWizard', () => {
     expect(client.upload).toHaveBeenCalledTimes(1)
   })
 
-  /**
-   * Where the rows are going, asked where they are read.
-   *
-   * The step above asks it as a radio pair while the answer is still being
-   * composed. Over the rows it is one question with one answer, so it is one
-   * control writing the same state.
-   */
   describe('the destination over the rows', () => {
     it('offers a new group and every existing one', async () => {
       existingGroup('Roommates')
@@ -691,7 +645,6 @@ describe('SettleUpWizard', () => {
     it('names the new group it would create', async () => {
       const wrapper = await previewed()
 
-      // Taken from the file, so the option says what will actually appear.
       expect(wrapper.find('[data-testid="destination"] option').text())
         .toContain('World tour')
     })
@@ -725,13 +678,6 @@ describe('SettleUpWizard', () => {
     })
   })
 
-  /**
-   * What a person checks a row against.
-   *
-   * The title says what it was, the amount says how much, and the two names say
-   * whether it belongs to anybody in this group. All three used to be spread along
-   * one line of dashes with the date, which is where they were hardest to read.
-   */
   describe('what each row says', () => {
     it('leads with the purpose', async () => {
       const wrapper = await previewed()
@@ -766,7 +712,6 @@ describe('SettleUpWizard', () => {
     })
 
     it('says a name is missing rather than leaving a gap', async () => {
-      // The preview comes back from the client, so the client is what changes.
       client.upload = vi.fn(async (path: string) => {
         if (path.endsWith('/analyze')) return analysis
         if (path.endsWith('/preview')) {
@@ -776,7 +721,6 @@ describe('SettleUpWizard', () => {
       }) as never
       const wrapper = await previewed()
 
-      // A blank reads as a rendering fault, and an export really can omit them.
       const row = wrapper.find('[data-testid="row"]')
       expect(row.find('[data-testid="row-from"]').text()).toBe('Not named')
       expect(row.find('[data-testid="row-to"]').text()).toBe('Not named')

@@ -5,14 +5,6 @@ import { db, resetDatabase } from '@/offline/db'
 import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
 
-/**
- * Filing many expenses at once.
- *
- * The thing that makes categories usable on a group that already existed: a year
- * of rows filed under nothing, fixed a hundred at a time. It touches one field
- * and recomputes nothing, which is the whole point - a bulk edit that rebuilt
- * splits would quietly rewrite money nobody asked it to.
- */
 describe('filing many expenses at once', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
@@ -21,7 +13,6 @@ describe('filing many expenses at once', () => {
     await db.groups.put(testGroup())
   })
 
-  /** Offline, so the queue is left standing where it can be counted. */
   function storeWith() {
     const store = useExpensesStore()
     store.attachSync(new SyncEngine({ push: vi.fn(), pull: vi.fn(), acknowledge: vi.fn() } as never, () => false))
@@ -69,10 +60,6 @@ describe('filing many expenses at once', () => {
     expect(await store.unsentCount()).toBe(2)
   })
 
-  /**
-   * The reason to skip rather than re-send: selecting a whole month to fix the
-   * three that are wrong should queue three operations, not ninety.
-   */
   it('leaves alone the ones already filed there', async () => {
     const store = await seed(
       { id: 'a', categoryKey: 'groceries' },
@@ -83,8 +70,6 @@ describe('filing many expenses at once', () => {
 
     expect(filed).toBe(1)
     expect(await db.outbox.count()).toBe(1)
-    // And the untouched one keeps the revision it had, so nothing claims an edit
-    // that never happened.
     expect((await db.expenses.get('a'))?.revision).toBe(1)
     expect((await db.expenses.get('b'))?.revision).toBe(2)
   })
@@ -128,13 +113,6 @@ describe('filing many expenses at once', () => {
     expect(await db.outbox.count()).toBe(0)
   })
 
-  /**
-   * It works off the replica, not off whatever the screen happens to be holding.
-   *
-   * Filing reaches the store from a list of ids, and a store that had not
-   * hydrated would write the change to the database and then show the old row
-   * until something else reloaded it.
-   */
   it('shows one it did not have in memory yet', async () => {
     await db.expenses.put(testExpense({ id: 'a' }))
 

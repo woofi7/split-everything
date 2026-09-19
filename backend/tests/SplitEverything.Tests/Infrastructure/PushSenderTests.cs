@@ -11,11 +11,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Infrastructure;
 
-/// <summary>
-/// The three delivery channels. All of them must be no-ops when unconfigured: a
-/// homelab install with no Firebase or Apple account still has to work over Web
-/// Push instead of erroring on every notification.
-/// </summary>
 public class PushSenderTests
 {
     private static readonly PushMessage Message = new("Title", "Body", "/groups/1", "tag-1",
@@ -118,7 +113,6 @@ public class PushSenderTests
         var sender = new FcmPushSender(new HttpClient(handler), ConfiguredFcm(),
             tokens, NullLogger<FcmPushSender>.Instance);
 
-        // A 500 is Google's problem, not a dead device.
         (await sender.SendAsync(Target("token"), Message)).ShouldBeTrue();
     }
 
@@ -236,7 +230,6 @@ public class PushSenderTests
         var provider = new ApnsJwtProvider(ConfiguredApns(), clock);
         var first = await provider.GetAsync();
 
-        // Apple rejects tokens older than an hour, so it must not be cached forever.
         clock.Advance(TimeSpan.FromMinutes(50));
 
         (await provider.GetAsync()).ShouldNotBe(first);
@@ -247,7 +240,6 @@ public class PushSenderTests
     {
         var sender = new LoggingEmailSender(NullLogger<LoggingEmailSender>.Instance);
 
-        // Invites still work by link and QR when SMTP is not configured.
         await sender.SendAsync("someone@example.com", "Subject", "<p>html</p>", "text");
     }
 
@@ -268,7 +260,6 @@ public class PushSenderTests
     private static FixedClock Clock()
         => new(new DateTimeOffset(2026, 8, 31, 10, 0, 0, TimeSpan.Zero));
 
-    /// <summary>A throwaway P-256 key, so the signing path runs for real.</summary>
     private static string GenerateEcPrivateKeyPem()
     {
         using var key = System.Security.Cryptography.ECDsa.Create(

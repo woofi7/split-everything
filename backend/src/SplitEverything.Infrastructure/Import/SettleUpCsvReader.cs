@@ -7,14 +7,6 @@ namespace SplitEverything.Infrastructure.Import;
 
 public sealed record CsvTable(IReadOnlyList<string> Headers, IReadOnlyList<string[]> Rows, string Delimiter);
 
-/// <summary>
-/// Permissive reader for Settle Up exports.
-///
-/// The layout varies by app version and locale, so nothing is assumed: the
-/// delimiter is sniffed, ragged rows are tolerated rather than fatal, and the
-/// caller confirms the column mapping. A single malformed line must never cost the
-/// user their whole export.
-/// </summary>
 public static class SettleUpCsvReader
 {
     private static readonly string[] CandidateDelimiters = [",", ";", "\t", "|"];
@@ -37,8 +29,6 @@ public static class SettleUpCsvReader
         {
             Delimiter = delimiter,
             HasHeaderRecord = false,
-            // The whole point: a ragged or oddly quoted row is data to flag, not a
-            // reason to abort the import.
             BadDataFound = null,
             MissingFieldFound = null,
             TrimOptions = TrimOptions.Trim,
@@ -64,11 +54,6 @@ public static class SettleUpCsvReader
         return new CsvTable(headers, rows.Skip(1).ToList(), delimiter);
     }
 
-    /// <summary>
-    /// Picks the delimiter that yields the most consistent column count across the
-    /// first few lines, which beats counting occurrences when a description itself
-    /// contains commas.
-    /// </summary>
     private static string SniffDelimiter(string text)
     {
         var lines = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Take(5).ToList();

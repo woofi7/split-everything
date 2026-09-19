@@ -3,10 +3,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Tests.Support;
 
-/// <summary>
-/// Base for tests that touch the database. Each test starts from an empty schema
-/// so no test can depend on another's leftovers.
-/// </summary>
 [Collection(PostgresCollection.Name)]
 public abstract class DatabaseTestBase : IAsyncLifetime
 {
@@ -16,7 +12,6 @@ public abstract class DatabaseTestBase : IAsyncLifetime
 
     protected AppDbContext Db { get; private set; } = null!;
 
-    /// <summary>A second context, for asserting what actually landed in the database.</summary>
     protected AppDbContext NewContext() => _fixture.CreateContext();
 
     protected string ConnectionString => _fixture.ConnectionString;
@@ -35,8 +30,6 @@ public abstract class DatabaseTestBase : IAsyncLifetime
 
     private async Task ResetAsync()
     {
-        // Truncate rather than drop: keeps the schema and the identity sequences in
-        // one statement, and is far faster than recreating the database per test.
         var tables = new[]
         {
             "expense_item_shares", "expense_items", "expense_splits", "expense_comments",
@@ -47,13 +40,9 @@ public abstract class DatabaseTestBase : IAsyncLifetime
             "push_subscriptions", "devices", "refresh_tokens", "users", "exchange_rates"
         };
 
-        // EF cannot tell a table list from user input, and this one is the constant
-        // above: a parameter cannot carry a table name anyway, so there is nothing
-        // to parameterise here.
 #pragma warning disable EF1002
         await Db.Database.ExecuteSqlRawAsync(
             $"TRUNCATE TABLE {string.Join(", ", tables)} RESTART IDENTITY CASCADE;");
 #pragma warning restore EF1002
     }
-
 }

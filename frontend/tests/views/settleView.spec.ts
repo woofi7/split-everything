@@ -66,8 +66,6 @@ describe('SettleView', () => {
     })
 
     await wrapper.find('form').trigger('submit')
-    // The redirect is the last thing to happen, so it is the only safe signal
-    // that the whole action finished.
     await waitFor(() => replace.mock.calls.length > 0)
 
     expect(await db.settlements.count()).toBe(1)
@@ -120,14 +118,7 @@ describe('SettleView', () => {
   })
 })
 
-/**
- * Two people who share more than one group can owe each other in both directions
- * at once, and paying both in full is two transfers where none is needed. The
- * settle screen is already about settling with somebody, so it is where the app
- * says so.
- */
 describe('SettleView cancelling debts across groups', () => {
-  /** Bob with an account of his own, since a placeholder exists in one group only. */
   const withAccounts = () => {
     const group = testGroup()
     group.members = group.members.map((member) =>
@@ -229,15 +220,12 @@ describe('SettleView cancelling debts across groups', () => {
     })
     await settle()
 
-    // One group between two people is the ordinary case and needs no explaining.
     expect(wrapper.find('[data-testid="cross-group"]').exists()).toBe(false)
   })
 
   it('says nothing for somebody who has no account to look up', async () => {
     query = { from: BOB, to: ALICE, amount: '30' }
 
-    // Bob as a placeholder: he exists in this group and nowhere else, so there is
-    // nothing of his to find in another.
     const { wrapper, api } = await mountView(SettleView, {
       api: fakeApi({ '/groups': () => testGroup(), '/settlements/cross-group': () => facingBalance }),
       groups: [testGroup()],
@@ -250,13 +238,6 @@ describe('SettleView cancelling debts across groups', () => {
   })
 })
 
-/**
- * A settlement could be recorded and never seen again: the balance moved, and
- * there was nothing on any screen saying why or letting anybody take it back. Two
- * people offset their debts across groups, the form kept the figure it had been
- * prefilled with, and the button underneath recorded the same debt a second time
- * six seconds later - with no way to undo it.
- */
 describe('SettleView showing what is already settled', () => {
   const settled = (overrides: Record<string, unknown> = {}) => ({
     id: 'settlement-1',
@@ -303,8 +284,6 @@ describe('SettleView showing what is already settled', () => {
     await wrapper.find('[data-testid="unsettle-settlement-1"]').trigger('click')
     await settle()
 
-    // A tombstone, so the other phone learns of it too rather than holding a
-    // payment this one has forgotten.
     expect(expensesStore.settlementsForGroup(GROUP_ID)).toHaveLength(0)
     expect(await db.outbox.where('entityId').equals('settlement-1').count()).toBe(1)
   })
@@ -353,8 +332,6 @@ describe('SettleView showing what is already settled', () => {
     await wrapper.find('[data-testid="offset-across-groups"]').trigger('click')
     await settle()
 
-    // The figure that was on screen has been cancelled, so the button below it
-    // must not still be armed with it.
     expect((wrapper.find('input[inputmode="decimal"]').element as HTMLInputElement).value).toBe('')
   })
 })

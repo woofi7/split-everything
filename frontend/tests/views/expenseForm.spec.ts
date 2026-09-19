@@ -18,7 +18,6 @@ const bob = 'member-bob'
 const push = vi.fn()
 const replace = vi.fn()
 
-/** Mutable, because this one form serves both adding and editing. */
 let routeParams: Record<string, string> = {}
 
 vi.mock('vue-router', () => ({
@@ -129,19 +128,14 @@ async function mountView() {
     global: { stubs: { RouterLink: RouterLinkStub } },
   })
 
-  // The view loads groups from IndexedDB and then defaults the form. fake-indexeddb
-  // resolves its transactions on a macrotask, so a microtask flush alone is not
-  // enough to see the mounted state.
   await settle()
 
   return { wrapper, expenses, groups }
 }
 
-/** Lets a test set how the group splits before the form reads it. */
 let groupOverrides: Record<string, unknown> = {}
 let groupsPatch: ReturnType<typeof vi.fn> | null = null
 
-/** Lets pending microtasks and IndexedDB transactions finish. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 5; i++) {
     await flushPromises()
@@ -171,9 +165,6 @@ describe('ExpenseFormView', () => {
     await wrapper.find('input[inputmode="decimal"]').setValue('60')
     await settle()
 
-    // The preview is the whole point: people check the numbers before saving. It
-    // now sits on each person's chip rather than in a section of its own, which is
-    // what bought the room to fit the form on one screen.
     expect(wrapper.text()).toContain('30.00')
   })
 
@@ -213,14 +204,10 @@ describe('ExpenseFormView', () => {
     expect(expenses.forGroup(groupId)).toHaveLength(1)
     expect(expenses.forGroup(groupId)[0].description).toBe('Groceries')
 
-    // The navigation happens after the local write and the queue entry, so wait
-    // for it rather than assuming a fixed number of turns.
     await vi.waitFor(() =>
       expect(replace).toHaveBeenCalledWith({
         name: 'group',
         params: { groupId },
-        // The month it went into and which expense it was, so the list opens
-        // where it is and says which row is the new one.
         query: {
           month: expect.stringMatching(/^\d{4}-\d{2}-01$/),
           added: expect.any(String),
@@ -308,7 +295,6 @@ describe('ExpenseFormView with several payers', () => {
     routeParams = { groupId }
   })
 
-  /** Turns on the shared payment rows and fills them in. */
   async function shareBetween(
     wrapper: Awaited<ReturnType<typeof mountView>>['wrapper'],
     amounts: string[],
@@ -341,8 +327,6 @@ describe('ExpenseFormView with several payers', () => {
 
     await shareBetween(wrapper, ['40', '25'])
 
-    // The amount field is gone: the total is the sum of the contributions, and a
-    // field that can disagree with the numbers under it is a field that will.
     expect(wrapper.find('[data-testid="shared-total"]').text()).toContain('65.00')
     expect(wrapper.find('[data-testid="amount"]').exists()).toBe(false)
   })
@@ -372,8 +356,6 @@ describe('ExpenseFormView with several payers', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    // 65 split evenly between the two of them: what each owes has nothing to do
-    // with what each paid.
     const saved = expenses.forGroup(groupId)[0]
     expect(saved.splits.map((split) => split.amount)).toEqual([32.5, 32.5])
   })
@@ -401,7 +383,6 @@ describe('ExpenseFormView with several payers', () => {
 
     expect(textOf(wrapper)).toContain('Say what each person paid')
   })
-
 })
 
 describe('ExpenseFormView editing an expense', () => {
@@ -520,7 +501,6 @@ describe('ExpenseFormView editing an expense', () => {
     })
     await settle()
 
-    // Opened as it was saved: the rows are there and the total is read from them.
     expect(wrapper.findAll('[data-testid="payer-row"]')).toHaveLength(2)
     expect(wrapper.find('[data-testid="shared-total"]').text()).toContain('65.00')
   })
@@ -545,9 +525,6 @@ describe('ExpenseFormView editing an expense', () => {
   it('keeps an uneven split someone set by hand', async () => {
     const { wrapper } = await mountEdit()
 
-    // Read back out of the stored shares rather than recomputed, or the shares
-    // people chose would be lost the moment they opened the form.
-    // The chosen split type is the filled button; the others are outlined.
     const selected = wrapper
       .findAll('button')
       .filter((button) => button.classes().includes('btn-primary'))
@@ -555,7 +532,6 @@ describe('ExpenseFormView editing an expense', () => {
 
     expect(selected).toContain('Shares')
 
-    // The amount, plus one input per participant for their share.
     expect(wrapper.findAll('input[inputmode="decimal"]').length).toBe(3)
   })
 
@@ -571,8 +547,6 @@ describe('ExpenseFormView editing an expense', () => {
   it('does not offer to move the expense to another group', async () => {
     const { wrapper } = await mountEdit()
 
-    // Moving one has to carry its history, comments and audit trail; that is the
-    // transfer feature, and a dropdown here would look like it did that.
     expect(textOf(wrapper)).not.toContain('Group')
   })
 
@@ -581,8 +555,6 @@ describe('ExpenseFormView editing an expense', () => {
 
     await wrapper.find('input[placeholder="Groceries"]').setValue('Groceries at IGA')
     await wrapper.find('form').trigger('submit')
-    // The redirect is the last thing the save does, so it is the only safe signal
-    // that the whole action finished.
     await waitFor(() => replace.mock.calls.length > 0)
 
     expect(expenses.expenses.find((e) => e.id === 'expense-1')?.description)
@@ -650,9 +622,6 @@ describe('ExpenseFormView fits one screen', () => {
   it('asks for six things and no more', async () => {
     const { wrapper } = await mountView()
 
-    // Adding an expense is what people open this app to do, usually one-handed, so
-    // a form that scrolls hides half the decision. Amount, date, what it was,
-    // group, who paid, and who it is between.
     const fields = wrapper.findAll('input:not([type="checkbox"]), select')
     expect(fields.length).toBeLessThanOrEqual(6)
   })
@@ -667,8 +636,6 @@ describe('ExpenseFormView fits one screen', () => {
   it('does not ask for a category', async () => {
     const { wrapper } = await mountView()
 
-    // Dropped to keep the form on one screen. The by-category breakdown in stats
-    // now only reflects what an import set.
     expect(wrapper.find('[data-testid="category"]').exists()).toBe(false)
     expect(textOf(wrapper)).not.toContain('Category')
   })
@@ -677,9 +644,6 @@ describe('ExpenseFormView fits one screen', () => {
     routeParams = { groupId, expenseId: 'expense-1' }
     const { wrapper } = await mountView()
 
-    // Moving an existing expense is a move, with its history and comments, and it
-    // has its own panel at the foot of the screen. A dropdown here would look like
-    // it did that and would not.
     expect(wrapper.find('[data-testid="group"]').exists()).toBe(false)
   })
 
@@ -689,8 +653,6 @@ describe('ExpenseFormView fits one screen', () => {
     await wrapper.find('input[inputmode="decimal"]').setValue('60')
     await settle()
 
-    // One block instead of two: the row of people and the preview were the same
-    // information twice.
     const chips = wrapper.findAll('fieldset li')
     expect(chips).toHaveLength(2)
     expect(chips[0].text()).toContain('30.00')
@@ -699,7 +661,6 @@ describe('ExpenseFormView fits one screen', () => {
   it('keeps the save button reachable however many people are in the group', async () => {
     const { wrapper } = await mountView()
 
-    // Sticky, so a group of ten cannot push it off the bottom.
     expect(wrapper.find('button[type="submit"]').classes()).toContain('sticky')
   })
 
@@ -711,7 +672,6 @@ describe('ExpenseFormView fits one screen', () => {
       .map((button) => button.text())
 
     expect(labels).toEqual(['Equally', 'Percent', 'Shares', 'Exact'])
-    // Short enough that four abreast do not wrap on a phone.
     for (const label of labels) expect(label.length).toBeLessThanOrEqual(7)
   })
 })
@@ -744,7 +704,6 @@ describe('ExpenseFormView switching split type', () => {
     await pick(wrapper, 'Percent')
     await settle()
 
-    // Empty boxes meant the split was invalid the moment the type changed.
     expect(shareInputs(wrapper)).toEqual(['50', '50'])
   })
 
@@ -771,7 +730,6 @@ describe('ExpenseFormView switching split type', () => {
     await pick(wrapper, 'Exact')
     await settle()
 
-    // Seventy percent of sixty is forty two: the same division, said differently.
     expect(shareInputs(wrapper)).toEqual(['42', '18'])
   })
 
@@ -790,8 +748,6 @@ describe('ExpenseFormView switching split type', () => {
     await pick(wrapper, 'Percent')
     await settle()
 
-    // A percentage on its own does not say what anyone owes, and that is the
-    // number people check before saving.
     expect(shareInputs(wrapper)).toEqual(['50', '50'])
     expect(wrapper.text()).toContain('30.00')
   })
@@ -804,7 +760,6 @@ describe('ExpenseFormView switching split type', () => {
     await pick(wrapper, 'Equally')
     await settle()
 
-    // Equal needs no values, and stale ones would reappear on the next switch.
     expect(wrapper.findAll('input[type="number"]')).toHaveLength(0)
     expect(wrapper.text()).toContain('30.00')
   })
@@ -859,7 +814,6 @@ describe('ExpenseFormView group default split', () => {
 
     const { wrapper } = await mountView()
 
-    // A household that always divides rent sixty forty had to say so every time.
     const selected = wrapper.findAll('button').filter((b) => b.classes().includes('btn-primary'))
     expect(selected.map((b) => b.text())).toContain('Shares')
     expect(shareInputs(wrapper)).toEqual(['2', '1'])
@@ -889,14 +843,12 @@ describe('ExpenseFormView group default split', () => {
     await wrapper.find('input[inputmode="decimal"]').setValue('90')
     await settle()
 
-    // Left in, the split would refuse to add up and nobody would know why.
     expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
   })
 
   it('offers to record the split as the default once it differs', async () => {
     const { wrapper } = await mountView()
 
-    // Nothing to record while the form matches what the group already does.
     expect(wrapper.find('[data-testid="make-default"]').exists()).toBe(false)
 
     const shares = wrapper.findAll('button[type="button"]').find((b) => b.text() === 'Shares')
@@ -952,19 +904,11 @@ describe('ExpenseFormView group default split', () => {
     await wrapper.find('form').trigger('submit')
     await waitFor(() => expenses.forGroup(groupId).length > 0)
 
-    // A group setting is not worth losing someone's expense over.
     expect(expenses.forGroup(groupId)).toHaveLength(1)
     expect(textOf(wrapper)).toContain('group default could not be changed')
   })
 })
 
-/**
- * Where a new expense starts.
- *
- * Today is right for the one being typed at the till and wrong for the six
- * receipts from last weekend, which is the case that had people opening the date
- * field and picking the same day over and over.
- */
 describe('ExpenseFormView remembering the date', () => {
   beforeEach(() => {
     routeParams = {}
@@ -976,7 +920,6 @@ describe('ExpenseFormView remembering the date', () => {
   const dateField = (wrapper: Awaited<ReturnType<typeof mountView>>['wrapper']) =>
     wrapper.find('input[type="date"]')
 
-  /** What a device looks like part-way through a batch entered the same day. */
   const rememberForToday = (date: string) =>
     localStorage.setItem(
       'split-everything.last-expense-date',
@@ -1008,7 +951,6 @@ describe('ExpenseFormView remembering the date', () => {
     await settle()
 
     expect((dateField(wrapper).element as HTMLInputElement).value).toBe(today())
-    // Gone once it is today again: it has nothing left to say.
     expect(wrapper.find('[data-testid="use-today"]').exists()).toBe(false)
   })
 
@@ -1022,9 +964,6 @@ describe('ExpenseFormView remembering the date', () => {
 
     await wrapper.find('form').trigger('submit')
 
-    // Remembered after the expense is saved, so a refused one does not move where
-    // the next one starts. Waited for rather than counted in turns: the save
-    // crosses several IndexedDB transactions.
     await waitFor(
       () =>
         JSON.parse(localStorage.getItem('split-everything.last-expense-date') ?? '{}').date ===
@@ -1083,8 +1022,6 @@ describe('ExpenseFormView remembering the date', () => {
     })
     await settle()
 
-    // The expense's own date, not the one carried over, and no offer of today
-    // either: this one is from November and that is not a mistake.
     expect((wrapper.find('input[type="date"]').element as HTMLInputElement).value).toBe(
       '2025-11-01',
     )
@@ -1092,8 +1029,6 @@ describe('ExpenseFormView remembering the date', () => {
 
     await wrapper.find('form').trigger('submit')
 
-    // Saved, and only then asked what it remembered: the answer here is that
-    // nothing moved, which is only worth asserting once the save has finished.
     await waitFor(() => replace.mock.calls.length > 0)
     expect(JSON.parse(localStorage.getItem('split-everything.last-expense-date')!).date).toBe(
       '2026-03-14',
@@ -1104,8 +1039,6 @@ describe('ExpenseFormView remembering the date', () => {
     rememberForToday('2026-03-14')
     const { wrapper } = await mountView()
 
-    // The figures in a date input are the thing an eye slides over: this is how a
-    // week of expenses went into a month nobody meant.
     expect(wrapper.text()).toContain('March 14')
     expect(wrapper.find('[data-testid="spent-at"]').attributes('style')).toContain('--accent-text')
 
@@ -1125,23 +1058,12 @@ describe('ExpenseFormView remembering the date', () => {
     await settle()
     await wrapper.find('form').trigger('submit')
 
-    // Without the month, an expense dated outside the current one is filed
-    // correctly and invisibly, which reads as "it did not save".
     await waitFor(() =>
       replace.mock.calls.some(([to]) => to.query?.month === '2026-03-01' && to.query?.added),
     )
   })
 })
 
-/**
- * Moving an expense into another group.
- *
- * The thing people reach for when an expense went into the household group and
- * belonged to the trip. It is a move rather than a retyping: the expense takes its
- * history and its comments with it, so the form hands the whole job to the server
- * and only has to ask the two questions the server cannot answer on its own -
- * which group, and who these people are over there.
- */
 describe('ExpenseFormView moving an expense to another group', () => {
   const otherGroupId = 'group-2'
   const carol = 'member-carol'
@@ -1207,7 +1129,6 @@ describe('ExpenseFormView moving an expense to another group', () => {
     routeParams = { groupId, expenseId: 'expense-1' }
   })
 
-  /** The other groups this device knows about, as the settings say. */
   async function mountMove(others: Array<Record<string, unknown>> = [otherGroup]) {
     setActivePinia(createPinia())
     await resetDatabase()
@@ -1248,7 +1169,6 @@ describe('ExpenseFormView moving an expense to another group', () => {
     routeParams = {}
     const { wrapper } = await mountView()
 
-    // Adding already asks which group, in the form. There is nothing to move.
     expect(wrapper.find('[data-testid="move-open"]').exists()).toBe(false)
   })
 
@@ -1269,8 +1189,6 @@ describe('ExpenseFormView moving an expense to another group', () => {
   })
 
   it('leaves out a group kept in another currency', async () => {
-    // The server refuses it, because balances either side of the move are kept in
-    // the group's own money, and a list that offers it is a list that lies.
     const { wrapper } = await mountMove([{ ...otherGroup, baseCurrency: 'EUR' }])
 
     expect(wrapper.text()).toContain('no other group in CAD')
@@ -1285,9 +1203,6 @@ describe('ExpenseFormView moving an expense to another group', () => {
     await wrapper.find('[data-testid="move-target"]').setValue(otherGroupId)
     await settle()
 
-    // Alice is in both under the same account, so nothing is asked about her. Bob
-    // is not in the trip at all, and putting his half on the wrong person is the
-    // one mistake this must not make quietly.
     const rows = wrapper.findAll('[data-testid="move-mapping"]')
     expect(rows).toHaveLength(1)
     expect(rows[0].text()).toContain('Bob')
@@ -1313,7 +1228,6 @@ describe('ExpenseFormView moving an expense to another group', () => {
       memberMapping: { [bob]: carol },
     })
 
-    // To the expense where it now lives: the link it came from no longer finds it.
     await waitFor(() =>
       replace.mock.calls.some(
         ([to]) =>
@@ -1339,8 +1253,6 @@ describe('ExpenseFormView moving an expense to another group', () => {
     await wrapper.find('[data-testid="move-confirm"]').trigger('click')
     await settle()
 
-    // Over the top of the screen: the move panel is at the foot of a long form,
-    // and a failure announced down there is a failure nobody reads.
     expect(toasts.value.map((toast) => toast.text).join(' '))
       .toContain('Both groups must share a base currency.')
     expect(replace).not.toHaveBeenCalled()

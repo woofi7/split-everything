@@ -308,7 +308,6 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
         var first = await Expenses.CreateAsync(userId, request);
         var second = await Expenses.CreateAsync(userId, request);
 
-        // An offline client that retries a queued create must not double-charge.
         second.Id.ShouldBe(first.Id);
         (await NewContext().Expenses.CountAsync(e => e.GroupId == group.Id)).ShouldBe(1);
     }
@@ -365,7 +364,6 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
         await Expenses.UpdateAsync(userId, expense.Id, new UpdateExpenseRequest(
             null, "First edit", null, null, null, null, null, null, null, null, null));
 
-        // Second device edits from the clock it last saw: concurrent, so it must not win.
         await Should.ThrowAsync<SyncConflictException>(() => Expenses.UpdateAsync(
             userId, expense.Id, new UpdateExpenseRequest(
                 null, "Second edit", null, null, null, null, null, null, null, null, staleClock)));
@@ -570,5 +568,4 @@ public class ExpenseServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
 
         await Should.ThrowAsync<ForbiddenException>(() => Expenses.GetAsync(stranger.Id, expense.Id));
     }
-
 }

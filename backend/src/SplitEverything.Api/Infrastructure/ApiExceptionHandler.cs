@@ -4,11 +4,6 @@ using SplitEverything.Application.Common;
 
 namespace SplitEverything.Api.Infrastructure;
 
-/// <summary>
-/// Turns the application's deliberate failures into problem responses, so a
-/// validation mistake is a 400 with a readable message rather than a 500, and
-/// anything unexpected is a 500 that says nothing about internals.
-/// </summary>
 public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(

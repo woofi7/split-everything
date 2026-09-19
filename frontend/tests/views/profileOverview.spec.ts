@@ -19,12 +19,6 @@ vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
 }))
 
-/**
- * Where somebody stands, everywhere.
- *
- * The dashboard is about a group. This is about a person: three groups used to
- * mean three tabs and the arithmetic in your head.
- */
 describe('the profile overview', () => {
   const OTHER = 'group-2'
 
@@ -38,7 +32,6 @@ describe('the profile overview', () => {
 
   const closed = testGroup({ id: 'group-3', name: 'Old flat', isArchived: true })
 
-  /** Alice paid 100, of which half is Bob's. */
   const dinner = testExpense({
     id: 'expense-dinner',
     description: 'Dinner',
@@ -61,7 +54,6 @@ describe('the profile overview', () => {
     ],
   })
 
-  /** Bob paid this one, in the other group: 40, of which half is Alice's. */
   const flights = testExpense({
     id: 'expense-flights',
     groupId: OTHER,
@@ -75,7 +67,6 @@ describe('the profile overview', () => {
     ],
   })
 
-  /** What the list endpoint answers with: summaries, which carry no member list. */
   const summaries = (...list: Array<ReturnType<typeof testGroup>>) =>
     list.map((group) => ({ ...group, memberCount: group.members.length, lastActivityAt: null }))
 
@@ -95,8 +86,6 @@ describe('the profile overview', () => {
     const rows = wrapper.findAll('[data-testid="group-row"]')
     expect(rows.map((row) => row.attributes('data-group-id'))).toEqual([GROUP_ID, OTHER])
 
-    // Roommates: Alice put up 1,600 and owes 800 of it. World tour: Bob paid, so
-    // Alice is 20 down.
     expect(rows[0].text()).toContain('$800.00')
     expect(rows[1].text()).toContain('$20.00')
   })
@@ -113,7 +102,6 @@ describe('the profile overview', () => {
     const { wrapper } = await mountProfile()
 
     expect(wrapper.find('[data-testid="profile-settings-link"]').exists()).toBe(true)
-    // The things that used to be this screen are not on it any more.
     expect(textOf(wrapper)).not.toContain('Delete my account')
   })
 })

@@ -2,24 +2,13 @@ export interface ApiClientOptions {
   baseUrl: string
   getAccessToken: () => string | null
   getDeviceId: () => string | null
-  /** Returns a fresh access token, or null when the session is over. */
   refreshAccessToken?: () => Promise<string | null>
   onUnauthorized: () => void
-  /** How long a request may take before it is treated as unreachable. */
   timeoutMs?: number
 }
 
-/**
- * How long a request gets.
- *
- * Long enough that a slow connection finishes, short enough that a dead one is
- * noticed. A stalled fetch is not slow, it is over: a phone that sleeps its wifi
- * or changes network mid-request leaves the connection open and silent, and fetch
- * has no timeout of its own, so nothing ever settles.
- */
 export const DEFAULT_TIMEOUT_MS = 20_000
 
-/** Uploads carry a file, so they get their own, longer allowance. */
 export const UPLOAD_TIMEOUT_MS = 120_000
 
 export class ApiError extends Error {
@@ -38,19 +27,6 @@ export class ApiError extends Error {
 
 type QueryValue = string | number | boolean | null | undefined
 
-/**
- * The HTTP layer.
- *
- * Three behaviours worth naming. A 401 triggers exactly one refresh-and-retry, and
- * concurrent 401s share that single refresh: refresh tokens rotate, so a second
- * concurrent refresh would invalidate the token the first just issued and sign the
- * user out. A network failure is reported as `isOffline`, which is how the UI
- * tells "we are offline, your change is queued" apart from "the server said no".
- * And every request is given a deadline, because the two single-flight promises
- * above are only safe if they are guaranteed to settle: a stalled request with no
- * deadline left the sync indicator spinning for the life of the page and every
- * later flush waiting behind it.
- */
 export class ApiClient {
   private refreshInFlight: Promise<string | null> | null = null
   private readonly options: ApiClientOptions
@@ -86,15 +62,6 @@ export class ApiClient {
     return this.request<T>('POST', path, { form })
   }
 
-  /**
-   * A request whose 401 is an answer rather than a failure.
-   *
-   * Used to ask whether this device still has a session. The ordinary path treats
-   * a 401 as the session ending: it refreshes, and failing that signs the app out
-   * and sends the person to sign-in. On the way in that is wrong twice over -
-   * there is nothing to refresh yet, and pushing to sign-in would throw away a
-   * public page someone deliberately opened, an invite link most of all.
-   */
   async probe<T>(path: string): Promise<T | null> {
     try {
       const response = await this.send('POST', path, {})
@@ -103,12 +70,10 @@ export class ApiClient {
       const text = await response.text()
       return text ? (JSON.parse(text) as T) : null
     } catch {
-      // Offline, or nothing there. Either way there is no session to report.
       return null
     }
   }
 
-  /** Raw response, for endpoints that return a file rather than JSON. */
   async blob(path: string, query?: Record<string, QueryValue>): Promise<Blob> {
     const response = await this.send('GET', path, { query })
     if (!response.ok) throw await this.toError(response)
@@ -167,16 +132,12 @@ export class ApiClient {
 
     let body: BodyInit | undefined
     if (init.form) {
-      // No Content-Type: the browser has to add the multipart boundary.
       body = init.form
     } else if (init.body !== undefined) {
       headers.set('Content-Type', 'application/json')
       body = JSON.stringify(init.body)
     }
 
-    // Aborted on a deadline rather than left pending. Reported as offline, because
-    // that is what it is from here and what the caller needs to do about it: the
-    // queued change stays queued and is sent again later.
     const controller = new AbortController()
     const budget = init.form
       ? (this.options.timeoutMs ?? UPLOAD_TIMEOUT_MS)
@@ -213,8 +174,6 @@ export class ApiClient {
   }
 
   private async refresh(): Promise<string | null> {
-    // Shared, because refresh tokens rotate: two concurrent refreshes would leave
-    // one of them holding a token the server has already revoked.
     if (this.refreshInFlight) return this.refreshInFlight
 
     this.refreshInFlight = (this.options.refreshAccessToken?.() ?? Promise.resolve(null)).finally(
@@ -241,9 +200,6 @@ export class ApiClient {
   }
 
   private async toError(response: Response): Promise<ApiError> {
-    // A status with no body says nothing a person can act on. These two mean the
-    // request reached a server that has no such endpoint, which in practice is a
-    // server older than the app talking to it.
     const fallback =
       response.status === 404 || response.status === 405
         ? 'The server does not know this request. It may be running an older version than this app.'
@@ -265,14 +221,6 @@ export class ApiClient {
   }
 }
 
-/**
- * Whether a failed request means the server could not be reached.
- *
- * "Offline" on screen should mean unreachable. A server that answered - refused,
- * rate limited, complained about a payload - is not offline, and saying so sends
- * somebody looking at their wifi for a problem that is not there. A 408 or a 5xx is
- * the exception: something answered, but nothing useful happened.
- */
 export function looksOffline(error: unknown): boolean {
   const status = (error as { status?: unknown } | null)?.status
 

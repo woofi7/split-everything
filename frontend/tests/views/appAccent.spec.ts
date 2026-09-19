@@ -16,14 +16,6 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/router', () => ({ isNavigating: { value: false }, router: {} }))
 
-/**
- * The colour the app is wearing.
- *
- * Set on the root element as the brand tokens themselves, because every surface in
- * the stylesheet is mixed from them: the background, the cards, the borders. Which
- * is what makes a group's colour worth having - the whole screen says which group
- * you are on before a word of it is read.
- */
 describe('the colour the app wears', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
@@ -39,8 +31,6 @@ describe('the colour the app wears', () => {
 
     for (const group of groups) await db.groups.put(group)
 
-    // The list as the server answers it, because the app loads groups the moment
-    // it is up and a store seeded by hand would be replaced by that answer.
     const store = useGroupsStore()
     store.attachApi(
       fakeApi({
@@ -63,8 +53,6 @@ describe('the colour the app wears', () => {
   it('wears the account colour when the group has none of its own', async () => {
     await mountApp([testGroup({ themeName: null })])
 
-    // A group that has never been given a colour must not quietly overrule the
-    // colour somebody chose for their own account.
     expect(brandFill()).toBe(findAccent('violet')!.shades[2])
     expect(document.documentElement.dataset.accent).toBe('violet')
   })
@@ -87,8 +75,6 @@ describe('the colour the app wears', () => {
   })
 
   it('falls back to the account colour for a name it does not know', async () => {
-    // An older client meeting a newer server's name: better the person's own
-    // colour than an app with no accent at all.
     await mountApp([testGroup({ themeName: 'chartreuse' })])
 
     expect(brandFill()).toBe(findAccent('violet')!.shades[2])

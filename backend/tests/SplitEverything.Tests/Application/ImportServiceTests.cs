@@ -42,8 +42,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         CurrencyColumn: 3, PaidByColumn: 5,
         ParticipantColumns: null, DateFormat: null, DecimalSeparator: null);
 
-    // ---- analysis --------------------------------------------------------
-
     [Fact]
     public async Task Analysis_reads_the_header_row()
     {
@@ -129,8 +127,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         await Should.ThrowAsync<ValidationException>(
             () => Imports.AnalyzeCsvAsync(userId, CsvText("Date,Purpose,Amount"), "header.csv"));
     }
-
-    // ---- preview ---------------------------------------------------------
 
     [Fact]
     public async Task Preview_parses_every_row_with_the_confirmed_mapping()
@@ -245,8 +241,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
             stranger.Id, Csv("settleup-basic.csv"),
             new CsvPreviewRequest(group.Id, BasicMapping(), new Dictionary<string, Guid?>(), "CAD")));
     }
-
-    // ---- commit ----------------------------------------------------------
 
     [Fact]
     public async Task Committing_creates_the_expenses_with_their_original_dates()
@@ -427,8 +421,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
             e.GroupId == group.Id && e.EntityType == SyncEntityType.Expense)).ShouldBe(4);
     }
 
-    // ---- statement commit (client-side parsing) --------------------------
-
     [Fact]
     public async Task A_statement_commit_records_only_the_file_name_never_the_file()
     {
@@ -452,9 +444,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (userId, group) = await SetupAsync("Bob");
         var members = NameMap(group);
 
-        // Filed in the browser, from the group's own keywords, while the rows were
-        // being reviewed: two hundred statement lines are exactly what nobody will
-        // ever file by hand.
         await Imports.CommitStatementAsync(userId, new StatementCommitRequest([
             new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "METRO", 20m, "CAD",
                 TestData.Jan1, SplitType.Equal,
@@ -470,7 +459,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
             .ToListAsync();
 
         expenses.Single(e => e.Description == "METRO").CategoryKey.ShouldBe("groceries");
-        // And a row nothing matched stays unfiled rather than being put somewhere.
         expenses.Single(e => e.Description == "CADEAU").CategoryKey.ShouldBeNull();
     }
 
@@ -546,8 +534,6 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
         (await NewContext().Expenses.SingleAsync()).AmountInBaseCurrency.ShouldBe(68m);
     }
-
-    // ---- duplicate check -------------------------------------------------
 
     [Fact]
     public async Task The_duplicate_check_reports_the_expense_a_fingerprint_matches()

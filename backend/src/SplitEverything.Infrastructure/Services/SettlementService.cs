@@ -211,8 +211,6 @@ public sealed class SettlementService(
                 .NetBalances(memberIds, expenses, settlements, membership.BaseCurrency)
                 .First(b => b.MemberId == membership.Id).Net;
 
-            // Each group carries its own base currency, so the cross-group total has
-            // to be converted rather than added up raw.
             var inUserCurrency = net == 0m || string.Equals(
                 membership.BaseCurrency, user.DefaultCurrency, StringComparison.OrdinalIgnoreCase)
                 ? net
@@ -257,8 +255,6 @@ public sealed class SettlementService(
 
         await db.SaveChangesAsync(ct);
 
-        // A placeholder member has nobody to notify yet; the reminder still lands in
-        // the feed so it is not silently lost.
         if (target.UserId is { } targetUserId)
         {
             await push.SendToUsersAsync([targetUserId], new PushMessage(
@@ -340,11 +336,6 @@ public sealed class SettlementService(
             var owed = byGroup[offset.OwedGroupId];
             var owing = byGroup[offset.OwingGroupId];
 
-            // Two settlements, opposite ways round, written as a pair. The one in
-            // the group where they owe has them paying; the one in the group where
-            // the caller owes has the caller paying. Together they move debt from
-            // one group to the other and leave the total between the two people
-            // exactly as it was.
             var theyPay = NewOffsetSettlement(owed, owed.TheirMemberId, owed.MyMemberId, offset.Amount,
                 now, request.Note, owing.Name);
             var iPay = NewOffsetSettlement(owing, owing.MyMemberId, owing.TheirMemberId, offset.Amount,
@@ -390,25 +381,15 @@ public sealed class SettlementService(
                 accepted, [], [], new Dictionary<Guid, long> { [groupId] = seq }), deviceId, ct);
         }
 
-        // Read again rather than reused: the offsets changed the ledgers they were
-        // planned from, and what is left is the thing worth reporting back.
         var after = await SharedGroupsAsync(userId, request.WithUserId, ct);
 
         return new OffsetAcrossGroupsResult(offsets, Remainders(after, []), recorded.Count);
     }
 
-    /// <summary>One shared group, seen from the caller's side.</summary>
     private sealed record SharedGroup(
         Guid GroupId, string Name, string Currency, Guid LineageId, Guid MyMemberId, Guid TheirMemberId,
         decimal Net, bool CanSettle);
 
-    /// <summary>
-    /// Every group both people are active in, with what they owe each other there.
-    ///
-    /// The figure is the pairwise debt, which is the one the who-owes-whom view
-    /// shows: what these two owe each other directly, rather than a share of a
-    /// simplified plan that may route through somebody else entirely.
-    /// </summary>
     private async Task<List<SharedGroup>> SharedGroupsAsync(Guid userId, Guid withUserId, CancellationToken ct)
     {
         var mine = await db.GroupMembers
@@ -451,14 +432,6 @@ public sealed class SettlementService(
         return shared.OrderByDescending(g => Math.Abs(g.Net)).ToList();
     }
 
-    /// <summary>
-    /// The pairs that cancel, largest first.
-    ///
-    /// Only within one currency: a thousand dollars against nine hundred euros is
-    /// not an offset, it is an exchange, and this is not the place to decide a rate
-    /// that both people would then be stuck with. Only between groups that still
-    /// take writes, since an archived group cannot hold the settlement.
-    /// </summary>
     private static List<PlannedOffsetDto> PlanOffsets(IEnumerable<SharedGroup> shared)
     {
         var offsets = new List<PlannedOffsetDto>();
@@ -494,7 +467,6 @@ public sealed class SettlementService(
         return offsets;
     }
 
-    /// <summary>What is left per currency once the pairs have cancelled, and where.</summary>
     private static List<CrossGroupRemainderDto> Remainders(
         IEnumerable<SharedGroup> shared, IReadOnlyList<PlannedOffsetDto> offsets)
     {
@@ -536,9 +508,6 @@ public sealed class SettlementService(
             AmountInBaseCurrency = amount,
             ExchangeRate = 1m,
             SettledAt = when,
-            // Says what it is on the row itself. A settlement nobody paid needs to
-            // explain itself in the list it appears in, on a device that may never
-            // have heard of the group on the other side of it.
             Note = string.IsNullOrWhiteSpace(note) ? $"Cancelled against {counterpartName}" : note.Trim(),
             OriginLineageId = group.LineageId,
             CreatedAt = when,

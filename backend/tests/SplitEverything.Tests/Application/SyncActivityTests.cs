@@ -10,14 +10,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// The activity feed and the way the app actually writes.
-///
-/// Every screen in the app is offline first, so an expense is queued locally and
-/// pushed through the sync endpoint. Only the REST services recorded activity, so
-/// nothing anyone did in the app ever reached the feed: it showed group and member
-/// events, which do go through REST, and never an expense.
-/// </summary>
 public class SyncActivityTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity);
@@ -210,8 +202,6 @@ public class SyncActivityTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [operation]));
         await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [operation]));
 
-        // A retry after a dropped connection is normal, and it must not read as the
-        // expense being added twice.
         (await ActivityForAsync(group.Id))
             .Count(entry => entry.Kind == ActivityKind.ExpenseCreated)
             .ShouldBe(1);

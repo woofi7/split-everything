@@ -2,27 +2,11 @@
 import { t } from '@/i18n'
 import { onMounted, ref } from 'vue'
 
-/**
- * A new version is waiting.
- *
- * A service worker that has downloaded a new build does not take over while a page
- * is still using the old one, and on a phone a page is never closed: the app sat on
- * whatever version it was installed with until the tab was killed by hand. That is
- * how a client ends up older than the server it is talking to, which the API client
- * already has a message for.
- *
- * So it is asked rather than forced. An app in the middle of typing an expense
- * should not reload itself from under someone, and the offline outbox means there
- * is nothing to lose by waiting either.
- */
-
 const waiting = ref(false)
 const offlineReady = ref(false)
 let apply: ((reload?: boolean) => Promise<void>) | null = null
 
 onMounted(async () => {
-  // Imported here rather than at the top: the virtual module only exists once the
-  // PWA plugin has built, and a test mounting this component has no such module.
   try {
     const { registerSW } = await import('virtual:pwa-register')
 
@@ -39,24 +23,15 @@ onMounted(async () => {
       },
     })
   } catch {
-    // No service worker in this build, or none allowed by the browser. The app
-    // works; it simply cannot tell anybody about a new version.
   }
 })
 
 async function update(): Promise<void> {
   waiting.value = false
-  // Reloads every tab on this device, which is the point: two tabs on two versions
-  // share one local replica.
   await apply?.(true)
 }
 </script>
-
 <template>
-  <!--
-    Above the tab bar, out of the way of the thumb, and never over the page's own
-    controls: this is not urgent, it is just true.
-  -->
   <Teleport to="body">
     <div
       v-if="waiting"
@@ -72,7 +47,6 @@ async function update(): Promise<void> {
       role="status"
     >
       <span class="min-w-0 flex-1">{{ t('A new version is ready.') }}</span>
-
       <button
         type="button"
         data-testid="dismiss-update"
@@ -80,7 +54,6 @@ async function update(): Promise<void> {
         @click="waiting = false"
       >{{ t('Later') }}
       </button>
-
       <button
         type="button"
         data-testid="apply-update"
@@ -89,7 +62,6 @@ async function update(): Promise<void> {
       >{{ t('Reload') }}
       </button>
     </div>
-
     <p
       v-else-if="offlineReady"
       data-testid="offline-ready"

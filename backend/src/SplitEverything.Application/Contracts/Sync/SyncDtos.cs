@@ -2,7 +2,6 @@ using SplitEverything.Domain.Common;
 
 namespace SplitEverything.Application.Contracts.Sync;
 
-// <summary>One offline mutation, exactly as the client recorded it.</summary>
 public sealed record SyncOperationDto(
     Guid OperationId,
     SyncEntityType EntityType,
@@ -39,7 +38,6 @@ public sealed record SyncPushResult(
     IReadOnlyList<SyncRejectedDto> Rejected,
     IReadOnlyDictionary<Guid, long> GroupCursors);
 
-/// <summary>Cursor-based delta pull, one cursor per group the device follows.</summary>
 public sealed record SyncPullRequest(
     string DeviceId,
     IReadOnlyDictionary<Guid, long> GroupCursors,
@@ -66,8 +64,6 @@ public sealed record SyncSnapshotDto(
 public sealed record SyncPullResult(
     IReadOnlyList<SyncLogEntryDto> Entries,
     IReadOnlyDictionary<Guid, long> GroupCursors,
-    // A device further behind than a compaction cutoff must bootstrap from these
-    // instead of replaying trimmed entries.
     IReadOnlyList<SyncSnapshotDto> Snapshots,
     bool HasMore);
 

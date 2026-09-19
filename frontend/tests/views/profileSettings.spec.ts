@@ -19,13 +19,6 @@ describe('the profile settings', () => {
     expect(textOf(wrapper)).toContain('alice@example.com')
   })
 
-  /**
-   * One save, one way back.
-   *
-   * The same shape as the group's settings, because these are settings too: edited
-   * and then kept. The theme is not among them, since it applies as it is switched
-   * and there is nothing to preview.
-   */
   describe('which build is running', () => {
     it('shows the version at the foot of the page', async () => {
       const { wrapper } = await mountView(ProfileSettingsView, {
@@ -33,7 +26,6 @@ describe('the profile settings', () => {
       })
       await settle()
 
-      // One number when both halves agree, which is the ordinary case.
       expect(wrapper.find('[data-testid="app-version"]').text()).toBe('Version dev')
     })
 
@@ -43,8 +35,6 @@ describe('the profile settings', () => {
       })
       await settle()
 
-      // A release that half landed - new app, old api - looks like nothing at all
-      // otherwise, and it is a specific kind of confusing.
       expect(wrapper.find('[data-testid="app-version"]').text()).toContain('server 0.1.9')
     })
 
@@ -55,8 +45,6 @@ describe('the profile settings', () => {
       const { wrapper } = await mountView(ProfileSettingsView, { api })
       await settle()
 
-      // Offline is not a version mismatch, and a dash where a number belongs
-      // would read like one.
       expect(wrapper.find('[data-testid="app-version"]').text()).toBe('Version dev')
     })
   })
@@ -118,7 +106,6 @@ describe('the profile settings', () => {
       await settle()
 
       expect(auth.theme).toBe('light')
-      // Nothing to save: there is no preview of a theme.
       expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
     })
   })
@@ -156,13 +143,6 @@ describe('the profile settings', () => {
     expect(textOf(wrapper)).toContain('three-letter currency code')
   })
 
-  /**
-   * The colour the whole application wears.
-   *
-   * On the account rather than on the device, because somebody who picks a colour
-   * means it wherever they sign in. There is no personal colour on this screen any
-   * more: a member's colour belongs to the group, and that is where it is edited.
-   */
   describe('the app colour', () => {
     it('offers the eight themes', async () => {
       const { wrapper } = await mountView(ProfileSettingsView)
@@ -188,8 +168,6 @@ describe('the profile settings', () => {
       await wrapper.find('[data-testid="accent-teal"]').trigger('click')
       await settle()
 
-      // The whole application changes colour on the tap: a Save button over a
-      // change you are already looking at would have nothing to do.
       expect(auth.accent.name).toBe('teal')
       expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
     })
@@ -215,8 +193,6 @@ describe('the profile settings', () => {
       await wrapper.find('[data-testid="accent-amber"]').trigger('click')
       await settle()
 
-      // The same bargain the light switch makes: it is a preference, not a
-      // transaction, and it is already on screen.
       expect(auth.accent.name).toBe('amber')
       expect(textOf(wrapper)).not.toContain('offline')
     })
@@ -233,18 +209,11 @@ describe('the profile settings', () => {
     it('has no colour of your own on it any more', async () => {
       const { wrapper } = await mountView(ProfileSettingsView)
 
-      // A member's colour belongs to the group, and is edited in its settings.
       expect(wrapper.findAll('[data-testid^="colour-"]')).toHaveLength(0)
       expect(textOf(wrapper)).not.toContain('Your colour')
     })
   })
 
-  /**
-   * The language the app is read in.
-   *
-   * On the account like the colour, applied on the tap for the same reason: the
-   * screen is the confirmation, and there is nothing left to preview.
-   */
   describe('the language', () => {
     it('offers English and French, each named in itself', async () => {
       const { wrapper } = await mountView(ProfileSettingsView)
@@ -272,7 +241,6 @@ describe('the profile settings', () => {
         '/auth/me',
         expect.objectContaining({ locale: 'fr' }),
       )
-      // Nothing to save: the whole screen has already changed language.
       expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
     })
 
@@ -366,17 +334,12 @@ describe('the profile settings', () => {
     await wrapper.find('[data-testid="disconnect"]').trigger('click')
     await settle()
 
-    // Startup signs a remembered device back in without asking, so a disconnect
-    // that left the account behind would put you straight back where you were
-    // and the button would appear to do nothing.
     expect(auth.rememberedAccount).toBeNull()
   })
 
   it('shows its actions as buttons rather than lines of text', async () => {
     const { wrapper } = await mountView(ProfileSettingsView)
 
-    // On a dark surface a bordered button with no fill was invisible, which is why
-    // signing out looked like it did not exist.
     const disconnect = wrapper.find('[data-testid="disconnect"]')
     expect(disconnect.classes()).toContain('btn-secondary')
     expect(disconnect.classes()).toContain('btn-press')
@@ -389,7 +352,6 @@ describe('the profile settings', () => {
     await button!.trigger('click')
     await settle(1)
 
-    // Irreversible, so it must not be one tap away.
     expect(api.delete).not.toHaveBeenCalled()
     expect(textOf(wrapper)).toContain('Your name stays on past expenses')
   })
@@ -441,22 +403,7 @@ describe('the profile settings', () => {
     expect(targets).toContain('conflicts')
   })
 
-
-  /**
-   * Notifications, and installing it like an application.
-   *
-   * The registration existed and nothing ever called it, so notifications were
-   * unreachable. Both of these need the app served over a secure origin, and what
-   * the screen says depends on why it cannot be offered: those have different
-   * answers.
-   */
   describe('notifications', () => {
-    /**
-     * A browser that can do them: a secure origin, a service worker container and
-     * a Notification API. jsdom has none of the three, which is also exactly what
-     * a plain-HTTP address looks like, so the supported case is the one that has to
-     * be arranged.
-     */
     const asSupported = (permission: NotificationPermission = 'default', subscribed = false) => {
       const previous = {
         secure: window.isSecureContext,
@@ -480,11 +427,6 @@ describe('the profile settings', () => {
         configurable: true,
       })
 
-      /*
-       * Put back by deleting rather than by defining undefined: a property defined
-       * with no value still answers `'PushManager' in window`, which left the next
-       * test in this file looking at a browser that half exists.
-       */
       const put = (target: object, name: string, value: unknown) => {
         if (value === undefined) delete (target as Record<string, unknown>)[name]
         else Object.defineProperty(target, name, { value, configurable: true })
@@ -507,7 +449,6 @@ describe('the profile settings', () => {
 
         const toggle = wrapper.find('[data-testid="notifications-toggle"]')
         expect(toggle.exists()).toBe(true)
-        // Nothing is subscribed, so it reads as off rather than as unavailable.
         expect(toggle.attributes('aria-pressed')).toBe('false')
         expect(wrapper.find('[data-testid="notifications-note"]').text()).toContain(
           'while the app is closed',
@@ -538,8 +479,6 @@ describe('the profile settings', () => {
         const { wrapper } = await mountView(ProfileSettingsView)
         await settle()
 
-        // Nothing this app does can change that, so the note has to point at the
-        // only place it can be changed.
         expect(wrapper.find('[data-testid="notifications-toggle"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="notifications-note"]').text()).toContain(
           'site settings',
@@ -550,8 +489,6 @@ describe('the profile settings', () => {
     })
 
     it('explains a plain address rather than offering a switch that cannot work', async () => {
-      // The environment here is the same shape as a phone reading this over http on
-      // the local network: no service worker, and not a secure context.
       const { wrapper } = await mountView(ProfileSettingsView)
       await settle()
 
@@ -560,8 +497,6 @@ describe('the profile settings', () => {
     })
 
     it('says plainly when a secure browser has no notifications at all', async () => {
-      // An older browser rather than a plain address: nothing to be done about it,
-      // and a different sentence from "serve it over https".
       Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
 
       try {
@@ -583,7 +518,6 @@ describe('the profile settings', () => {
       await settle()
 
       expect(textOf(wrapper)).toContain('Install on this device')
-      // No offer yet, so no button: a dead button is worse than none.
       expect(wrapper.find('[data-testid="install-app"]').exists()).toBe(false)
     })
 

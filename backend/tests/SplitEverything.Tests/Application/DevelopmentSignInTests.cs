@@ -10,12 +10,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// The development sign-in exists so the app can be used locally without a Google
-/// OAuth client. That makes it an authentication bypass, so what matters is that
-/// it is impossible to reach unless someone deliberately turned it on in a
-/// non-production environment.
-/// </summary>
 public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private static AuthOptions Options(bool allow) => new()
@@ -49,7 +43,6 @@ public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(f
     {
         var auth = CreateAuth(allow: false);
 
-        // Off by default: a deployment that never sets the flag has no bypass.
         await Should.ThrowAsync<ForbiddenException>(
             () => auth.SignInAsDeveloperAsync(new DevelopmentSignInRequest("alice@example.com", "Alice", null)));
     }
@@ -103,7 +96,6 @@ public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(f
         await auth.SignInAsDeveloperAsync(new DevelopmentSignInRequest("alice@example.com", "Alice", null));
         await auth.SignInAsDeveloperAsync(new DevelopmentSignInRequest("bob@example.com", "Bob", null));
 
-        // Testing a shared group needs more than one account on one machine.
         (await NewContext().Users.CountAsync()).ShouldBe(2);
     }
 
@@ -115,8 +107,6 @@ public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(f
         var result = await auth.SignInAsDeveloperAsync(
             new DevelopmentSignInRequest("alice@example.com", "Alice", null));
 
-        // Namespaced so a development account can never collide with, or be
-        // mistaken for, a real Google subject.
         var user = await NewContext().Users.FirstAsync(u => u.Id == result.User.Id);
         user.GoogleSubject.ShouldStartWith("dev:");
     }
@@ -133,8 +123,6 @@ public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(f
         var result = await auth.SignInAsDeveloperAsync(
             new DevelopmentSignInRequest("alice@example.com", "Alice", null));
 
-        // Matching on email would hand a development sign-in somebody's real
-        // account; the subject is the identity, so this is a separate user.
         result.User.Id.ShouldNotBe(existing.Id);
         (await NewContext().Users.CountAsync()).ShouldBe(2);
     }
@@ -228,7 +216,6 @@ public class DevelopmentSignInTests(PostgresFixture fixture) : ServiceTestBase(f
             new InviteService(Db, Writer, Activity, Email, options, Clock),
             options, Admins, Clock);
 
-        // The sign-in page needs to tell "not set up" apart from "broken".
         auth.GetCapabilities().GoogleConfigured.ShouldBeFalse();
     }
 }

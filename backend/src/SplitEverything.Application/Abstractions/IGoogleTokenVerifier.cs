@@ -5,6 +5,5 @@ public sealed record GoogleIdentity(
 
 public interface IGoogleTokenVerifier
 {
-    /// <summary>Validates signature, audience and expiry. Throws on anything unacceptable.</summary>
     Task<GoogleIdentity> VerifyAsync(string idToken, CancellationToken ct = default);
 }

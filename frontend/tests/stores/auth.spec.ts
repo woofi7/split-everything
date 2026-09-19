@@ -67,7 +67,6 @@ describe('auth store', () => {
     const revived = useAuthStore()
     revived.restore()
 
-    // Without this the app would bounce the user to sign-in on every launch.
     expect(revived.isSignedIn).toBe(true)
     expect(revived.user?.displayName).toBe('Alice')
   })
@@ -83,14 +82,6 @@ describe('auth store', () => {
     expect(store.accessToken).toBe('access-2')
   })
 
-  /**
-   * What ends a session, and what merely fails.
-   *
-   * Only the server can say a refresh token is spent. Treating every failure as
-   * that meant a refresh attempted with no connection signed the app out, which
-   * locked somebody out of data sitting on their own device, and it produced a
-   * storm: cleared session, sign-in screen, another resume, another failure.
-   */
   const refusing = (status: number) =>
     fakeApi({
       post: vi.fn(async (path: string) => {
@@ -130,7 +121,6 @@ describe('auth store', () => {
     const store = await signedIn(api)
 
     await expect(store.refresh()).rejects.toThrow()
-    // Still signed in: the data on this device is the whole point of the replica.
     expect(store.isSignedIn).toBe(true)
   })
 
@@ -188,20 +178,12 @@ describe('auth store', () => {
     store.attachApi(fakeApi() as never)
     await store.signInWithGoogle('google-credential')
 
-    // Dark by default, per the spec.
     expect(store.theme).toBe('dark')
 
     await store.setTheme('light')
     expect(store.theme).toBe('light')
   })
 
-  /**
-   * The accent the whole application wears.
-   *
-   * On the account, so it follows the person onto any device they sign in on, and
-   * applied the moment it is tapped: the app changes colour there and then, and a
-   * spinner over a swatch while a server agrees would be absurd.
-   */
   describe('the app accent', () => {
     it('wears the default until somebody says otherwise', async () => {
       const store = useAuthStore()
@@ -246,7 +228,6 @@ describe('auth store', () => {
 
       await store.setAccent('amber')
 
-      // A preference, not a transaction, and it is already on screen.
       expect(store.accent.name).toBe('amber')
     })
 
@@ -261,7 +242,6 @@ describe('auth store', () => {
       const revived = useAuthStore()
       revived.restore()
 
-      // Right on the first paint, without waiting for the profile to come back.
       expect(revived.accent.name).toBe('sky')
     })
 

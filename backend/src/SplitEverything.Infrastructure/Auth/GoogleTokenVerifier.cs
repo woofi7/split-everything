@@ -5,13 +5,6 @@ using SplitEverything.Application.Common;
 
 namespace SplitEverything.Infrastructure.Auth;
 
-/// <summary>
-/// Verifies a Google ID token against Google's published keys.
-///
-/// Signature, expiry and audience are all checked by the library; pinning the
-/// audience to our own client id is what stops a token minted for a different app
-/// from being replayed here.
-/// </summary>
 public sealed class GoogleTokenVerifier(AuthOptions options, ILogger<GoogleTokenVerifier> logger)
     : IGoogleTokenVerifier
 {

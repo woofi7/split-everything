@@ -10,11 +10,6 @@ namespace SplitEverything.Infrastructure.Sync;
 
 public interface ISyncWriter
 {
-    /// <summary>
-    /// Stamps a write onto an entity and appends the log entry peers will replay.
-    /// Does not save: the caller decides the transaction boundary, so a multi-entity
-    /// change (an expense plus its splits) lands as one unit.
-    /// </summary>
     Task<long> RecordAsync<TEntity>(
         TEntity entity,
         SyncEntityType entityType,
@@ -30,10 +25,6 @@ public interface ISyncWriter
         CancellationToken ct = default)
         where TEntity : SyncableEntity;
 
-    /// <summary>
-    /// Appends a log entry with no entity behind it: the merge and split markers,
-    /// and compaction snapshots.
-    /// </summary>
     Task<long> RecordMarkerAsync(
         Guid groupId,
         SyncEntityType entityType,
@@ -52,8 +43,6 @@ public sealed class SyncWriter(
     IGroupSequenceAllocator sequences,
     IClock clock) : ISyncWriter
 {
-    // The same options the push path parses with, so what the log hands back is
-    // always a shape a client can send straight back.
     private static readonly JsonSerializerOptions PayloadOptions = SyncPayloads.Options;
 
     public async Task<long> RecordAsync<TEntity>(
@@ -103,8 +92,6 @@ public sealed class SyncWriter(
             UserId = userId,
             VectorClockJson = entity.VectorClockJson,
             PayloadJson = Serialize(payload),
-            // Default to the group's own lineage. A transfer passes the origin
-            // lineage instead, so a later split can find the moved history again.
             LineageId = lineageId ?? group.LineageId,
             SourceGroupId = sourceGroupId,
             CounterpartGroupId = counterpartGroupId,

@@ -14,14 +14,6 @@ using SplitEverything.Infrastructure.Sync;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// Two importers with one shape: upload, map, preview, commit.
-///
-/// The Settle Up CSV is parsed server-side because it is our own structured
-/// format. A bank statement is not: it is parsed entirely in the browser, and this
-/// service only ever receives the rows the user confirmed. Nothing here accepts a
-/// statement file, by design.
-/// </summary>
 public sealed class ImportService(
     AppDbContext db,
     ISyncWriter writer,
@@ -41,8 +33,6 @@ public sealed class ImportService(
         ["splitAmounts"] = ["split amounts", "split amount", "shares", "montants"],
         ["type"] = ["type", "kind", "art"]
     };
-
-    // ---- analysis --------------------------------------------------------
 
     public async Task<CsvAnalysisResult> AnalyzeCsvAsync(
         Guid userId, Stream csv, string? fileName, CancellationToken ct = default)
@@ -92,15 +82,10 @@ public sealed class ImportService(
 
         var table = SettleUpCsvReader.Read(csv);
 
-        // No group means nothing to match names against and no history to compare,
-        // so every name comes back unmapped and nothing is a duplicate.
         var members = request.GroupId is { } forMembers
             ? await LoadMembersAsync(forMembers, ct)
             : new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
 
-        // A name bound to an account is answered for, whether or not that account is
-        // in the group yet: the import makes it a member. Standing in a placeholder
-        // id keeps the rest of this method as it is, and none of it leaves here.
         var nameMapping = new Dictionary<string, Guid?>(
             request.MemberNameMapping, StringComparer.OrdinalIgnoreCase);
         foreach (var name in request.MemberUserMapping?.Keys ?? Enumerable.Empty<string>())
@@ -142,9 +127,6 @@ public sealed class ImportService(
     public async Task<ImportCommitResult> CommitCsvAsync(
         Guid userId, Stream csv, CsvCommitRequest request, CancellationToken ct = default)
     {
-        // Read the file before anything is created. A file that cannot be read must
-        // not leave an empty group behind, which would be a worse outcome than the
-        // failure itself.
         var table = SettleUpCsvReader.Read(csv);
         if (table.Rows.Count == 0)
             throw new ValidationException("That export has a header row but no expenses.");
@@ -161,9 +143,6 @@ public sealed class ImportService(
         var warnings = new List<string>();
         var deviceId = GroupService.DeviceFor(userId);
 
-        // Names bound to an account come first: they decide who the rows belong to,
-        // and without them the step below would invent a placeholder wearing the
-        // same name and the export would land on a stranger.
         await BindAccountsAsync(
             userId, groupId, request.MemberUserMapping, members, nameMapping,
             createdMemberIds, deviceId, ct);
@@ -203,8 +182,6 @@ public sealed class ImportService(
 
             await db.SaveChangesAsync(ct);
 
-            // Re-parse now that the names resolve, so previously unresolvable rows
-            // become committable instead of being skipped.
             parsed = ParseRows(table, request.Mapping, nameMapping, members, request.FallbackCurrency);
         }
 
@@ -254,20 +231,10 @@ public sealed class ImportService(
                 ? row.ParticipantMemberIds
                 : [row.PaidByMemberId!.Value];
 
-            // Who paid, as a list. Settle Up writes a payment several people made
-            // together as a pair of lists - payers "Emma;Nicolas", amount "40;25" -
-            // and an expense here holds exactly that: one row of 65 that two people
-            // put money into, split between whoever it was for.
             var payers = row.Payers is { Count: > 1 }
                 ? row.Payers
                 : [new ImportPayerShare(row.PaidByName ?? string.Empty, row.PaidByMemberId, row.Amount!.Value)];
 
-            // A transfer is one person paying another down, not money spent. Booked
-            // as an expense it would count once as spending and again as a share
-            // owed, moving both balances the wrong way.
-            //
-            // One per payer here, unlike an expense: a settlement is a movement
-            // between two people, so two people paying somebody down is two of them.
             if (row.IsSettlement)
             {
                 foreach (var payer in payers)
@@ -308,11 +275,6 @@ public sealed class ImportService(
                 continue;
             }
 
-            // The export's own per-person amounts, used as weights rather than as
-            // final figures. An export can disagree with itself by a cent, and this
-            // one does: 53.99 split "27;27" adds up to 54.00. Weighting keeps the
-            // ratio the export intended while the shares still sum to the total,
-            // which the rest of the app requires and the sync path enforces.
             var exact = row.SplitAmounts;
             var useExact = exact is { Count: > 0 }
                            && exact.Count == participants.Count
@@ -336,7 +298,6 @@ public sealed class ImportService(
             var expense = new Expense
             {
                 GroupId = groupId,
-                // The largest contribution is the name on the expense.
                 PaidByMemberId = known
                     .OrderByDescending(y => y.Amount)
                     .ThenBy(y => y.MemberId!.Value)
@@ -409,12 +370,6 @@ public sealed class ImportService(
         return new ImportCommitResult(batch.Id, groupId, created, createdSettlements, skipped, createdMemberIds, warnings);
     }
 
-    /// <summary>
-    /// Creates the group an import is going into, when the wizard did not name an
-    /// existing one. Goes through the group service rather than inserting a row, so
-    /// the owner membership, vector clock, sync log entry and activity all happen
-    /// the way they do for a group made by hand.
-    /// </summary>
     private async Task<Guid> CreateGroupForImportAsync(
         Guid userId, CsvCommitRequest request, CancellationToken ct)
     {
@@ -454,7 +409,6 @@ public sealed class ImportService(
 
         var batch = new ImportBatch
         {
-            // A statement spans groups, so the batch is not tied to one.
             GroupId = groupIds.Count == 1 ? groupIds[0] : null,
             ImportedByUserId = userId,
             Source = "statement",
@@ -580,8 +534,6 @@ public sealed class ImportService(
         return new DuplicateCheckResult(matches.Values.ToList());
     }
 
-    // ---- internals -------------------------------------------------------
-
     private static IReadOnlyDictionary<string, int> GuessMapping(IReadOnlyList<string> headers)
     {
         var mapping = new Dictionary<string, int>();
@@ -596,7 +548,6 @@ public sealed class ImportService(
                     index = i;
             }
 
-            // Fall back to a contains match, for headers such as "Amount (CAD)".
             for (var i = 0; i < headers.Count && index < 0; i++)
             {
                 if (aliases.Any(alias => headers[i].Contains(alias, StringComparison.OrdinalIgnoreCase)))
@@ -626,9 +577,6 @@ public sealed class ImportService(
             var spentAt = CsvValueParser.ParseDate(Cell(raw, mapping.DateColumn), mapping.DateFormat);
             if (spentAt is null) problems.Add("the date could not be read");
 
-            // Read as a list, because one cell can hold several: Settle Up writes a
-            // payment shared between people as "40;25", one figure per payer. A
-            // single amount is a list of one, so this is the same path for both.
             var amounts = CsvValueParser.ParseAmountList(
                 Cell(raw, mapping.AmountColumn), mapping.DecimalSeparator);
 
@@ -660,15 +608,6 @@ public sealed class ImportService(
             if (payerName is null) problems.Add("no payer was named");
             else if (payerId is null) problems.Add($"the payer {payerName} is not a member yet");
 
-            // Several payers, each with their own figure. Flagged rather than
-            // guessed when the two lists disagree: a row that says who paid without
-            // saying how much each of them put in cannot be divided, and inventing
-            // a division would be wrong in a way nobody would see.
-            //
-            // Decided by the amount cell alone. A payer cell can hold a comma for
-            // reasons that have nothing to do with sharing - a name written surname
-            // first - and the list of names is split on commas too, so reading two
-            // names as two payers would flag ordinary rows as unsplittable.
             List<ImportPayerShare>? payers = null;
             if (amounts.Count > 1)
             {
@@ -690,7 +629,6 @@ public sealed class ImportService(
                 }
             }
 
-            // Two export shapes: a single "for whom" cell, or one column per member.
             var participantNames = new List<string>();
             if (mapping.ParticipantColumns is { Count: > 0 })
             {
@@ -703,8 +641,6 @@ public sealed class ImportService(
             }
             else
             {
-                // The mapped column when there is one. The old fallback guessed the
-                // column beside the payer, which in a real export is the amount.
                 var participantColumn = mapping.ParticipantsColumn
                                         ?? (mapping.PaidByColumn is null ? 6 : mapping.PaidByColumn.Value + 1);
                 participantNames.AddRange(CsvValueParser.ParseNameList(Cell(raw, participantColumn)));
@@ -721,9 +657,6 @@ public sealed class ImportService(
                 else participantIds.Add(resolved.Value);
             }
 
-            // Paired positionally with the participants, which is how the export
-            // writes them. A count that does not line up is not trustworthy, so the
-            // split is computed instead.
             var splitAmounts = mapping.SplitAmountsColumn is { } splitColumn
                 ? CsvValueParser.ParseAmountList(Cell(raw, splitColumn), mapping.DecimalSeparator)
                 : [];
@@ -740,8 +673,6 @@ public sealed class ImportService(
 
             rows.Add(new ParsedExpenseRow(
                 i + 1, spentAt, description, amount, rowCurrency,
-                // Every payer in the name, so a preview of a shared payment does not
-                // read as though one person covered the lot.
                 payers is null ? payerName : string.Join(", ", payers.Select(p => p.Name)),
                 payerId, participantNames, participantIds,
                 fingerprint, false, null, problems, splitAmounts, isSettlement, payers));
@@ -750,10 +681,6 @@ public sealed class ImportService(
         return rows;
     }
 
-    /// <summary>
-    /// Whether a Type cell marks a settlement. Settle Up calls it a transfer; other
-    /// wordings are accepted because the column is free text in practice.
-    /// </summary>
     private static bool IsTransfer(string? value)
     {
         var trimmed = value?.Trim();
@@ -806,19 +733,6 @@ public sealed class ImportService(
         return map;
     }
 
-    /// <summary>
-    /// Makes each account the user matched a name to into a member of the group.
-    ///
-    /// An export is somebody's group history, and the people in it usually have
-    /// accounts here already: binding a name to one means the import lands on the
-    /// real person, with their own colour and their own view of the group, rather
-    /// than on a placeholder that happens to share their name.
-    ///
-    /// A membership that already exists is reused, including one that was removed,
-    /// for the same reason redeeming an invite does: a second row for one account
-    /// would collide with the one-membership-per-user index and orphan whatever
-    /// history points at the first.
-    /// </summary>
     private async Task BindAccountsAsync(
         Guid userId,
         Guid groupId,
@@ -890,11 +804,6 @@ public sealed class ImportService(
         }
     }
 
-    /// <summary>
-    /// Stands for "a name the user has bound to an account" while a preview is
-    /// worked out. It is never written anywhere: a preview creates nothing, and by
-    /// the time anything is created the real member id is known.
-    /// </summary>
     private static readonly Guid BoundToAnAccount = new("00000000-0000-0000-0000-0000000000ff");
 
     private static Guid? Resolve(
@@ -903,7 +812,6 @@ public sealed class ImportService(
         if (string.IsNullOrWhiteSpace(name)) return null;
         var trimmed = name.Trim();
 
-        // An explicit mapping wins, so the user can fix a typo in the export.
         if (nameMapping.TryGetValue(trimmed, out var mapped) && mapped is not null) return mapped;
         if (members.TryGetValue(trimmed, out var member)) return member;
         return null;
@@ -919,8 +827,6 @@ public sealed class ImportService(
 
         if (myGroupIds.Count == 0) return new SplitSuggestionResult([]);
 
-        // Only the user's own history is consulted, and only in aggregate: this
-        // returns how they usually split a merchant, never anyone else's data.
         var history = await db.Expenses
             .Where(e => myGroupIds.Contains(e.GroupId) && !e.IsDeleted)
             .Select(e => new
@@ -943,7 +849,6 @@ public sealed class ImportService(
             var key = ExpenseFingerprint.NormalizeDescription(merchant);
             if (key.Length == 0 || !byMerchant.TryGetValue(key, out var matches)) continue;
 
-            // The split shape used most often wins; ties go to the most recent.
             var best = matches
                 .GroupBy(e => new
                 {

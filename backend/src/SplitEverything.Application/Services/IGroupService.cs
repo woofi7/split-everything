@@ -9,48 +9,15 @@ public interface IGroupService
     Task<IReadOnlyList<GroupSummaryDto>> ListAsync(Guid userId, bool includeArchived = false, CancellationToken ct = default);
     Task<GroupDto> UpdateAsync(Guid userId, Guid groupId, UpdateGroupRequest request, CancellationToken ct = default);
 
-    /// <summary>
-    /// Sets the names this group keeps out of its totals.
-    ///
-    /// Any member, not only an owner or an admin. The rest of a group's settings
-    /// decide how money is divided and who is in it, which is why they are an
-    /// admin's business; this decides whether the rent drowns out the month on a
-    /// screen everybody reads, and it changes no amount, no balance and nothing
-    /// anybody owes. The person who notices that the totals are useless is rarely
-    /// the person holding the owner's account.
-    /// </summary>
     Task<GroupDto> SetIgnoredNamesAsync(Guid userId, Guid groupId, SetIgnoredNamesRequest request, CancellationToken ct = default);
 
     Task<GroupDto> ArchiveAsync(Guid userId, Guid groupId, CancellationToken ct = default);
     Task<GroupDto> UnarchiveAsync(Guid userId, Guid groupId, CancellationToken ct = default);
 
-
-    /// <summary>
-    /// Adds someone who already has an account. The other way into a group is an
-    /// invite link, which suits a person who has never opened the app; this is for
-    /// one who is already here.
-    /// </summary>
     Task<GroupMemberDto> AddUserMemberAsync(Guid userId, Guid groupId, AddUserMemberRequest request, CancellationToken ct = default);
 
-    /// <summary>
-    /// People with an account who could be added to a group: everyone but the
-    /// caller and the group's current members. Pass a null group for a group that
-    /// does not exist yet.
-    ///
-    /// Every account on the instance, deliberately, not only people the caller
-    /// already shares a group with. The point of this list is to add someone who
-    /// has just signed up, and they share nothing yet; narrowing it would leave
-    /// that case with no route in but an invite link. The spec scopes this app to
-    /// the owner and the people they invited, so an account existing already means
-    /// the owner let that person in. Confirmed as intended, so it is not a leak to
-    /// be tightened later without changing that scope first.
-    /// </summary>
     Task<IReadOnlyList<AddableUserDto>> ListAddableUsersAsync(Guid userId, Guid? groupId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Removes a member. Someone with history is deactivated rather than deleted, so
-    /// past expenses keep pointing at a real row.
-    /// </summary>
     Task<GroupMemberDto> SetMemberColorAsync(Guid userId, Guid groupId, Guid memberId, SetMemberColorRequest request, CancellationToken ct = default);
     Task<GroupDto> MergeMembersAsync(Guid userId, Guid groupId, MergeMembersRequest request, CancellationToken ct = default);
     Task RemoveMemberAsync(Guid userId, Guid groupId, Guid memberId, CancellationToken ct = default);

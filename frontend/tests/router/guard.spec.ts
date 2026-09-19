@@ -20,7 +20,6 @@ const session = {
   },
 }
 
-/** A server that will sign a known device back in from its address alone. */
 function reconnectableApi() {
   return {
     probe: vi.fn(async () => null),
@@ -51,8 +50,6 @@ describe('route guard', () => {
   it('remembers where they were going', async () => {
     await router.push('/groups/group-1')
 
-    // Otherwise a deep link or an invite would dump them on the group list after
-    // signing in, having lost what they clicked.
     expect(router.currentRoute.value.query.redirect).toBe('/groups/group-1')
   })
 
@@ -76,8 +73,6 @@ describe('route guard', () => {
 
     await router.push('/groups')
 
-    // No detour through sign-in: the device knows whose it is, so it gets itself
-    // back in rather than asking a question it has the answer to.
     expect(router.currentRoute.value.name).toBe('dashboard')
     expect(auth.isSignedIn).toBe(true)
   })
@@ -100,7 +95,6 @@ describe('route guard', () => {
     const auth = useAuthStore()
     auth.attachApi({
       probe: vi.fn(async () => null),
-      // A connection that answers eventually, which on a phone is most of them.
       get: vi.fn(() => new Promise((resolve) => setTimeout(() => resolve({
         googleConfigured: false,
         developmentSignIn: true,
@@ -114,9 +108,6 @@ describe('route guard', () => {
     await vi.advanceTimersByTimeAsync(4_100)
     await navigation
 
-    // The screen was blank until this returned. Four seconds is the most a
-    // navigation waits; the attempt carries on and the sign-in page, which shares
-    // it, moves on when it lands.
     expect(router.currentRoute.value.name).toBe('sign-in')
     vi.useRealTimers()
   })
@@ -124,7 +115,6 @@ describe('route guard', () => {
   it('leaves the invite page public', async () => {
     await router.push('/join/some-token')
 
-    // A person who has never opened the app has to be able to see the invite.
     expect(router.currentRoute.value.name).toBe('join')
   })
 

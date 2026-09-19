@@ -9,21 +9,13 @@ public sealed record CreateGroupRequest(
     string? IconName,
     string? ColorHex,
     IReadOnlyList<string>? PlaceholderMemberNames,
-    /// <summary>The accent the app wears for this group, by name, or null for none.</summary>
     string? ThemeName = null);
 
 public sealed record UpdateGroupRequest(
     string? Name, string? Description, string? IconName, string? ColorHex, string? BaseCurrency,
-    // How a new expense here is split unless someone says otherwise. Null leaves
-    // the current default alone; DefaultSplitValues is only read when a type is
-    // given, and an empty map clears the values.
     SplitType? DefaultSplitType = null,
     IReadOnlyDictionary<Guid, decimal>? DefaultSplitValues = null,
-    // Names to leave out of the highlights, as regular expressions. Null leaves them
-    // as they are; an empty list is the explicit clear.
     IReadOnlyList<string>? IgnoredNamePatterns = null,
-    // The accent the app wears for this group. Null leaves it alone and an empty
-    // string is the explicit clear, the same convention as the text fields.
     string? ThemeName = null);
 
 public sealed record GroupMemberDto(
@@ -35,17 +27,10 @@ public sealed record GroupMemberDto(
     MembershipStatus Status,
     bool IsPlaceholder,
     decimal NetBalance,
-    /// <summary>Their colour in this group. Null on rows that predate the column.</summary>
     string? ColorHex = null);
 
-/// <summary>
-/// The names this group keeps out of its totals. The whole list every time: it is
-/// edited as a list on one screen, and a patch of one line would be a merge nobody
-/// asked for.
-/// </summary>
 public sealed record SetIgnoredNamesRequest(IReadOnlyList<string> Patterns);
 
-/// <summary>Changes one member's colour in one group.</summary>
 public sealed record SetMemberColorRequest(string ColorHex);
 
 public sealed record GroupDto(
@@ -74,22 +59,10 @@ public sealed record GroupSummaryDto(
     bool IsArchived, decimal MyNetBalance, int MemberCount, DateTimeOffset? LastActivityAt,
     string? ThemeName = null);
 
-
-/// <summary>Adds someone who already has an account, rather than a placeholder.</summary>
-/// <summary>
-/// Folds one member into another. The source is emptied and removed; the target
-/// ends up owning everything the source paid, owed, was owed and said.
-/// </summary>
 public sealed record MergeMembersRequest(Guid SourceMemberId, Guid TargetMemberId);
 
 public sealed record AddUserMemberRequest(Guid UserId);
 
-/// <summary>
-/// Someone with an account who is not in the group yet.
-///
-/// Carries the email because two people can share a display name, and the person
-/// choosing needs to be able to tell them apart.
-/// </summary>
 public sealed record AddableUserDto(Guid Id, string DisplayName, string Email, string? AvatarUrl);
 
 public sealed record CreateInviteRequest(string? Email, Guid? ClaimsMemberId, int MaxUses, int ExpiresInHours);
@@ -102,12 +75,10 @@ public sealed record InvitePreviewDto(Guid GroupId, string GroupName, string? Ic
 
 public sealed record RedeemInviteResult(Guid GroupId, Guid MemberId, bool AlreadyMember);
 
-/// <summary>Both groups keep their history; the target absorbs the source log.</summary>
 public sealed record MergeGroupsRequest(Guid SourceGroupId, Guid TargetGroupId, IReadOnlyDictionary<Guid, Guid>? MemberMapping, string? Note);
 
 public sealed record MergeGroupsResult(Guid TargetGroupId, Guid ArchivedSourceGroupId, int MovedExpenses, int MovedSettlements, int MovedLogEntries, Guid LineageLinkId);
 
-/// <summary>Moves the listed expenses and settlements into a brand new group.</summary>
 public sealed record SplitGroupRequest(
     Guid SourceGroupId,
     string NewGroupName,

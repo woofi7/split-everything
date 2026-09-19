@@ -12,6 +12,5 @@ public abstract class ApiControllerBase(ICurrentUser currentUser) : ControllerBa
 {
     protected ICurrentUser CurrentUser { get; } = currentUser;
 
-    /// <summary>The signed-in caller, or a 403 from the exception handler.</summary>
     protected Guid UserId => CurrentUser.RequireUserId();
 }

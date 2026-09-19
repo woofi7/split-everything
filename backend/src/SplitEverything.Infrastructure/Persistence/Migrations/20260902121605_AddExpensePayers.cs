@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SplitEverything.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddExpensePayers : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -62,13 +60,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                 table: "expense_payers",
                 column: "member_id");
 
-            // Every expense that already exists had exactly one payer, and the new
-            // table is where the money now lives: without this backfill every balance
-            // in the app reads as though nobody paid for anything.
-            //
-            // Deleted expenses are carried over as they are. They are excluded from
-            // every balance by the expense's own flag, and dropping them here would
-            // lose the payer of an expense somebody later restores.
             migrationBuilder.Sql(
                 """
                 INSERT INTO expense_payers (
@@ -81,7 +72,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                 """);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

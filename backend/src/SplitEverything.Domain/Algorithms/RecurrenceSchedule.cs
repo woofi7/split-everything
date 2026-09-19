@@ -2,12 +2,6 @@ using SplitEverything.Domain.Common;
 
 namespace SplitEverything.Domain.Algorithms;
 
-/// <summary>
-/// Next-occurrence math for recurring expenses.
-///
-/// Runs on UTC dates and clamps the day of month, so a rule set on the 31st still
-/// fires in February instead of silently skipping the month.
-/// </summary>
 public static class RecurrenceSchedule
 {
     public static DateTimeOffset Next(
@@ -29,11 +23,6 @@ public static class RecurrenceSchedule
         };
     }
 
-    /// <summary>
-    /// Every occurrence strictly after <paramref name="after"/> and at or before
-    /// <paramref name="until"/>. Used by the worker to backfill a rule whose
-    /// schedule was missed while the app was down, rather than losing occurrences.
-    /// </summary>
     public static IReadOnlyList<DateTimeOffset> Occurrences(
         DateTimeOffset start,
         DateTimeOffset after,

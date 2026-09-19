@@ -38,11 +38,6 @@ describe('sync transport', () => {
   })
 })
 
-/**
- * A stand-in for the real Worker. The worker itself runs pdfjs and tesseract in a
- * worker scope jsdom does not provide; what this covers is the message protocol
- * between the two, which is where a mismatch would actually break the wizard.
- */
 class FakeWorker implements Partial<Worker> {
   static instances: FakeWorker[] = []
 
@@ -146,7 +141,6 @@ describe('statement worker client', () => {
     const pending = client.parseCsv('text')
     const request = worker().posted[0] as { id: string }
 
-    // Two parses can be in flight; a response must only settle its own promise.
     worker().emit({ kind: 'rows', id: 'someone-else', rows: [{ rowNumber: 9 }], usedOcr: false })
     worker().emit({ kind: 'rows', id: request.id, rows: [], usedOcr: false })
 
@@ -184,8 +178,6 @@ describe('statement worker client', () => {
 
     client.dispose()
 
-    // The statement lives in the worker's memory; ending it is part of the data
-    // hygiene the spec asks for.
     expect(worker().terminated).toBe(true)
   })
 

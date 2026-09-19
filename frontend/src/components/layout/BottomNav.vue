@@ -3,23 +3,6 @@ import { t } from '@/i18n'
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
-/**
- * The mobile-first bottom tab bar from the spec: Dashboard, Activity, a centre
- * add-expense button, and Profile. The centre action is deliberately the largest
- * target, because adding an expense is the thing people open this app to do.
- *
- * The tab you are on is lifted into a circle that stands proud of the bar, the
- * same shape as the centre button. Colour alone was easy to miss on a phone in
- * daylight, and the raised disc reads as position rather than decoration.
- */
-/**
- * Which routes each tab stands for.
- *
- * Named rather than left to the router's path matching. A group opened by its own
- * URL is the dashboard, rendered by the same component, so coming back to it from
- * an expense or the settle screen left every tab unlit: the path was /groups/<id>
- * and the tab points at /dashboard.
- */
 const tabs = [
   {
     name: 'dashboard',
@@ -55,19 +38,7 @@ const route = useRoute()
 const currentName = computed(() => String(route?.name ?? ''))
 const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.value)
 </script>
-
 <template>
-  <!--
-    A row of the frame rather than something pinned over the page.
-
-    Pinned, it was placed against the viewport, and a phone changes what that
-    means every time it slides its own toolbar in or out: the bar moved down the
-    screen, and off it. As a row in a frame the height of the screen, nothing about
-    scrolling can reach it.
-
-    Raised in the stack all the same, because the centre button stands proud of the
-    bar and has to be over the page rather than under it.
-  -->
   <nav
     class="relative z-30 shrink-0 overflow-visible border-t bg-[var(--surface-raised)] pb-[env(safe-area-inset-bottom)]"
     style="border-color: var(--border)"
@@ -96,7 +67,6 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
           {{ tab.label }}
         </RouterLink>
       </li>
-
       <li class="flex justify-center">
         <RouterLink
           :to="{ name: 'add-expense' }"
@@ -108,7 +78,6 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
           </svg>
         </RouterLink>
       </li>
-
       <li v-for="tab in tabs.slice(2)" :key="tab.name" class="contents">
         <RouterLink
           :to="tab.to"
@@ -134,7 +103,6 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
     </ul>
   </nav>
 </template>
-
 <style scoped>
 .nav-tab-icon {
   display: flex;
@@ -150,8 +118,6 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
     background-color 150ms ease;
 }
 
-/* Stands proud of the bar, the same shape as the centre action. Colour alone was
-   easy to miss on a phone in daylight. */
 .nav-tab-active .nav-tab-icon {
   height: 3rem;
   width: 3rem;

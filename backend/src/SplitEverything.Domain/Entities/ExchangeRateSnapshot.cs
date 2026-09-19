@@ -1,6 +1,5 @@
 namespace SplitEverything.Domain.Entities;
 
-/// <summary>Daily Frankfurter rate, cached so conversions do not hit the network per expense.</summary>
 public class ExchangeRateSnapshot
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();

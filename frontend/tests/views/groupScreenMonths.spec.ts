@@ -13,7 +13,6 @@ import {
   textOf,
 } from '../support/viewHarness'
 
-/** Mutable, because the month to open is what the form puts in the URL. */
 let routeQuery: Record<string, string> = {}
 
 vi.mock('vue-router', () => ({
@@ -22,15 +21,6 @@ vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
 }))
 
-/**
- * Which month the group screen opens on.
- *
- * It groups by the month an expense was spent in and keeps every other heading
- * closed, which is right for reading and wrong for the moment just after adding:
- * an expense dated in August is filed correctly and, on a screen showing
- * September, invisibly. That is what somebody adding a stack of old receipts saw,
- * four times over, before concluding the app was dropping them.
- */
 describe('the month the group screen opens on', () => {
   const thisMonth = new Date()
   const iso = (when: Date) => when.toISOString()
@@ -41,7 +31,6 @@ describe('the month the group screen opens on', () => {
     spentAt: iso(new Date(thisMonth.getFullYear(), thisMonth.getMonth(), 2, 12)),
   })
 
-  /** Five months back, which no default would ever open. */
   const older = testExpense({
     id: 'expense-older',
     description: 'Corn dogs in August',
@@ -94,16 +83,9 @@ describe('the month the group screen opens on', () => {
     const { wrapper } = await mountGroup()
     await settle()
 
-    // Back to the ordinary default rather than a screen of closed headings.
     expect(textOf(wrapper)).toContain('Groceries this month')
   })
 
-  /**
-   * The list renders one window across every month that is open, so a month opened
-   * underneath another one used to land entirely behind the "show more". Tapping a
-   * heading and finding nothing under it looks exactly like the expenses not being
-   * there, which is how an evening of entry looked lost.
-   */
   it('shows a month when it is opened, however far down the list it starts', async () => {
     const olderMonthExpenses = Array.from({ length: 25 }, (_, index) =>
       testExpense({
@@ -124,7 +106,6 @@ describe('the month the group screen opens on', () => {
     await headings[headings.length - 1].trigger('click')
     await settle()
 
-    // The last of twenty-five, which is well past a twenty-row window.
     expect(textOf(wrapper)).toContain('Older 24')
   })
 

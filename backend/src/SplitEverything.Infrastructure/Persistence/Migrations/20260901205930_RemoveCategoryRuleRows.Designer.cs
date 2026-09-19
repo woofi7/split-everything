@@ -15,7 +15,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
     [Migration("20260901205930_RemoveCategoryRuleRows")]
     partial class RemoveCategoryRuleRows
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

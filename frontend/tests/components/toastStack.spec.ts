@@ -3,9 +3,6 @@ import { mount } from '@vue/test-utils'
 import ToastStack from '@/components/ui/ToastStack.vue'
 import { clearToasts, notify, toasts } from '@/ui/toasts'
 
-/**
- * Where the app says things: the top of the screen, over whatever is there.
- */
 describe('the toast stack', () => {
   beforeEach(clearToasts)
   afterEach(clearToasts)
@@ -32,8 +29,6 @@ describe('the toast stack', () => {
     const wrapper = mountStack()
     const [problem, confirmation] = wrapper.findAll('[data-testid="toast"]')
 
-    // A screen reader is told about a failure at once; a confirmation can wait for
-    // a gap, because nothing depends on hearing it.
     expect(problem.attributes('role')).toBe('alert')
     expect(problem.attributes('aria-live')).toBe('assertive')
     expect(confirmation.attributes('role')).toBe('status')

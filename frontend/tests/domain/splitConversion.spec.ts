@@ -1,16 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { calculateSplit, splitValuesFor } from '@/domain/splitting'
 
-/**
- * Carrying a split across a change of type.
- *
- * Switching from equal to percentage used to empty the form: the values meant
- * something different, so nothing was carried and the split became invalid until
- * every box was typed again. Switching type is usually the start of an
- * adjustment, not a reset, so the new values describe the division that was
- * already on screen.
- */
-
 const shares = (...amounts: number[]) =>
   amounts.map((amount, index) => ({ memberId: `m${index}`, amount }))
 
@@ -32,7 +22,6 @@ describe('splitValuesFor', () => {
   })
 
   it('makes percentages add up to exactly one hundred', () => {
-    // Three ways on 100 rounds to 33.33 each, which is 99.99 and refused.
     const values = splitValuesFor('Percentage', shares(33.34, 33.33, 33.33), 100)
 
     const sum = Object.values(values).reduce((total, value) => total + value, 0)
@@ -59,7 +48,6 @@ describe('splitValuesFor', () => {
   it('keeps the ratio when moving to shares', () => {
     const values = splitValuesFor('Shares', shares(40, 20), 60)
 
-    // Whatever the numbers, the division they describe has to be the same one.
     const inputs = Object.entries(values).map(([memberId, value]) => ({ memberId, value }))
     const result = calculateSplit(60, 'CAD', 'Shares', inputs)
 

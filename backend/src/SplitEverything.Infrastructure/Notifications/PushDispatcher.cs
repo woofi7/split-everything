@@ -6,14 +6,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Infrastructure.Notifications;
 
-/// <summary>
-/// Fans a message out to every subscription a user holds, across channels: native
-/// APNs/FCM for the Capacitor shells and Web Push for plain browsers.
-///
-/// Delivery is best effort by design. A notification is a nudge to open the app,
-/// never the mechanism that moves data, so a failed send must not fail the write
-/// that triggered it.
-/// </summary>
 public sealed class PushDispatcher(
     AppDbContext db,
     IEnumerable<IPushSender> senders,
@@ -61,7 +53,6 @@ public sealed class PushDispatcher(
             }
             catch (Exception ex)
             {
-                // One unreachable provider must not stop the others from delivering.
                 logger.LogWarning(ex, "Push to {Channel} failed", subscription.Channel);
                 subscription.FailingSince ??= clock.UtcNow;
             }

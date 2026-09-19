@@ -3,15 +3,6 @@ import { mount } from '@vue/test-utils'
 import PersonPicker from '@/components/groups/PersonPicker.vue'
 import type { AddableUser } from '@/api/types'
 
-/**
- * Finding someone who already has an account.
- *
- * The field used to demand a name typed exactly, and produced a placeholder
- * whatever you typed, so adding a real person was impossible from here. Fuzzy
- * matching over the people who actually exist is the difference between guessing
- * a spelling and picking someone.
- */
-
 const people: AddableUser[] = [
   { id: 'u1', displayName: 'Alice Anderson', email: 'alice@example.com', avatarUrl: null },
   { id: 'u2', displayName: 'Bob Brown', email: 'bob@example.com', avatarUrl: null },
@@ -30,7 +21,6 @@ describe('PersonPicker', () => {
   it('lists nobody until something is typed', () => {
     const wrapper = mountPicker()
 
-    // A bare directory dump is noise, and on a phone it pushes the form away.
     expect(wrapper.findAll('[data-testid="candidate"]')).toHaveLength(0)
   })
 
@@ -74,7 +64,6 @@ describe('PersonPicker', () => {
 
     await type(wrapper, 'ali')
 
-    // Otherwise a fuzzy hit looks arbitrary.
     expect(wrapper.find('[data-testid="candidate"] mark').exists()).toBe(true)
   })
 
@@ -122,8 +111,6 @@ describe('PersonPicker', () => {
 
     await type(wrapper, 'Dave')
 
-    // Not an offer to add them anyway: a member with no account behind them could
-    // never open the group, see what they owed, or be told about it.
     const answer = wrapper.find('[data-testid="no-match"]')
     expect(answer.exists()).toBe(true)
     expect(answer.text()).toContain('Dave')
@@ -169,7 +156,6 @@ describe('PersonPicker', () => {
 
     await wrapper.find('input[type="search"]').trigger('keydown', { key: 'Escape' })
 
-    // Closes the list without picking anyone, which is what Escape means.
     expect((wrapper.find('input[type="search"]').element as HTMLInputElement).value).toBe('')
     expect(wrapper.findAll('[data-testid="candidate"]')).toHaveLength(0)
     expect(wrapper.emitted('pick')).toBeFalsy()

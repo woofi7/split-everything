@@ -103,7 +103,6 @@ describe('ConflictsView', () => {
     await settle()
 
     expect(textOf(wrapper)).toContain('not found')
-    // It stays on the list, so the person can try again.
     expect(await db.conflicts.count()).toBe(1)
   })
 
@@ -161,13 +160,10 @@ describe('ConflictsView', () => {
       outbox: [testRejectedOperation({ status: 'pending', lastError: null })],
     })
 
-    // It used to say nothing needs attention while the header counted it as
-    // waiting to sync. A number with nothing behind it is not an answer.
     expect(textOf(wrapper)).not.toContain('Nothing needs your attention')
     expect(wrapper.findAll('[data-testid="waiting-operation"]')).toHaveLength(1)
     expect(textOf(wrapper)).toContain('waiting to be sent')
 
-    // Still not presented as a refusal: there is nothing to discard.
     expect(textOf(wrapper)).not.toContain('the server refused')
   })
 
@@ -186,12 +182,6 @@ describe('ConflictsView', () => {
     expect(textOf(wrapper)).toContain('Nothing needs your attention')
   })
 
-  /**
-   * The last resort for a replica that has diverged.
-   *
-   * Every screen reads from the local replica, so when it is wrong there is
-   * nothing else to look at and no way to argue with it from inside the app.
-   */
   describe('reloading everything from the server', () => {
     it('does not throw the replica away on one tap', async () => {
       const { wrapper, expensesStore } = await mountView(ConflictsView)
@@ -215,7 +205,6 @@ describe('ConflictsView', () => {
       await wrapper.find('[data-testid="reset-replica"]').trigger('click')
       await settle(1)
 
-      // The one thing the server cannot give back.
       expect(textOf(wrapper)).toContain('2 change(s) that have not reached the server')
     })
 
@@ -228,8 +217,6 @@ describe('ConflictsView', () => {
       await wrapper.find('[data-testid="reset-replica-confirm"]').trigger('click')
       await settle()
 
-      // Groups come from their own endpoint rather than from the sync log, so a
-      // pull alone leaves every expense with no group to hang on.
       expect(loadAll).toHaveBeenCalled()
     })
 
@@ -259,12 +246,6 @@ describe('ConflictsView', () => {
     })
   })
 
-  /**
-   * Sending what is waiting, on purpose.
-   *
-   * The queue drains by itself when a connection returns, but "by itself" is not
-   * something somebody staring at a count of three can watch happen.
-   */
   describe('sending the queue', () => {
     const waiting = () => ({
       outbox: [testRejectedOperation({ operationId: 'op-waiting', status: 'pending' })],
@@ -299,7 +280,6 @@ describe('ConflictsView', () => {
       await wrapper.find('[data-testid="sync-now"]').trigger('click')
       await settle()
 
-      // Offline is why the queue exists in the first place.
       expect(textOf(wrapper)).toContain('offline')
     })
 

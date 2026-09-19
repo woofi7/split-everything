@@ -8,6 +8,5 @@ public interface IReceiptService
 {
     Task<ReceiptDto> UploadAsync(Guid userId, Stream content, string contentType, string? fileName, CancellationToken ct = default);
 
-    /// <summary>Only members of a group the receipt is attached to may read it.</summary>
     Task<ReceiptContent> DownloadAsync(Guid userId, Guid receiptId, CancellationToken ct = default);
 }

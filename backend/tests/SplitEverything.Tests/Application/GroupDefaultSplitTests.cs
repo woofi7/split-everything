@@ -7,14 +7,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// How a group splits by default.
-///
-/// A household that always divides rent sixty forty had to say so on every
-/// expense. This is a group setting rather than a device preference, because how
-/// a household divides its costs is a fact about the household: it should hold on
-/// whichever phone the next expense is typed on.
-/// </summary>
 public class GroupDefaultSplitTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
@@ -76,8 +68,6 @@ public class GroupDefaultSplitTests(PostgresFixture fixture) : ServiceTestBase(f
 
         var updated = await Groups.UpdateAsync(userId, group.Id, Default(SplitType.Equal));
 
-        // An equal split needs no values, and keeping them would resurrect an old
-        // ratio the next time someone chose shares.
         updated.DefaultSplitType.ShouldBe(SplitType.Equal);
         updated.DefaultSplitValues.ShouldBeNull();
     }
@@ -103,7 +93,6 @@ public class GroupDefaultSplitTests(PostgresFixture fixture) : ServiceTestBase(f
         await Groups.UpdateAsync(userId, group.Id, Default(
             SplitType.Shares, new Dictionary<Guid, decimal> { [alice] = 2m, [bob] = 1m }));
 
-        // A patch that renames the group must not reset how it splits.
         var updated = await Groups.UpdateAsync(userId, group.Id,
             new UpdateGroupRequest("Flat", null, null, null, null));
 
@@ -117,7 +106,6 @@ public class GroupDefaultSplitTests(PostgresFixture fixture) : ServiceTestBase(f
     {
         var (userId, group, alice, _) = await SetupAsync();
 
-        // It would sit in the group forever, silently ignored by every form.
         await Should.ThrowAsync<ValidationException>(() => Groups.UpdateAsync(userId, group.Id,
             Default(SplitType.Shares, new Dictionary<Guid, decimal>
             {
@@ -142,8 +130,6 @@ public class GroupDefaultSplitTests(PostgresFixture fixture) : ServiceTestBase(f
         var other = await TestData.SeedUserAsync(Db, "Carol", "carol@example.com", "google-carol");
         await Groups.AddUserMemberAsync(userId, group.Id, new AddUserMemberRequest(other.Id));
 
-        // It changes what everyone else's next expense does, so it is not a
-        // per-member preference.
         await Should.ThrowAsync<ForbiddenException>(() =>
             Groups.UpdateAsync(other.Id, group.Id, Default(SplitType.Shares)));
     }
@@ -156,13 +142,9 @@ public class GroupDefaultSplitTests(PostgresFixture fixture) : ServiceTestBase(f
         var context = NewContext();
         var stored = await context.Groups.SingleAsync(g => g.Id == group.Id);
         stored.DefaultSplitType = SplitType.Shares;
-        // Valid JSON, wrong shape. Postgres refuses outright invalid JSON in a
-        // jsonb column, so this is the case the guard is actually for: a shape
-        // written by an older version of this app.
         stored.DefaultSplitValuesJson = "[1, 2, 3]";
         await context.SaveChangesAsync();
 
-        // It must not stop the group loading.
         var read = await Groups.GetAsync(userId, group.Id);
         read.DefaultSplitValues.ShouldBeNull();
     }
@@ -175,7 +157,6 @@ public class GroupDefaultSplitTests(PostgresFixture fixture) : ServiceTestBase(f
         await Groups.UpdateAsync(userId, group.Id, Default(
             SplitType.Percentage, new Dictionary<Guid, decimal> { [alice] = 60m, [bob] = 40m }));
 
-        // So another device learns it from the delta pull, not only a full read.
         var entry = await NewContext().SyncLog
             .Where(e => e.GroupId == group.Id && e.EntityType == SyncEntityType.Group)
             .OrderByDescending(e => e.ServerSeq)

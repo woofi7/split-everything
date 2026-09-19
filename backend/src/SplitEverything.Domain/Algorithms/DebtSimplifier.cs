@@ -6,20 +6,8 @@ public sealed record MemberBalance(Guid MemberId, decimal Net);
 
 public sealed record DebtTransfer(Guid FromMemberId, Guid ToMemberId, decimal Amount);
 
-/// <summary>
-/// Reduces a web of pairwise debts to the fewest transfers that settle everyone.
-///
-/// Only the net position of each member matters, so the input is collapsed to one
-/// number per person and then matched greedily: biggest debtor pays the biggest
-/// creditor, repeat. Each round fully clears at least one participant, which caps
-/// the result at n-1 transfers - optimal in transfer count for the general case.
-/// </summary>
 public static class DebtSimplifier
 {
-    /// <param name="balances">
-    /// Net position per member: positive when the group owes them, negative when
-    /// they owe the group. Must sum to zero within rounding tolerance.
-    /// </param>
     public static IReadOnlyList<DebtTransfer> Simplify(
         IReadOnlyList<MemberBalance> balances, string currency = "CAD")
     {
@@ -39,8 +27,6 @@ public static class DebtSimplifier
         if (creditors.Count == 0 || debtors.Count == 0)
             return Array.Empty<DebtTransfer>();
 
-        // Descending by amount, id as tie-break so the plan is deterministic across
-        // devices computing it offline from the same data.
         creditors.Sort(Compare);
         debtors.Sort(Compare);
 

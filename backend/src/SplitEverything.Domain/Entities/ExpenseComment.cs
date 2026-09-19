@@ -9,7 +9,6 @@ public class ExpenseComment : SyncableEntity
     public Guid AuthorMemberId { get; set; }
     public GroupMember? AuthorMember { get; set; }
 
-    /// <summary>Null for a top-level comment; set for a reply (single level of threading).</summary>
     public Guid? ParentCommentId { get; set; }
     public ExpenseComment? ParentComment { get; set; }
 

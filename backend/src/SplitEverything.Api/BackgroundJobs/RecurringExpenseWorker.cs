@@ -3,13 +3,6 @@ using SplitEverything.Application.Services;
 
 namespace SplitEverything.Api.BackgroundJobs;
 
-/// <summary>
-/// Materialises due recurring expenses.
-///
-/// Runs hourly rather than daily so a container restart cannot skip a day, and the
-/// service itself backfills anything missed, so the schedule is a hint rather than
-/// a guarantee the data depends on.
-/// </summary>
 public sealed class RecurringExpenseWorker(
     IServiceScopeFactory scopes,
     IClock clock,
@@ -20,7 +13,6 @@ public sealed class RecurringExpenseWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Let the app finish starting and migrations finish applying first.
         if (_schedule.StartupDelay > TimeSpan.Zero)
             await Task.Delay(_schedule.StartupDelay, stoppingToken);
 
@@ -42,8 +34,6 @@ public sealed class RecurringExpenseWorker(
             }
             catch (Exception ex)
             {
-                // Never let a bad run kill the worker: the next tick retries, and the
-                // backfill means nothing is lost in the meantime.
                 logger.LogError(ex, "Recurring expense run failed");
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));

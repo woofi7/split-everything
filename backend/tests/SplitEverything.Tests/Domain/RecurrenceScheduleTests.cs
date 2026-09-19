@@ -45,7 +45,6 @@ public class RecurrenceScheduleTests
     [Fact]
     public void A_clamped_rule_returns_to_its_real_day_the_following_month()
     {
-        // Rent on the 31st: February pays on the 28th, March goes back to the 31st.
         var february = RecurrenceSchedule.Next(Date(2026, 1, 31), RecurrenceUnit.Month, 1, dayOfMonth: 31);
         var march = RecurrenceSchedule.Next(february, RecurrenceUnit.Month, 1, dayOfMonth: 31);
 
@@ -76,7 +75,6 @@ public class RecurrenceScheduleTests
     [Fact]
     public void Occurrences_backfills_every_run_missed_while_the_app_was_down()
     {
-        // Monthly rule starting in January, nothing ran until May.
         var occurrences = RecurrenceSchedule.Occurrences(
             start: Date(2026, 1, 1),
             after: Date(2025, 12, 31),

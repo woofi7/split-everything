@@ -23,11 +23,7 @@ describe('AppShell', () => {
 
     const icon = wrapper.find('[data-testid="app-icon"]')
     expect(icon.exists()).toBe(true)
-    // Vite inlines a file this small as a data URI, so the source is checked
-    // for being the mark rather than for a literal path.
     expect(icon.attributes('src')).toMatch(/svg/)
-    // Decorative: the title beside it already says the name, and a screen reader
-    // announcing both would say it twice.
     expect(icon.attributes('alt')).toBe('')
   })
 
@@ -47,7 +43,6 @@ describe('AppShell', () => {
   it('leaves the subtitle out when there is none', () => {
     const wrapper = mountShell({})
 
-    // Nothing to say about sync either, so the page starts with the title alone.
     expect(wrapper.findAll('p')).toHaveLength(0)
   })
 
@@ -64,7 +59,6 @@ describe('AppShell', () => {
     expect(back.classes()).toContain('btn-secondary')
     expect(back.classes()).toContain('rounded-full')
 
-    // On the title's own row, not a row of its own above it.
     const row = wrapper.find('[data-testid="title-row"]')
     expect(row.find('[data-testid="back"]').exists()).toBe(true)
   })
@@ -75,8 +69,6 @@ describe('AppShell', () => {
       { 'header-action': '<button>Change</button>' },
     )
 
-    // Back is the one control that is not about this page but about leaving it, so
-    // it takes the corner.
     const html = wrapper.html()
     expect(html.indexOf('Change')).toBeLessThan(html.indexOf('data-testid="back"'))
   })
@@ -86,8 +78,6 @@ describe('AppShell', () => {
 
     const wrapper = mountShell({ backTo: { name: 'group' }, backLabel: 'Group' })
 
-    // Reached from the activity feed, so that is where back leads and what it
-    // should say - whatever the screen itself declares it belongs under.
     expect(wrapper.find('[data-testid="back"]').attributes('aria-label')).toBe('Back to Activity')
 
     window.history.replaceState(null, '')
@@ -109,7 +99,6 @@ describe('AppShell', () => {
   it('puts the page action on the title line', () => {
     const wrapper = mountShell({}, { 'header-action': '<button>Change</button>' })
 
-    // It acts on this page, so the two are read together.
     const row = wrapper.find('[data-testid="title-row"]')
     expect(row.find('button').text()).toBe('Change')
   })
@@ -128,7 +117,6 @@ describe('AppShell', () => {
   it('has no fixed chrome at the top', () => {
     const wrapper = mountShell({})
 
-    // The page is the page. The only fixed furniture is the tab bar.
     expect(wrapper.find('header').exists()).toBe(false)
     expect(wrapper.find('.sticky').exists()).toBe(false)
   })
@@ -136,8 +124,6 @@ describe('AppShell', () => {
   it('says nothing about sync when there is nothing to say', () => {
     const wrapper = mountShell({})
 
-    // "All synced" on every screen forever reports that nothing is wrong, which
-    // is not news.
     expect(wrapper.text()).not.toContain('All synced')
   })
 
@@ -150,7 +136,6 @@ describe('AppShell', () => {
   it('clears the notch at the top of the page', () => {
     const wrapper = mountShell({})
 
-    // With no header, the content itself has to clear the status bar.
     expect(wrapper.find('main').classes().join(' ')).toContain('safe-area-inset-top')
   })
 
@@ -168,7 +153,6 @@ describe('AppShell', () => {
   })
 
   it('hides the bottom nav on a focused screen', () => {
-    // A form screen has its own way back; a tab bar there invites losing input.
     const wrapper = mountShell({ showNav: false })
 
     expect(wrapper.find('nav').exists()).toBe(false)
@@ -178,27 +162,15 @@ describe('AppShell', () => {
     const withNav = mountShell({})
     const withoutNav = mountShell({ showNav: false })
 
-    // The bar is a row of the frame rather than something over the page, so this
-    // is clearance for the button that stands proud of it, not for the bar.
     expect(withNav.find('main').classes()).toContain('pb-10')
     expect(withoutNav.find('main').classes()).toContain('pb-[max(2rem,env(safe-area-inset-bottom))]')
   })
 
-  /**
-   * The shell is a frame the height of the screen, and the page scrolls inside it.
-   *
-   * Not a detail of styling: while the window was the thing that scrolled, a phone
-   * slid its own toolbar in and out as it went, and everything pinned to the
-   * bottom of the screen moved with it. A swipe across the screen that leaked a
-   * few pixels of scroll took the tab bar off the bottom of the screen with it.
-   */
   describe('as a frame', () => {
     it('scrolls the page rather than the window', () => {
       const main = mountShell({}).find('main')
 
       expect(main.classes()).toContain('overflow-y-auto')
-      // Without this a flex child refuses to be shorter than its content, and the
-      // frame grows instead of the page scrolling.
       expect(main.classes()).toContain('min-h-0')
       expect(main.classes()).toContain('flex-1')
     })
@@ -212,8 +184,6 @@ describe('AppShell', () => {
     it('holds the tab bar in the frame rather than over the page', () => {
       const nav = mountShell({}).find('nav')
 
-      // Pinned, it was placed against the viewport, and a phone changes what that
-      // means every time it slides its toolbar about.
       expect(nav.classes()).not.toContain('fixed')
       expect(nav.classes()).toContain('shrink-0')
     })
@@ -237,8 +207,6 @@ describe('BottomNav', () => {
   it('lifts the tab you are on into a circle', () => {
     const wrapper = mountNav()
 
-    // Every tab carries the icon holder; the active class is what grows it, so the
-    // holder has to be a element of its own rather than the svg.
     const holders = wrapper.findAll('[data-testid="tab-icon"]')
     expect(holders).toHaveLength(4)
     expect(holders[0].classes()).toContain('nav-tab-icon')
@@ -248,7 +216,6 @@ describe('BottomNav', () => {
     const wrapper = mountNav()
 
     const items = wrapper.findAll('li')
-    // Two tabs, the action, then two more tabs.
     expect(items).toHaveLength(5)
     expect(items[2].find('[aria-label="Add an expense"]').exists()).toBe(true)
   })

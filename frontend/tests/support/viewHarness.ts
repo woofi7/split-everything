@@ -25,18 +25,6 @@ export const ALICE = 'member-alice'
 export const BOB = 'member-bob'
 export const USER_ID = 'user-1'
 
-/**
- * Lets pending microtasks and IndexedDB transactions finish.
- *
- * fake-indexeddb resolves its transactions on a macrotask, so a microtask flush
- * alone never sees the mounted state of a view that reads the local replica.
- */
-/**
- * Waits for a condition rather than a fixed number of turns.
- *
- * A background drain crosses several macrotasks and fake-indexeddb resolves on a
- * macrotask, so counting turns is a race that only shows up under load.
- */
 export async function waitFor(
   condition: () => boolean | Promise<boolean>,
   turns = 200,
@@ -50,14 +38,6 @@ export async function waitFor(
   throw new Error('Timed out waiting for the expected state.')
 }
 
-/**
- * Turns the wheel a fixed number of times.
- *
- * Prefer `waitFor` for anything asynchronous: a count that is enough on a quiet
- * machine is not enough under load, which has cost real time here twice. This is
- * for letting reactivity catch up after a synchronous change, where the number of
- * turns is not a guess.
- */
 export async function settle(turns = 5): Promise<void> {
   for (let i = 0; i < turns; i++) {
     await flushPromises()
@@ -197,20 +177,10 @@ export interface FakeApi {
   upload: ReturnType<typeof vi.fn>
 }
 
-/**
- * An API that answers the reads a view makes, and records the writes.
- *
- * Patterns are matched longest first, so a specific route is never shadowed by a
- * shorter prefix. Insertion order would make '/groups' swallow
- * '/groups/x/invites' and let a test pass against the wrong response.
- */
 export function fakeApi(routes: Record<string, unknown> = {}): FakeApi {
   const patterns = Object.keys(routes).sort((left, right) => right.length - left.length)
 
   const answer = (path: string) => {
-    // A group's categories, unless a test says otherwise. Without this the
-    // '/groups' route answers it with a group, because it is a longer path that
-    // starts the same way.
     if (path.endsWith('/categories') && !patterns.includes(path)) return []
 
     for (const pattern of patterns) {
@@ -225,8 +195,6 @@ export function fakeApi(routes: Record<string, unknown> = {}): FakeApi {
   return {
     get: vi.fn(async (path: string) => answer(path)),
     post: vi.fn(async (path: string) => answer(path)),
-    // A request whose 401 is an answer rather than a sign-out. Nothing routed
-    // means no session, which is what a fresh device looks like.
     probe: vi.fn(async (path: string) => answer(path)),
     patch: vi.fn(async (path: string) => answer(path)),
     put: vi.fn(async (path: string) => answer(path)),
@@ -258,12 +226,6 @@ export function fakeSyncApi() {
   }
 }
 
-/**
- * Puts a session in the auth store.
- *
- * The sync path refuses to talk to the server as nobody, so a store-level test
- * that drives a push or a pull needs a session for the same reason the app does.
- */
 export function signInForTests(
   overrides: Partial<typeof testUser & { isAdmin: boolean }> = {},
 ): ReturnType<typeof useAuthStore> {
@@ -285,13 +247,10 @@ export interface MountViewOptions {
   settlements?: LocalSettlement[]
   comments?: LocalComment[]
   conflicts?: LocalConflict[]
-  /** The feed as this device last stored it, which is what it shows offline. */
   activity?: LocalActivity[]
   outbox?: OutboxOperation[]
   signedIn?: boolean
-  /** Who is signed in, for the few screens that ask something about them. */
   user?: Partial<typeof testUser & { isAdmin: boolean }>
-  /** Whose device this is, as restore() would have set it before any view mounts. */
   rememberedAccount?: { email: string; displayName: string; avatarUrl: string | null }
   online?: boolean
 }
@@ -304,22 +263,15 @@ export interface MountedView {
   expensesStore: ReturnType<typeof useExpensesStore>
 }
 
-/**
- * Mounts a view over the real stores and the real local replica, with only the
- * API faked. That keeps the tests honest about what the view does with real store
- * state, rather than asserting against a mocked store.
- */
 export async function mountView(
   component: Component,
   options: MountViewOptions = {},
 ): Promise<MountedView> {
   setActivePinia(createPinia())
   localStorage.clear()
-  // Nothing announced on the last screen carries over to this one.
   clearToasts()
   await resetDatabase()
 
-  // Seeded before mount, because a view reads the local replica in onMounted.
   const groups = options.groups ?? [testGroup()]
   for (const group of groups) await db.groups.put(group)
   for (const expense of options.expenses ?? []) await db.expenses.put(expense)
@@ -341,16 +293,12 @@ export async function mountView(
 
   const expensesStore = useExpensesStore()
   expensesStore.attachSync(new SyncEngine(fakeSyncApi(), () => options.online ?? false))
-  // For the writes that cannot be queued - moving an expense, cancelling debts
-  // across two groups - which the store asks for directly, as the app does.
   expensesStore.attachApi(api as never)
 
   const wrapper = mount(component, {
     global: {
       stubs: {
         RouterLink: RouterLinkStub,
-        // The icon picker teleports to the body to escape any clipping parent.
-        // Stubbing it renders inline, which is what lets the wrapper query it.
         teleport: true,
       },
     },
@@ -361,20 +309,11 @@ export async function mountView(
   return { wrapper, api, auth, groupsStore, expensesStore }
 }
 
-/**
- * What the screen says, collapsed for readable assertions.
- *
- * The view's own text plus anything in the toasts, because that is what a person
- * in front of it reads: failures and confirmations are announced at the top of the
- * screen now rather than in a line of text somewhere down the page, and a test that
- * could only see the page would think the app had gone quiet.
- */
 export function textOf(wrapper: VueWrapper): string {
   const said = toasts.value.map((toast) => toast.text).join(' ')
   return `${wrapper.text()} ${said}`.replace(/\s+/g, ' ').trim()
 }
 
-/** Just the toasts, for asserting what was announced and what was not. */
 export function saidOnScreen(): string[] {
   return toasts.value.map((toast) => toast.text)
 }

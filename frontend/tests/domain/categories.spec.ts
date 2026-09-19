@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { categoriseByKeywords, categoryFor, fold, type Category } from '@/domain/categories'
 
-/**
- * Filing an expense by what it is called.
- *
- * The dropdown is not the feature; the guess is. Nobody fills in a category on
- * every expense, which is exactly why categories were deleted from this app once
- * already - so the only version worth having is one that is usually right before
- * anybody looks at it.
- */
 const category = (key: string, keywords: string[], sortOrder = 0): Category => ({
   key,
   name: key,
@@ -32,8 +24,6 @@ describe('filing an expense by what it is called', () => {
   })
 
   it('lets the longest keyword win', () => {
-    // "uber eats" has to beat "uber", or every takeaway is filed as a taxi - and
-    // the taxi category comes first in the list, so order cannot be what decides.
     expect(categoriseByKeywords('UBER EATS Montreal', list)).toBe('dining')
   })
 
@@ -60,8 +50,6 @@ describe('filing an expense by what it is called', () => {
   it('names the category a key belongs to, and admits when it cannot', () => {
     expect(categoryFor('groceries', list)?.key).toBe('groceries')
 
-    // A category the group has since removed. The expense keeps the key, and the
-    // screen shows it as unfiled rather than inventing a name for it.
     expect(categoryFor('ski', list)).toBeNull()
     expect(categoryFor(null, list)).toBeNull()
   })

@@ -1,17 +1,7 @@
 <script setup lang="ts">
 import { ACCENT_THEMES, type AccentTheme } from '@/domain/themes'
 
-/**
- * The accent the whole application wears.
- *
- * Eight of them, drawn from their own shades so a swatch is the answer to what
- * the app will look like rather than a label promising it. Each one shows its
- * light tint and its fill together, because both are on screen everywhere: the
- * fill on buttons and the tab you are on, the tint on links and small marks.
- */
-
 const props = defineProps<{
-  /** The theme on now, by name. */
   value: string
   label: string
 }>()
@@ -20,7 +10,6 @@ const emit = defineEmits<{ pick: [name: string] }>()
 
 const isCurrent = (theme: AccentTheme) => theme.name === props.value
 </script>
-
 <template>
   <ul class="grid grid-cols-4 gap-2" :aria-label="props.label">
     <li v-for="theme in ACCENT_THEMES" :key="theme.name">

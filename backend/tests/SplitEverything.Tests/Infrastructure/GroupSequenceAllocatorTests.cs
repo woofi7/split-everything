@@ -5,11 +5,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Infrastructure;
 
-/// <summary>
-/// The per-group cursor every delta pull depends on. If it ever hands the same
-/// number to two writers, a client's "everything after N" pull silently skips a
-/// change, so the concurrency behaviour is the point of these tests.
-/// </summary>
 public class GroupSequenceAllocatorTests(PostgresFixture fixture) : DatabaseTestBase(fixture)
 {
     [Fact]
@@ -70,8 +65,6 @@ public class GroupSequenceAllocatorTests(PostgresFixture fixture) : DatabaseTest
         await allocator.NextAsync(group.Id);
         await allocator.NextAsync(group.Id);
 
-        // A caller that goes on to renumber rows from this counter would otherwise
-        // reuse numbers already handed out and collide on (group, seq).
         tracked.SequenceCounter.ShouldBe(2);
     }
 
@@ -99,8 +92,6 @@ public class GroupSequenceAllocatorTests(PostgresFixture fixture) : DatabaseTest
         var (group, _) = await SeedAsync();
         const int writers = 24;
 
-        // Separate contexts, so this really is 24 connections racing on one row
-        // rather than one change tracker serialising them for us.
         var results = await Task.WhenAll(Enumerable.Range(0, writers).Select(async _ =>
         {
             await using var context = NewContext();

@@ -6,24 +6,10 @@ import { fuzzySearch } from '@/domain/fuzzySearch'
 import { resolveIcon } from '@/domain/icons'
 import { categoryFor, type Category } from '@/domain/categories'
 
-/**
- * Choosing what an expense was for.
- *
- * A dropdown of fourteen things is a dropdown nobody reads to the end, and the
- * one word somebody has in mind is faster to type than to find: so this is a
- * search box with a list under it, matching names and the keywords behind them -
- * type "metro" and Groceries comes up, even though the word is not in its name.
- *
- * And when nothing matches, the answer is not "no results". It is the category
- * they were about to want: the list is theirs to extend, and the moment they need
- * one that is not there is the only moment they will ever bother adding it.
- */
-
 const props = withDefaults(
   defineProps<{
     modelValue: string | null
     categories: Category[]
-    /** True while the app filled this in rather than the person. */
     isGuess?: boolean
     isCreating?: boolean
   }>(),
@@ -44,35 +30,20 @@ const search = useTemplateRef<HTMLInputElement>('search')
 
 const chosen = computed(() => categoryFor(props.modelValue, props.categories))
 
-/** What the closed control says: the category, a key nothing answers to, or nothing. */
 const label = computed(() => chosen.value?.name ?? props.modelValue ?? t('Not filed'))
 
 const trimmed = computed(() => query.value.trim())
 
-/**
- * The whole list until something is typed.
- *
- * Unlike finding a person, the list here is short and the reader may well not
- * know what is in it - which is half of what they are opening it to find out.
- */
 const results = computed(() =>
   trimmed.value.length === 0
     ? props.categories.slice(0, RESULTS).map((item) => ({ item, indices: [] as number[], fieldIndex: 0 }))
     : fuzzySearch(trimmed.value, props.categories, fields, RESULTS),
 )
 
-/** The name first, so a name match outranks one of its keywords. */
 function fields(category: Category): readonly string[] {
   return [category.name, (category.keywords ?? []).join(' ')]
 }
 
-/**
- * Whether to offer making one.
- *
- * Offered whenever what is typed is not already a category's name, rather than
- * only when nothing matches: "Ski" fuzzy-matches "Shopping" on two letters, and
- * that is no reason to hide the thing they are actually asking for.
- */
 const canCreate = computed(
   () =>
     trimmed.value.length > 0 &&
@@ -81,7 +52,6 @@ const canCreate = computed(
     ),
 )
 
-/** Every row the arrow keys walk: the matches, then create, then not filed. */
 const rowCount = computed(() => results.value.length + (canCreate.value ? 1 : 0) + 1)
 
 watch([results, canCreate], () => {
@@ -117,7 +87,6 @@ function create(): void {
   close()
 }
 
-/** Enter takes whatever the highlight is on, in the order the list is drawn. */
 function onEnter(): void {
   if (activeIndex.value < results.value.length) {
     choose(results.value[activeIndex.value].item.key)
@@ -132,7 +101,6 @@ function onEnter(): void {
   choose(null)
 }
 
-/** Splits a name around the matched letters, so a fuzzy hit is legible. */
 function segments(value: string, indices: number[]): Array<{ text: string; matched: boolean }> {
   const matched = new Set(indices)
   const parts: Array<{ text: string; matched: boolean }> = []
@@ -154,7 +122,6 @@ function nameSegments(result: { item: Category; indices: number[]; fieldIndex: n
     : [{ text: result.item.name, matched: false }]
 }
 
-/** The keyword that brought a category up, when its name did not. */
 function matchedOn(result: { item: Category; fieldIndex: number }): string | null {
   if (result.fieldIndex !== 1) return null
 
@@ -162,7 +129,6 @@ function matchedOn(result: { item: Category; fieldIndex: number }): string | nul
   return (result.item.keywords ?? []).find((word) => word.includes(needle)) ?? null
 }
 </script>
-
 <template>
   <div class="relative">
     <button
@@ -186,12 +152,6 @@ function matchedOn(result: { item: Category; fieldIndex: number }): string | nul
       </span>
       <span class="shrink-0 text-xs text-[var(--text-muted)]" aria-hidden="true">&#9662;</span>
     </button>
-
-    <!--
-      Over the form rather than in it: opening a picker should not move the fields
-      under somebody's thumb, and this one sits in the middle of a form built to
-      fit one screen.
-    -->
     <div
       v-if="isOpen"
       class="absolute inset-x-0 z-20 mt-1 overflow-hidden rounded-lg border shadow-lg"
@@ -213,7 +173,6 @@ function matchedOn(result: { item: Category; fieldIndex: number }): string | nul
         @keydown.enter.prevent="onEnter"
         @keydown.esc.prevent="close"
       />
-
       <ul id="category-picker-results" role="listbox" class="max-h-64 overflow-y-auto">
         <li
           v-for="(result, index) in results"
@@ -239,14 +198,12 @@ function matchedOn(result: { item: Category; fieldIndex: number }): string | nul
               <template v-else>{{ part.text }}</template>
             </template>
           </span>
-          <!-- Why this one came up, when the name is not what matched. -->
           <span
             v-if="matchedOn(result)"
             class="shrink-0 truncate text-xs text-[var(--text-muted)]"
           >{{ matchedOn(result) }}
           </span>
         </li>
-
         <li
           v-if="canCreate"
           data-testid="category-create"
@@ -261,7 +218,6 @@ function matchedOn(result: { item: Category; fieldIndex: number }): string | nul
           <span aria-hidden="true">+</span>
           <span class="min-w-0 flex-1 truncate">{{ t('Add "{name}"', { name: trimmed }) }}</span>
         </li>
-
         <li
           data-testid="category-none"
           role="option"
@@ -274,8 +230,6 @@ function matchedOn(result: { item: Category; fieldIndex: number }): string | nul
         </li>
       </ul>
     </div>
-
-    <!-- Closes on a press anywhere else, which is what a dropdown does. -->
     <div v-if="isOpen" class="fixed inset-0 z-10" aria-hidden="true" @click="close" />
   </div>
 </template>

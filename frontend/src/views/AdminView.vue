@@ -13,21 +13,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
 import { notify, report } from '@/ui/toasts'
 
-/**
- * Every group on the server, for whoever runs it.
- *
- * The rest of the application is scoped by membership, which is right and leaves
- * the person whose machine this is unable to answer the questions only they get
- * asked: what is on the disk, and can this abandoned group finally go. Six groups
- * called "Nicoco & Emmouuu", five of them archived leftovers of a transfer, and no
- * way to be rid of them.
- *
- * Read from the server rather than from the replica, because the point is the
- * groups this device has never seen. Deleting is the one destructive action in the
- * application, so it asks for the group's name to be typed - not a second button
- * beside the first, which is a reflex away from the first.
- */
-
 const api = useApi()
 const auth = useAuthStore()
 const groups = useGroupsStore()
@@ -52,14 +37,10 @@ interface AdminGroup {
 const all = ref<AdminGroup[]>([])
 const isLoading = ref(true)
 
-/** Which group is being deleted, and what has been typed to confirm it. */
 const deleting = ref<string | null>(null)
 const typedName = ref('')
 const isDeleting = ref(false)
 
-// Only for whoever runs the server: anybody else would be asking for a refusal,
-// and a screen that greets them with a red error rather than a plain sentence
-// reads like something broke.
 onMounted(() => {
   if (auth.user?.isAdmin) {
     void load()
@@ -69,10 +50,6 @@ onMounted(() => {
   }
 })
 
-/**
- * The server's own category list: what every group starts from, and what a group
- * keeps seeing until it edits its own.
- */
 const categories = ref<Category[]>([])
 const isSavingCategories = ref(false)
 
@@ -124,7 +101,6 @@ function cancelDelete(): void {
   typedName.value = ''
 }
 
-/** Typed exactly, because the next thing that happens cannot be undone. */
 const canDelete = (group: AdminGroup) => typedName.value.trim() === group.name
 
 async function remove(group: AdminGroup): Promise<void> {
@@ -138,9 +114,6 @@ async function remove(group: AdminGroup): Promise<void> {
     notify(t('{name} is gone.', { name: group.name }), 'done')
     cancelDelete()
 
-    // This device may have been in it. Reading the list again drops it from the
-    // group picker and from the local replica rather than leaving a group nobody
-    // can open.
     await groups.loadAll()
   } catch (caught) {
     report(caught, t('Could not delete that group.'))
@@ -152,7 +125,6 @@ async function remove(group: AdminGroup): Promise<void> {
 const on = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null
 </script>
-
 <template>
   <AppShell
     :title="t('Server groups')"
@@ -163,11 +135,8 @@ const on = (iso: string | null) =>
     <p v-if="!auth.user?.isAdmin" class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
       {{ t('This is for whoever runs this server.') }}
     </p>
-
     <template v-else>
       <p v-if="isLoading" class="py-12 text-center text-[var(--text-muted)]">{{ t('Loading') }}</p>
-
-
       <section
         v-for="section in [
           { key: 'live', title: t('In use'), rows: live },
@@ -177,7 +146,6 @@ const on = (iso: string | null) =>
         <h2 v-if="section.rows.length > 0" class="mb-2 text-sm font-medium text-[var(--text-muted)]">
           {{ section.title }}
         </h2>
-
         <ul class="flex flex-col gap-2">
           <li
             v-for="group in section.rows"
@@ -194,7 +162,6 @@ const on = (iso: string | null) =>
               >
                 <FontAwesomeIcon :icon="iconOf(group).definition" class="h-4 w-4" />
               </span>
-
               <span class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate font-medium">{{ group.name }}</span>
                 <span class="truncate text-xs text-[var(--text-muted)]">
@@ -205,7 +172,6 @@ const on = (iso: string | null) =>
                   {{ formatMoney(group.totalSpend, group.baseCurrency) }}
                 </span>
               </span>
-
               <button
                 v-if="group.isArchived && deleting !== group.id"
                 type="button"
@@ -216,7 +182,6 @@ const on = (iso: string | null) =>
               >{{ t('Delete') }}
               </button>
             </div>
-
             <p class="mt-1 text-xs text-[var(--text-muted)]">
               {{ t('Made by {name}', { name: group.createdByName }) }}
               <template v-if="on(group.lastActivityAt)">
@@ -227,18 +192,12 @@ const on = (iso: string | null) =>
                 <span aria-hidden="true"> - </span>{{ t("you're in it") }}
               </template>
             </p>
-
-            <!--
-              The name, typed. There is no undo behind this and no backup but the
-              server's own, so it cannot be a button next to a button.
-            -->
             <div v-if="deleting === group.id" class="mt-3 flex flex-col gap-2">
               <p class="text-xs text-[var(--text-muted)]">
                 {{ t('This removes the group and everything in it: {expenses} expenses, every settlement, every comment. It cannot be undone. Type its name to confirm.', {
                   expenses: group.expenseCount,
                 }) }}
               </p>
-
               <input
                 v-model="typedName"
                 type="text"
@@ -247,7 +206,6 @@ const on = (iso: string | null) =>
                 class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3 text-sm"
                 style="border-color: var(--border)"
               />
-
               <div class="flex gap-2">
                 <button
                   type="button"
@@ -271,19 +229,11 @@ const on = (iso: string | null) =>
           </li>
         </ul>
       </section>
-
       <p v-if="!isLoading && all.length === 0" class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
         {{ t('No groups on this server.') }}
       </p>
-
-      <!--
-        The list every group starts from. Editing it reaches every group that has
-        never edited its own, and none of the ones that have - which is the whole
-        arrangement, and worth saying here rather than leaving to be discovered.
-      -->
       <section class="surface-card mb-5 p-4">
         <h2 class="mb-1 text-sm font-medium text-[var(--text-muted)]">{{ t('Categories') }}</h2>
-
         <CategoryEditor
           :categories="categories"
           :is-saving="isSavingCategories"

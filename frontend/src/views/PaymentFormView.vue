@@ -11,21 +11,6 @@ import { notify, report } from '@/ui/toasts'
 import { parseAmountInput } from '@/domain/money'
 import { today } from '@/domain/lastExpenseDate'
 
-/**
- * Money handed over, rather than money spent.
- *
- * Emma gives fifty dollars back. Nothing was bought, nobody owes a share of it,
- * and it belongs in no month's spending - but with only one thing the plus button
- * could record, it went in as an expense called "cash", where it inflated the
- * month, the group total and the chart, and left the balance exactly where it was.
- * This records it as what it is: a payment between two people, which moves the
- * balance and stays out of the expenses.
- *
- * The settle screen has always been able to write one, but it is reached from a
- * balance and arrives with a figure already in it. This is the other direction: a
- * payment somebody just made, for whatever amount they say, on whatever day.
- */
-
 const route = useRoute()
 const router = useRouter()
 const groups = useGroupsStore()
@@ -51,13 +36,6 @@ const members = computed(() => group.value?.members.filter((m) => m.status === '
 const currency = computed(() => group.value?.baseCurrency ?? auth.user?.defaultCurrency ?? 'CAD')
 const amount = computed(() => parseAmountInput(amountInput.value) ?? 0)
 
-/**
- * Who is handing money to whom, before anybody says.
- *
- * Somebody paying you is the common case - it is why the screen gets opened - so
- * the form starts there: the other person pays you, and the arrow swaps in a tap
- * for the times it is the other way round.
- */
 async function selectGroup(nextGroupId: string): Promise<void> {
   groupId.value = nextGroupId
   if (!nextGroupId) return
@@ -83,7 +61,6 @@ function swap(): void {
 const memberName = (memberId: string) =>
   members.value.find((member) => member.id === memberId)?.displayName ?? ''
 
-/** What this does to the balance, said before it is done rather than after. */
 const effect = computed(() => {
   if (!fromMemberId.value || !toMemberId.value || amount.value <= 0) return null
 
@@ -116,9 +93,6 @@ async function save(): Promise<void> {
       toMemberId: toMemberId.value,
       amount: amount.value,
       currency: currency.value,
-      // Midday, so a date typed here lands on the day it says whatever the
-      // timezone: midnight local is the day before somewhere, and a payment on
-      // the wrong side of a month boundary is the kind of thing nobody catches.
       settledAt: new Date(`${paidOn.value}T12:00:00`),
       note: note.value.trim() || null,
     })
@@ -131,14 +105,10 @@ async function save(): Promise<void> {
   }
 }
 </script>
-
 <template>
   <AppShell :title="t('Add payment')" :back-to="{ name: 'dashboard' }" back-label="Dashboard">
     <AddKindSwitch current="payment" />
-
     <form class="flex flex-col gap-3" @submit.prevent="save">
-      <!-- The amount leads, as it does on the expense form: it is the one field
-           nobody can leave blank. -->
       <div class="flex items-end gap-3">
         <label class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">
@@ -155,7 +125,6 @@ async function save(): Promise<void> {
             style="border-color: var(--border)"
           />
         </label>
-
         <label class="flex shrink-0 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Date') }}</span>
           <input
@@ -167,13 +136,6 @@ async function save(): Promise<void> {
           />
         </label>
       </div>
-
-      <!--
-        Where "what was it" sits on the expense form, and for the same reason: the
-        two forms are one tap apart, and a field that moves between them is a field
-        somebody types into by accident. This one is optional, which is the only
-        difference - a payment needs no name, it needs two people and an amount.
-      -->
       <label class="flex flex-col gap-1">
         <span class="text-xs text-[var(--text-muted)]">{{ t('Note (optional)') }}</span>
         <input
@@ -186,7 +148,6 @@ async function save(): Promise<void> {
           style="border-color: var(--border)"
         />
       </label>
-
       <label class="flex flex-col gap-1">
         <span class="text-xs text-[var(--text-muted)]">{{ t('Group') }}</span>
         <select
@@ -201,12 +162,6 @@ async function save(): Promise<void> {
           </option>
         </select>
       </label>
-
-      <!--
-        Read as a sentence, left to right, with the arrow itself the control that
-        turns it round: two dropdowns labelled "from" and "to" are two chances to
-        record a payment backwards, which is a balance wrong by twice the amount.
-      -->
       <div class="flex items-end gap-2">
         <label class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Who paid') }}</span>
@@ -221,7 +176,6 @@ async function save(): Promise<void> {
             </option>
           </select>
         </label>
-
         <button
           type="button"
           data-testid="swap-sides"
@@ -233,7 +187,6 @@ async function save(): Promise<void> {
         >
           <span aria-hidden="true">&rarr;</span>
         </button>
-
         <label class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Who received it') }}</span>
           <select
@@ -248,16 +201,12 @@ async function save(): Promise<void> {
           </select>
         </label>
       </div>
-
       <p v-if="effect" data-testid="payment-effect" class="text-xs text-[var(--text-muted)]">
         {{ effect }}
       </p>
-
       <p class="text-xs text-[var(--text-muted)]">
         {{ t('A payment moves the balance between two people. It is not spending, so it stays out of the expenses and out of the totals.') }}
       </p>
-
-
       <button
         type="submit"
         data-testid="save-payment"

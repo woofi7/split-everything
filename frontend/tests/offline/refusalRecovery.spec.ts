@@ -2,18 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db, resetDatabase } from '@/offline/db'
 import { SyncEngine } from '@/offline/syncEngine'
 
-/**
- * Recovering from a change the server will not take.
- *
- * The pending marker on a row is protection: a pull skips a row with unsent local
- * work so that a remote revision cannot overwrite something the person can still
- * see. Left on a change that has been refused, that protection becomes a trap.
- * The row is frozen wrong and the server can never correct it, and a refused
- * deletion hides the expense on that device for good, which is exactly the state
- * one device reached: every group reading as empty, with a manual reload as the
- * only way back.
- */
-
 const GROUP = 'group-1'
 
 function expenseRow(overrides: Record<string, unknown> = {}) {
@@ -56,7 +44,6 @@ async function queue(operation: 'Create' | 'Update' | 'Delete', status = 'pendin
   })
 }
 
-/** A server that refuses the operations it is sent, one by one. */
 function refusingApi() {
   return {
     push: vi.fn(async (request: { operations: Array<{ operationId: string; entityId: string }> }) => ({
@@ -75,7 +62,6 @@ function refusingApi() {
   }
 }
 
-/** A server that refuses the whole request, with a status. */
 function failingApi(status: number) {
   return {
     push: vi.fn(async () => {
@@ -97,8 +83,6 @@ describe('a change the server refuses', () => {
 
     await new SyncEngine(refusingApi(), () => true).flush()
 
-    // Hidden locally and alive on the server is the worst of both: the device
-    // shows nothing and no pull can put it right.
     const row = await db.expenses.get('expense-1')
     expect(row!.isDeleted).toBe(false)
     expect(row!.pending).toBe(false)
@@ -119,8 +103,6 @@ describe('a change the server refuses', () => {
 
     await new SyncEngine(refusingApi(), () => true).flush()
 
-    // It exists nowhere else, so no pull will replace it, and on screen it would
-    // keep counting towards balances nobody else can see.
     expect(await db.expenses.get('expense-1')).toBeUndefined()
   })
 
@@ -147,8 +129,6 @@ describe('a change the server refuses', () => {
       status: 'pending',
     })
 
-    // Only the deletion is refused; the later edit is left unanswered, which is
-    // what "still queued" looks like.
     const api = {
       push: vi.fn(async (request: { operations: Array<{ operationId: string; entityId: string }> }) => ({
         accepted: [],
@@ -168,7 +148,6 @@ describe('a change the server refuses', () => {
     }
     await new SyncEngine(api, () => true).flush()
 
-    // The later edit owns the row now; releasing it would strand that one.
     expect((await db.expenses.get('expense-1'))!.pending).toBe(true)
   })
 
@@ -190,7 +169,6 @@ describe('a change the server refuses', () => {
       await new SyncEngine(failingApi(500), () => true).flush()
 
       expect((await db.outbox.get('op-Delete'))!.status).toBe('pending')
-      // Still the person's own change, still theirs to see.
       expect((await db.expenses.get('expense-1'))!.isDeleted).toBe(true)
     })
 
@@ -260,7 +238,6 @@ describe('a change the server refuses', () => {
     })) as never
     await engine.pull()
 
-    // The whole point of letting go: the server gets to say what the row is.
     expect((await db.expenses.get('expense-1'))!.description).toBe('What the server holds')
   })
 })

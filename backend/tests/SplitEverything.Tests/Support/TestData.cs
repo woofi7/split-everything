@@ -5,10 +5,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Tests.Support;
 
-/// <summary>
-/// Fluent-ish builders for the fixtures nearly every test needs. Kept explicit
-/// rather than random so a failing assertion names a value you can read.
-/// </summary>
 public static class TestData
 {
     public const string DeviceA = "device-a";
@@ -62,8 +58,6 @@ public static class TestData
             Clock = VectorClock.Empty.Tick(DeviceA)
         };
 
-        // Every expense has at least one payer row, and the balances are computed
-        // from those rows: a fixture without one is an expense nobody paid for.
         expense.Payers.Add(new ExpensePayer
         {
             GroupId = groupId,
@@ -76,7 +70,6 @@ public static class TestData
         return expense;
     }
 
-    /// <summary>An expense several people paid for at once.</summary>
     public static Expense SharedExpense(
         Guid groupId, (Guid MemberId, decimal Amount)[] payers,
         string description = "Dinner", string currency = "CAD",
@@ -124,11 +117,6 @@ public static class TestData
         Clock = VectorClock.Empty.Tick(DeviceA)
     };
 
-
-    /// <summary>
-    /// A group with the given member names, the first of which belongs to
-    /// <paramref name="owner"/>. Returns the group plus a name-to-member-id map.
-    /// </summary>
     public static async Task<(Group Group, Dictionary<string, Guid> Members)> SeedGroupAsync(
         AppDbContext db, User owner, params string[] memberNames)
     {

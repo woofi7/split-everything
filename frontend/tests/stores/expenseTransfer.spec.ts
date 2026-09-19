@@ -7,15 +7,6 @@ import { useGroupsStore } from '@/stores/groups'
 import { SyncEngine } from '@/offline/syncEngine'
 import { ApiError } from '@/api/client'
 
-/**
- * Moving an expense into another group.
- *
- * The one write in this store that is not queued. The server rewrites the
- * expense, its revisions, its comments and both groups' logs in one go, and half
- * of that applied locally would be a replica that disagrees with itself, so the
- * store asks for it and then takes the answer back through an ordinary sync.
- */
-
 const OTHER_GROUP = 'group-2'
 
 function fakeSyncApi(entries: unknown[] = []) {
@@ -51,7 +42,6 @@ describe('moving an expense between groups', () => {
     await db.expenses.put(testExpense())
   })
 
-  /** The store, with an API that answers the move and a sync that pulls `entries`. */
   function storeWith(entries: unknown[] = [], post = vi.fn(async () => ({}))) {
     const store = useExpensesStore()
     store.attachSync(new SyncEngine(fakeSyncApi(entries) as never, () => true))
@@ -118,7 +108,6 @@ describe('moving an expense between groups', () => {
 
     await store.transfer('expense-1', OTHER_GROUP)
 
-    // Nothing was patched in here: this is the server's row, member ids and all.
     expect(store.forGroup(GROUP_ID)).toHaveLength(0)
     expect(store.forGroup(OTHER_GROUP)).toHaveLength(1)
     expect(store.forGroup(OTHER_GROUP)[0].paidByMemberId).toBe('member-carol')
@@ -128,9 +117,6 @@ describe('moving an expense between groups', () => {
     await db.expenses.put(testExpense({ description: 'Edited offline', pending: true }))
     const { store, post } = storeWith()
 
-    // The queued change names the group the expense was written in. Sent after
-    // the move, it would ask the server to update an expense that is no longer
-    // where the change says it is.
     await expect(store.transfer('expense-1', OTHER_GROUP)).rejects.toThrow('not been sent yet')
     expect(post).not.toHaveBeenCalled()
   })
@@ -157,8 +143,6 @@ describe('moving an expense between groups', () => {
     })
     const { store } = storeWith([], refused)
 
-    // The server names who it could not place, which is the one thing a person
-    // needs in order to answer it.
     await expect(store.transfer('expense-1', OTHER_GROUP)).rejects.toThrow('Bob has no match')
   })
 
@@ -182,7 +166,6 @@ describe('moving an expense between groups', () => {
 
     await store.transfer('expense-1', OTHER_GROUP)
 
-    // What each person owes changed on both sides of the move.
     expect(loadAll).toHaveBeenCalled()
   })
 })

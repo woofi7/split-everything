@@ -14,15 +14,6 @@ import {
   resetDatabase,
 } from '@/offline/db'
 
-/**
- * Getting on screen when startup does not go to plan.
- *
- * A blank page is the worst outcome there is: no error, no content, nothing to
- * act on. It happened for real, because IndexedDB will not upgrade a database
- * while an older connection is open and does not fail either, so the wait before
- * the first render never ended.
- */
-
 describe('settleWithin', () => {
   it('reports work that finished in time', async () => {
     expect(await settleWithin(Promise.resolve('done'), 50)).toBe('finished')
@@ -40,8 +31,6 @@ describe('settleWithin', () => {
   })
 
   it('treats a failure as finished, so startup carries on', async () => {
-    // Startup is not the place to handle it: the work is over either way, and the
-    // app is more useful on screen than not.
     expect(await settleWithin(Promise.reject(new Error('no')), 50)).toBe('finished')
   })
 
@@ -101,12 +90,10 @@ describe('showStartupProblem', () => {
   it('does nothing when there is no host to write into', () => {
     document.body.innerHTML = ''
 
-    // Called from the last-resort catch, so it must not throw on the way out.
     expect(() => showStartupProblem('Anything')).not.toThrow()
   })
 
   it('says which tab to close, and how', () => {
-    // The instruction has to be actionable on the device where this happens.
     expect(BLOCKED_MESSAGE).toContain('another tab')
     expect(BLOCKED_MESSAGE).toContain('Close the other tabs')
     expect(BLOCKED_MESSAGE).toContain('tab switcher')
@@ -137,20 +124,10 @@ describe('a replica another tab is holding open', () => {
     const listener = vi.fn()
     onDatabaseBlocked(listener)
 
-    // The event fires while startup is still wiring itself up, so a listener
-    // attached a moment later must not miss it and wait forever.
     expect(listener).toHaveBeenCalled()
   })
 })
 
-/**
- * A replica that has stopped answering.
- *
- * IndexedDB waits rather than failing, and every screen holds a loading flag it
- * clears after its read, so one wedged read is a spinner that never stops. It
- * reads as a stopped clock rather than an error, which is what made it so hard
- * to see: the app was up and looked busy.
- */
 describe('isReplicaResponsive', () => {
   it('says yes when the replica answers', async () => {
     await resetDatabase()
@@ -161,8 +138,6 @@ describe('isReplicaResponsive', () => {
   it('counts a refusal as an answer', async () => {
     const get = vi.spyOn(db.meta, 'get').mockRejectedValue(new Error('QuotaExceededError'))
 
-    // Reachable and saying no is a different problem, with its own error path.
-    // This check is only about whether anything comes back at all.
     expect(await isReplicaResponsive(1_000)).toBe(true)
     get.mockRestore()
   })

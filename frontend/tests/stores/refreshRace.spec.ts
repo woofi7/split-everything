@@ -3,20 +3,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { resetDatabase } from '@/offline/db'
 
-/**
- * Two tabs, one session.
- *
- * Scanning a QR code opens a new tab each time, so a phone ends up with several
- * on the same origin. They share stored state but not memory, and the server
- * treats a replayed refresh token as theft: it revokes every token for the
- * account. So the second tab to refresh signed both of them out, which reads as
- * "the authentication is not good".
- *
- * A tab about to refresh reads what is stored first. If another tab has already
- * done the work, it takes that result instead of replaying a token that is now
- * dead.
- */
-
 const user = {
   id: 'user-1',
   email: 'alice@example.com',
@@ -39,12 +25,6 @@ function api(overrides: Record<string, unknown> = {}) {
   return {
     post: vi.fn(async (path: string, body?: unknown) => {
       if (path === '/auth/refresh') {
-        /*
-         * The server's rule: a token already exchanged is treated as stolen, and
-         * it answers 401. The status matters, because that is what separates the
-         * session being over from the request merely failing: without it a refresh
-         * attempted with no connection would sign the app out.
-         */
         if ((body as { refreshToken?: string })?.refreshToken !== 'refresh-live') {
           throw Object.assign(new Error('That session was already used. Sign in again.'), {
             status: 401,
@@ -79,7 +59,6 @@ describe('refreshing when another tab got there first', () => {
   })
 
   it('adopts the token the other tab stored instead of replaying a dead one', async () => {
-    // This tab still holds the token it loaded with; the other tab has exchanged it.
     const { store, client } = signedInWith('stale')
     localStorage.setItem(
       SESSION_KEY,
@@ -90,7 +69,6 @@ describe('refreshing when another tab got there first', () => {
 
     expect(token).toBe('access-live')
     expect(store.isSignedIn).toBe(true)
-    // Nothing sent: replaying would have revoked the account's every token.
     expect(client.post).not.toHaveBeenCalled()
   })
 
@@ -140,8 +118,6 @@ describe('refreshing when another tab got there first', () => {
       JSON.stringify({ user: { ...user, id: 'user-2' }, tokens: tokensFor('other') }),
     )
 
-    // Someone else signed in here; adopting their token would be worse than
-    // failing, so this tab asks with its own and finds out where it stands.
     await store.refresh()
     expect(client.post).toHaveBeenCalledWith('/auth/refresh', { refreshToken: 'refresh-live' })
   })

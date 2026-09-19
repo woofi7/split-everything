@@ -1,15 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadGoogleIdentity, resetGoogleIdentity } from '@/native/googleIdentity'
 
-/**
- * Fetching Google's sign-in library.
- *
- * The sign-in screen was written to wait for this library to appear on the window,
- * and nothing ever put it there: no script tag in the page, none in the bundle. The
- * component's own tests stubbed the global, so they all passed while production had
- * no way to sign in at all - it only said "Google sign-in is unavailable".
- */
-
 const SRC = 'https://accounts.google.com/gsi/client'
 
 const identity = () => ({
@@ -17,7 +8,6 @@ const identity = () => ({
   renderButton: vi.fn(),
 })
 
-/** The script arriving, the way the browser announces it. */
 function scriptLoads(withGoogle = true) {
   const tag = document.querySelector<HTMLScriptElement>(`script[src="${SRC}"]`)
   if (!tag) throw new Error('nothing asked for the script')
@@ -43,7 +33,6 @@ describe('loading Google Identity Services', () => {
   it('asks for the script, which is the whole point', async () => {
     const pending = loadGoogleIdentity()
 
-    // The one assertion that would have caught this: something has to fetch it.
     const tag = document.querySelector<HTMLScriptElement>(`script[src="${SRC}"]`)
     expect(tag).not.toBeNull()
     expect(tag!.async).toBe(true)
@@ -66,7 +55,6 @@ describe('loading Google Identity Services', () => {
     ;(window as unknown as { google: unknown }).google = { accounts: { id: identity() } }
 
     expect(await loadGoogleIdentity()).not.toBeNull()
-    // Nothing fetched: a second tag would re-run Google's library.
     expect(document.querySelector(`script[src="${SRC}"]`)).toBeNull()
   })
 
@@ -85,7 +73,6 @@ describe('loading Google Identity Services', () => {
     const pending = loadGoogleIdentity()
     document.querySelector(`script[src="${SRC}"]`)!.dispatchEvent(new Event('error'))
 
-    // Blocked by a content policy, or an ad blocker, or no connection.
     expect(await pending).toBeNull()
   })
 
@@ -101,8 +88,6 @@ describe('loading Google Identity Services', () => {
 
     try {
       const pending = loadGoogleIdentity(8000)
-      // A blocked script fires neither load nor error, which is how a sign-in page
-      // ends up pending with nothing on it.
       await vi.advanceTimersByTimeAsync(8100)
 
       expect(await pending).toBeNull()
@@ -112,8 +97,6 @@ describe('loading Google Identity Services', () => {
   })
 
   it('does not wait on a script that has already failed', async () => {
-    // The case that hangs a screen: a tag left from an earlier attempt fires neither
-    // event again, so a second caller must read its state rather than listen.
     const first = loadGoogleIdentity()
     document.querySelector(`script[src="${SRC}"]`)!.dispatchEvent(new Event('error'))
     expect(await first).toBeNull()

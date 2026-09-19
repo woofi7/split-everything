@@ -9,13 +9,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// Spending over time, split by who paid.
-///
-/// A single bar per month says how much was spent. Split by person it also says who
-/// carried it, which is the thing a shared account argues about, and it costs
-/// nothing to compute alongside the total that was already there.
-/// </summary>
 public class SpendOverTimeByMemberTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private StatsService Stats => new(Db, Currency);
@@ -68,7 +61,6 @@ public class SpendOverTimeByMemberTests(PostgresFixture fixture) : ServiceTestBa
         var bucket = (await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id)))
             .SpendOverTime.ShouldHaveSingleItem();
 
-        // A stacked bar whose parts do not sum to its total is a lie about both.
         bucket.ByMember.Sum(m => m.Amount).ShouldBe(bucket.Amount);
     }
 
@@ -83,7 +75,6 @@ public class SpendOverTimeByMemberTests(PostgresFixture fixture) : ServiceTestBa
         var bucket = (await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id)))
             .SpendOverTime.ShouldHaveSingleItem();
 
-        // A zero-height segment is not information.
         bucket.ByMember.ShouldHaveSingleItem().MemberName.ShouldBe("Alice");
     }
 
@@ -115,8 +106,6 @@ public class SpendOverTimeByMemberTests(PostgresFixture fixture) : ServiceTestBa
         var bucket = (await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id)))
             .SpendOverTime.ShouldHaveSingleItem();
 
-        // Stable ordering, so a stack does not reshuffle its own colours between
-        // one bucket and the next.
         bucket.ByMember.First().MemberName.ShouldBe("Alice");
     }
 
@@ -130,7 +119,6 @@ public class SpendOverTimeByMemberTests(PostgresFixture fixture) : ServiceTestBa
         var bucket = (await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id)))
             .SpendOverTime.ShouldHaveSingleItem();
 
-        // The client colours people by id, so the name alone is not enough.
         bucket.ByMember.ShouldHaveSingleItem().MemberId.ShouldBe(alice);
     }
 
@@ -150,7 +138,6 @@ public class SpendOverTimeByMemberTests(PostgresFixture fixture) : ServiceTestBa
             .SpendOverTime.ShouldHaveSingleItem();
 
         bucket.Amount.ShouldBe(100m);
-        // One person, two groups, two member rows: they are different memberships.
         bucket.ByMember.Sum(m => m.Amount).ShouldBe(100m);
     }
 }

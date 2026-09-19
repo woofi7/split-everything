@@ -6,11 +6,6 @@ export interface MemberBalance {
 }
 
 export interface BalanceExpense {
-  /**
-   * Who put money in, and how much. A list because an expense can be paid by more
-   * than one person at once, and no single-payer stand-in gets the balances right:
-   * two people paying 40 and 25 of a 65 bill split evenly are 7.50 apart, not 32.50.
-   */
   payers: Array<{ memberId: string; amount: number }>
   splits: Array<{ memberId: string; amount: number }>
 }
@@ -27,14 +22,6 @@ export interface Transfer {
   amount: number
 }
 
-/**
- * Balance math run locally, so a group screen shows correct numbers while offline
- * and updates the instant an expense is added rather than after a round trip.
- *
- * Amounts are expected to already be in the group base currency, exactly as the
- * server stores them, so this never converts and never disagrees with the server
- * about a rate.
- */
 export function netBalances(
   memberIds: string[],
   expenses: BalanceExpense[],
@@ -44,7 +31,6 @@ export function netBalances(
   const net = new Map<string, number>()
   for (const memberId of new Set(memberIds)) net.set(memberId, 0)
 
-  // Members who left still carry history, so ids outside the roster are accepted.
   const bump = (memberId: string, delta: number) =>
     net.set(memberId, (net.get(memberId) ?? 0) + delta)
 
@@ -62,15 +48,6 @@ export function netBalances(
     .map(([memberId, value]) => ({ memberId, net: roundMoney(value, currency) }))
     .sort((left, right) => (left.memberId < right.memberId ? -1 : 1))
 
-  /*
-   * Balances have to sum to zero, and rounding each of them to a payable cent can
-   * leave them a cent short of it: shares are worked out finer than the currency,
-   * so a net position can be a fraction of a cent either way.
-   *
-   * The residue goes to the largest balance, as everywhere else. Left in, it is a
-   * cent nobody can pay off - the settle-up plan moves whole cents, so it would
-   * hand somebody a debt of one that survives being paid.
-   */
   const residue = roundMoney(
     -rounded.reduce((sum, balance) => sum + balance.net, 0),
     currency,
@@ -89,11 +66,6 @@ export function netBalances(
   return rounded
 }
 
-/**
- * Fewest transfers that settle everyone: collapse to net positions, then match the
- * biggest debtor to the biggest creditor. Ties break on member id so this agrees
- * with the server's plan rather than offering the user a different one.
- */
 export function simplifyDebts(balances: MemberBalance[], currency = 'CAD'): Transfer[] {
   const epsilon = minorUnit(currency) / 2
 
@@ -143,10 +115,6 @@ export function simplifyDebts(balances: MemberBalance[], currency = 'CAD'): Tran
   return transfers
 }
 
-/**
- * The unreduced view. Some people prefer it because it shows the actual expense
- * that created a debt rather than a netted-off suggestion.
- */
 export function pairwiseDebts(
   expenses: BalanceExpense[],
   settlements: BalanceSettlement[],
@@ -158,7 +126,6 @@ export function pairwiseDebts(
   const add = (from: string, to: string, amount: number) => {
     if (from === to || amount === 0) return
 
-    // Fold the reverse direction into one signed entry per unordered pair.
     const reverseKey = key(to, from)
     if (ledger.has(reverseKey)) {
       ledger.set(reverseKey, ledger.get(reverseKey)! - amount)
@@ -174,9 +141,6 @@ export function pairwiseDebts(
     if (paid === 0) continue
 
     for (const split of expense.splits) {
-      // Owed to whoever put the money in, in the proportion each of them did: of a
-      // bill two people covered 40/25, a share is owed 40/65 to one and 25/65 to
-      // the other. Rounded once at the end, so the proportions keep their cents.
       for (const payer of expense.payers) {
         add(split.memberId, payer.memberId, (split.amount * payer.amount) / paid)
       }

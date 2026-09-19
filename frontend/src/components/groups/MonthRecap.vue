@@ -5,21 +5,12 @@ import { formatMoney } from '@/domain/money'
 import { formatMonthHeading } from '@/domain/buckets'
 import type { MonthSummary } from '@/domain/monthSummary'
 
-/**
- * How a finished month went.
- *
- * The heading above already says what the month came to. This says the things a
- * total cannot: who actually paid it, what the largest single thing was, what was
- * left out of it, and whether it was a normal month or not - which is the question
- * somebody opening August in November is really asking.
- */
 const props = defineProps<{
   summary: MonthSummary
   currency: string
   nameOf: (memberId: string) => string
 }>()
 
-/** Signed, and worded rather than arrowed: "more" and "less" survive a screen reader. */
 const comparison = computed(() => {
   const previous = props.summary.versusPrevious
   if (!previous || previous.difference === 0) return null
@@ -43,15 +34,12 @@ const againstAverage = computed(() => {
     : t('{amount} below the usual month', { amount })
 })
 </script>
-
 <template>
   <div
     data-testid="month-recap"
     class="mt-2 flex flex-col gap-2 rounded-lg px-3 py-2.5 text-sm"
     style="background: var(--surface-sunken)"
   >
-    <!-- Who paid for the month, on one line per person: the amounts are the point,
-         so they are aligned rather than run together in a sentence. -->
     <ul class="flex flex-col gap-1">
       <li
         v-for="member in summary.byMember"
@@ -63,13 +51,6 @@ const againstAverage = computed(() => {
         <span class="shrink-0 tabular-nums">{{ formatMoney(member.amount, currency) }}</span>
       </li>
     </ul>
-
-    <!--
-      What was left out, and how much of the month it was. Said out loud rather than
-      quietly dropped: the heading above no longer counts it, and a month total that
-      is silently missing the rent is one nobody can check against the list under it.
-      With this line the two figures add back up to what the month cost.
-    -->
     <p
       v-if="summary.ignored"
       data-testid="recap-ignored"
@@ -84,7 +65,6 @@ const againstAverage = computed(() => {
         {{ formatMoney(summary.ignored.total, currency) }}
       </span>
     </p>
-
     <p
       v-if="summary.biggest"
       data-testid="recap-biggest"
@@ -98,12 +78,6 @@ const againstAverage = computed(() => {
         {{ formatMoney(summary.biggest.amount, currency) }}
       </span>
     </p>
-
-    <!--
-      Two comparisons rather than one: the month before answers "was it going up?",
-      and the average answers "was this a strange month?". A month can easily be
-      down on the last one and still well above normal.
-    -->
     <p
       v-if="comparison || againstAverage"
       data-testid="recap-comparison"

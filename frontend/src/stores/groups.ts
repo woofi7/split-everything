@@ -7,11 +7,6 @@ import type { AddableUser } from '@/api/types'
 import type { SplitType } from '@/domain/splitting'
 import type { Category } from '@/domain/categories'
 
-/**
- * One line of an edited list. The key travels with a category that already exists,
- * so renaming it keeps every expense filed under it; a new one is sent without and
- * the server makes a key from the name.
- */
 export interface CategoryDraft {
   key?: string
   name: string
@@ -44,32 +39,13 @@ interface GroupSummaryDto {
   updatedAt?: string
 }
 
-/**
- * Groups, backed by the local replica.
- *
- * Reads hydrate from IndexedDB first and then refresh from the server, so the list
- * renders instantly on launch and keeps working with no connection. A failed
- * refresh is not an error the user sees: it sets `isOffline` and leaves the cached
- * data in place.
- */
 export const useGroupsStore = defineStore('groups', () => {
   const groups = ref<LocalGroup[]>([])
   const includeArchived = ref(false)
   const isLoading = ref(false)
 
-  /**
-   * Each group's categories, by group id.
-   *
-   * Held here as well as in the replica so a screen can read them synchronously
-   * while it renders, the same way it reads the groups themselves.
-   */
   const categoriesByGroup = ref<Record<string, Category[]>>({})
 
-  /**
-   * The groups whose list is their own rather than the server's, as far as this
-   * session knows. Only a save can tell them apart - the endpoint answers with the
-   * resolved list either way - so this is what the last save said.
-   */
   const ownCategories = ref<Set<string>>(new Set())
   const isOffline = ref(false)
   let api: ApiClient | null = null
@@ -79,7 +55,6 @@ export const useGroupsStore = defineStore('groups', () => {
       .filter((group) => includeArchived.value || !group.isArchived)
       .slice()
       .sort((left, right) => {
-        // Anything outstanding first: a settled group needs no attention.
         const leftOutstanding = Math.abs(left.myNetBalance) > 0.005 ? 0 : 1
         const rightOutstanding = Math.abs(right.myNetBalance) > 0.005 ? 0 : 1
         if (leftOutstanding !== rightOutstanding) return leftOutstanding - rightOutstanding
@@ -98,13 +73,6 @@ export const useGroupsStore = defineStore('groups', () => {
     ),
   )
 
-  /**
-   * The group the app is about, and the default every screen falls back to.
-   *
-   * A device preference rather than account state: which group you are looking at
-   * is about the screen in your hand, and it has to survive a reload without
-   * waiting on the network.
-   */
   const mainGroupId = ref<string | null>(null)
 
   const mainGroup = computed(() =>
@@ -117,28 +85,12 @@ export const useGroupsStore = defineStore('groups', () => {
   }
 
   function setMainGroup(groupId: string): void {
-    // Ignored rather than trusted: pointing every screen at a group we do not have
-    // would empty all of them at once.
     if (!groups.value.some((group) => group.id === groupId)) return
 
     mainGroupId.value = groupId
     localStorage.setItem(MAIN_GROUP_KEY, groupId)
   }
 
-  /**
-   * The group one place before or after this one, without moving to it.
-   *
-   * In the order the groups are listed, so the cycle matches the picker rather
-   * than being an order of its own that nothing on screen shows.
-   *
-   * Wraps around: with three groups, three steps the same way come back to where
-   * they started, which is what makes swiping usable without counting. Nothing
-   * with fewer than two, and a main group that is not in the list (an archived
-   * one, while archived groups are hidden) steps in from the end asked for.
-   *
-   * Answered separately from moving because a swipe shows the group it is bringing
-   * in while the finger is still down.
-   */
   function groupInCycle(step: 1 | -1): LocalGroup | undefined {
     const order = visibleGroups.value
     if (order.length < 2) return undefined
@@ -149,7 +101,6 @@ export const useGroupsStore = defineStore('groups', () => {
     return order[(at + step + order.length) % order.length]
   }
 
-  /** Steps to that group, and answers where it landed. */
   function cycleMainGroup(step: 1 | -1): string | null {
     const next = groupInCycle(step)
     if (!next) return null
@@ -158,13 +109,6 @@ export const useGroupsStore = defineStore('groups', () => {
     return next.id
   }
 
-  /**
-   * Keeps the choice pointing at something real.
-   *
-   * Called after every list load, because a group can be archived, left or deleted
-   * on another device, and a main group that no longer exists shows as an empty
-   * app rather than as an error.
-   */
   function settleMainGroup(): void {
     const candidates = groups.value.filter((group) => !group.isArchived)
 
@@ -190,12 +134,6 @@ export const useGroupsStore = defineStore('groups', () => {
     isLoading.value = true
 
     try {
-      // Cache first, so the screen has content before the network answers. Inside
-      // the try with everything else: it was outside, so a replica that failed to
-      // answer left "Loading your groups" on screen for good.
-      // Both at once: they are independent reads of the same replica, and asking
-      // for them one after the other puts a turn of the wheel between the screen
-      // and its content for no reason.
       const [cachedCategories, cached] = await Promise.all([
         db.categories.toArray(),
         db.groups.toArray(),
@@ -217,37 +155,16 @@ export const useGroupsStore = defineStore('groups', () => {
       isOffline.value = false
       settleMainGroup()
 
-      // Worked out from the cached list rather than read again, so a load where
-      // nothing has vanished - which is every load - costs no extra trip to the
-      // replica and finishes in exactly the same turn it always did.
       const kept = new Set(merged.map((group) => group.id))
       const gone = cached.map((group) => group.id).filter((id) => !kept.has(id))
       if (gone.length > 0) await pruneVanished(gone)
     } catch (caught) {
-      // Keep the cached list: an unreachable server is a normal state here. A
-      // server that answered and refused is not offline, and saying so sends
-      // somebody looking at their wifi for a problem that is not there.
       isOffline.value = looksOffline(caught)
     } finally {
       isLoading.value = false
     }
   }
 
-  /**
-   * Clears out a group the server no longer lists.
-   *
-   * Every other deletion in this application is a tombstone that arrives through
-   * the sync log, and a group that has been deleted outright cannot send one: it is
-   * gone, and so is its log. Left alone, its expenses would sit in this device's
-   * replica for ever, and the group itself would flash back onto the screen at
-   * every cold start - read from the cache, then dropped again when the server
-   * answers - which reads exactly like a bug.
-   *
-   * Safe because a group only ever exists here after the server has returned one:
-   * creating a group is the one write in the app that needs a connection, so a
-   * group the list does not mention is a group this account has lost, by deletion
-   * or by leaving it.
-   */
   async function pruneVanished(gone: readonly string[]): Promise<void> {
     await db.groups.bulkDelete(gone as string[])
     await db.expenses.where('groupId').anyOf(gone).delete()
@@ -255,16 +172,11 @@ export const useGroupsStore = defineStore('groups', () => {
     await db.comments.where('groupId').anyOf(gone).delete()
     await db.activity.where('groupId').anyOf(gone).delete()
     await db.conflicts.where('groupId').anyOf(gone).delete()
-
-    // The outbox is left alone deliberately: an unsent change for a group that has
-    // gone is a rejection waiting to be read on the conflicts screen, not something
-    // to clear away quietly on the way past.
   }
 
   async function get(groupId: string): Promise<LocalGroup | undefined> {
     const cached = await db.groups.get(groupId)
     if (cached) {
-      // Refresh in the background, so opening a group is never a spinner.
       void refresh(groupId)
       return cached
     }
@@ -281,11 +193,6 @@ export const useGroupsStore = defineStore('groups', () => {
       upsert(local)
       isOffline.value = false
 
-      // Alongside rather than inside the group: the categories are their own
-      // endpoint because they are their own editor, and a group that has never
-      // touched them is reading the server's list. Not awaited by the caller's
-      // path - the group is what they asked for, and the picker can fill in a
-      // moment later.
       void loadCategories(groupId)
 
       return local
@@ -295,33 +202,21 @@ export const useGroupsStore = defineStore('groups', () => {
     }
   }
 
-  /**
-   * The group's categories, cached on the group.
-   *
-   * Cached because everything that uses them has to work with no connection: the
-   * picker on the expense form, the guess it starts from, the names on the cards
-   * and the breakdown on the stats screen.
-   */
   async function loadCategories(groupId: string): Promise<Category[] | undefined> {
     try {
       const categories = await requireApi().get<Category[]>(`/groups/${groupId}/categories`)
       await rememberCategories(groupId, categories)
       return categories
     } catch {
-      // The cached list stands: everything that reads it has to work with no
-      // connection, and a stale category name is worth more than none.
       return categoriesOf(groupId)
     }
   }
 
-  /** Replaces this group's list. Any member may: it files spending, it moves no money. */
   async function setCategories(groupId: string, categories: CategoryDraft[]): Promise<Category[]> {
     const saved = await requireApi().put<Category[]>(`/groups/${groupId}/categories`, {
       categories,
     })
 
-    // An empty list is how a group stops keeping one: the server answers with its
-    // own again, and this group is following it from here.
     await rememberCategories(groupId, saved, categories.length > 0)
     return saved
   }
@@ -331,9 +226,6 @@ export const useGroupsStore = defineStore('groups', () => {
     categories: Category[],
     isOwn?: boolean,
   ): Promise<void> {
-    // A list or nothing: everything downstream iterates this, and a screen that
-    // throws while rendering an expense form is a worse answer to a strange
-    // response than an empty picker.
     if (!Array.isArray(categories)) return
 
     await db.categories.put({ groupId, categories })
@@ -347,18 +239,10 @@ export const useGroupsStore = defineStore('groups', () => {
     ownCategories.value = own
   }
 
-  /** The list a screen should show for this group, from the cache. */
   function categoriesOf(groupId: string): Category[] {
     return categoriesByGroup.value[groupId] ?? []
   }
 
-  /**
-   * Whether that list is the group's own rather than the server's.
-   *
-   * Worth saying on the screen that edits it: the first save takes a copy, and
-   * somebody changing one word should know they have just stopped following the
-   * list everybody else follows.
-   */
   function hasOwnCategories(groupId: string): boolean {
     return ownCategories.value.has(groupId)
   }
@@ -387,25 +271,18 @@ export const useGroupsStore = defineStore('groups', () => {
       description: string | null
       iconName: string | null
       colorHex: string | null
-      /** The accent the app wears for this group, by name, or null for none. */
       themeName: string | null
       baseCurrency: string
-      // The group's own fields and how it splits are the same PATCH, so a screen
-      // that edits both can save both in one request rather than half-succeeding.
       defaultSplitType: SplitType
       defaultSplitValues: Record<string, number> | null
       ignoredNamePatterns: string[]
     }>,
   ): Promise<LocalGroup> {
-    // The API reads null as "not supplied" and an empty string as an explicit
-    // clear, so removing an icon or a description has to send the empty string.
     const payload: Record<string, unknown> = { ...changes }
     if ('iconName' in payload && payload.iconName === null) payload.iconName = ''
     if ('description' in payload && payload.description === null) payload.description = ''
     if ('themeName' in payload && payload.themeName === null) payload.themeName = ''
 
-    // An empty map is the explicit clear, matching the server's convention, and
-    // equal needs no values at all.
     if ('defaultSplitType' in changes) {
       payload.defaultSplitValues =
         changes.defaultSplitType === 'Equal' ? {} : (changes.defaultSplitValues ?? {})
@@ -435,20 +312,6 @@ export const useGroupsStore = defineStore('groups', () => {
     upsert(local)
   }
 
-  /**
-   * Records how this group splits by default, from what someone just used.
-   *
-   * An admin-only change on the server, because it decides what everyone else's
-   * next expense does.
-   */
-  /**
-   * The names this group keeps out of its totals.
-   *
-   * Its own call rather than part of the patch above, because it is the one group
-   * setting anybody in the group may change: everything else there decides how
-   * money is divided or who is in it, and this decides whether the rent drowns out
-   * the month on a screen everybody reads.
-   */
   async function setIgnoredNames(groupId: string, patterns: string[]): Promise<void> {
     const dto = await requireApi().put<GroupSummaryDto>(`/groups/${groupId}/ignored-names`, {
       patterns: patterns.map((pattern) => pattern.trim()).filter(Boolean),
@@ -466,7 +329,6 @@ export const useGroupsStore = defineStore('groups', () => {
   ): Promise<void> {
     const dto = await requireApi().patch<GroupSummaryDto>(`/groups/${groupId}`, {
       defaultSplitType: splitType,
-      // An empty map is the explicit clear, matching the server's convention.
       defaultSplitValues: splitType === 'Equal' ? {} : (values ?? {}),
     })
 
@@ -475,25 +337,11 @@ export const useGroupsStore = defineStore('groups', () => {
     upsert(local)
   }
 
-  /**
-   * Adds someone to the group.
-   *
-   * By account, and only by account. A member with no account behind them could
-   * never open the group, see what they owed, or be told about it, so the only
-   * other way in is an invite link they accept themselves.
-   */
   async function addUserMember(groupId: string, userId: string): Promise<void> {
     await requireApi().post(`/groups/${groupId}/members/user`, { userId })
     await refresh(groupId)
   }
 
-  /**
-   * Folds one member into another, and refreshes the group over the answer.
-   *
-   * Everything the source paid, owed, was owed and said becomes the target's, and
-   * the source is removed. There is no undo: nothing records which rows moved, so
-   * nothing can move them back.
-   */
   async function mergeMembers(
     groupId: string,
     sourceMemberId: string,
@@ -509,20 +357,12 @@ export const useGroupsStore = defineStore('groups', () => {
     upsert(local)
   }
 
-  /**
-   * People with an account who are not in this group yet.
-   *
-   * Read on demand rather than cached: the point of the list is to be current,
-   * and it changes whenever anyone else signs up or joins.
-   */
   async function addableUsers(groupId?: string): Promise<AddableUser[]> {
     const people = await requireApi().get<AddableUser[]>(
       '/users/addable',
       groupId ? { groupId } : undefined,
     )
 
-    // This list is a convenience on top of a field that works without it, so
-    // anything unexpected becomes "nobody" rather than breaking the form.
     return Array.isArray(people) ? people : []
   }
 
@@ -535,12 +375,6 @@ export const useGroupsStore = defineStore('groups', () => {
     return groups.value.find((group) => group.id === groupId)?.members ?? []
   }
 
-  /**
-   * Sets one member's colour in one group.
-   *
-   * The server may swap two people rather than refuse a colour that is taken, so
-   * the whole group is read back rather than the one member patched in place.
-   */
   async function setMemberColor(
     groupId: string,
     memberId: string,
@@ -550,21 +384,9 @@ export const useGroupsStore = defineStore('groups', () => {
     await refresh(groupId)
   }
 
-  /**
-   * The colour of every member of a group.
-   *
-   * Defined once, from the roster, because the palette resolves a clash by walking
-   * to the next free colour in the order it is given: hand it a different set of
-   * people, or the same people in a different order, and the same person comes out
-   * a different colour. Every screen was building its own list, so the activity
-   * feed and the charts disagreed with the expense cards about who was orange.
-   */
   function colorsOf(groupId: string): Record<string, string> {
     const roster = membersOf(groupId)
 
-    // Derived first, for anyone the group has not given a colour to: rows written
-    // before the group stored them, which is every group until it is next read
-    // from the server.
     const colours = memberColors(roster.map((member) => member.id))
 
     for (const member of roster) {
@@ -624,13 +446,6 @@ export const useGroupsStore = defineStore('groups', () => {
 })
 
 function toLocalGroup(dto: GroupSummaryDto, existing: LocalGroup[]): LocalGroup {
-  // A summary carries no member list; keep whatever the detail read already gave
-  // us rather than blanking the roster on every list refresh.
-  //
-  // Unwrapped, because the cached copy is read back out of a reactive ref and the
-  // result of this goes straight into IndexedDB. A reactive value is a Proxy, and
-  // a Proxy cannot be structure-cloned: the write fails with DataCloneError, which
-  // the caller cannot tell apart from an unreachable server.
   const cached = existing.find((group) => group.id === dto.id)
   const previous = cached ? toRaw(cached) : undefined
 
@@ -641,17 +456,11 @@ function toLocalGroup(dto: GroupSummaryDto, existing: LocalGroup[]): LocalGroup 
     baseCurrency: dto.baseCurrency,
     iconName: dto.iconName,
     colorHex: dto.colorHex,
-    // Read straight from the answer, with no fallback to what was cached: both the
-    // list and the detail carry it, so a null here is a group whose colour was
-    // cleared rather than one this read did not mention.
     themeName: dto.themeName ?? null,
     isArchived: dto.isArchived,
     lineageId: dto.lineageId ?? previous?.lineageId ?? '',
     members: dto.members ?? previous?.members ?? [],
-    // A detail read has the roster but no count; a summary has the count but no
-    // roster. Either one can answer "how many people".
     memberCount: dto.memberCount ?? dto.members?.length ?? previous?.memberCount ?? 0,
-    // A summary carries neither, so the cached copy holds them until a detail read.
     defaultSplitType: dto.defaultSplitType ?? previous?.defaultSplitType ?? 'Equal',
     defaultSplitValues: dto.defaultSplitValues ?? previous?.defaultSplitValues ?? null,
     ignoredNamePatterns: dto.ignoredNamePatterns ?? previous?.ignoredNamePatterns ?? null,

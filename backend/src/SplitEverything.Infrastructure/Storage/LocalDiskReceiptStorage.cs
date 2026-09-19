@@ -11,14 +11,6 @@ public sealed class ReceiptStorageOptions
     public string RootPath { get; set; } = "/data/receipts";
 }
 
-/// <summary>
-/// Receipts on local disk, behind the storage abstraction so swapping to S3 or
-/// MinIO later is a registration change rather than a rewrite.
-///
-/// Blobs are keyed by content hash and fanned into two levels of directories, which
-/// deduplicates identical photos and keeps any single directory from growing to the
-/// point where listing it becomes slow.
-/// </summary>
 public sealed class LocalDiskReceiptStorage : IReceiptStorage
 {
     private readonly string _root;
@@ -32,8 +24,6 @@ public sealed class LocalDiskReceiptStorage : IReceiptStorage
     public async Task<StoredReceipt> SaveAsync(
         Stream content, string contentType, string? fileName, CancellationToken ct = default)
     {
-        // Buffer once so the hash and the write see the same bytes even when the
-        // caller handed us a non-seekable request stream.
         using var buffer = new MemoryStream();
         await content.CopyToAsync(buffer, ct);
         var bytes = buffer.ToArray();
@@ -73,10 +63,6 @@ public sealed class LocalDiskReceiptStorage : IReceiptStorage
     private static string BuildKey(string hash, string extension)
         => $"{hash[..2]}/{hash[2..4]}/{hash}{extension}";
 
-    /// <summary>
-    /// Resolves a key to an absolute path and refuses anything that would land
-    /// outside the root, so a crafted key cannot read arbitrary host files.
-    /// </summary>
     private string Resolve(string storageKey)
     {
         if (string.IsNullOrWhiteSpace(storageKey))

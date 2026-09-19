@@ -7,17 +7,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// A payment two people made together, which Settle Up allows and this app's
-/// expenses do not.
-///
-/// From a real import that came out 3,960 too high on a total of 43,681.76. The
-/// export wrote one row as payers "Emma;Nicolas" and amount "40;25" - forty and
-/// twenty-five, sixty-five in all - and the amount parser, which strips currency
-/// symbols and spaces, stripped the semicolon too and read four thousand and
-/// twenty-five. One row in four hundred, and the group's total was wrong with
-/// nothing on screen to say which row did it.
-/// </summary>
 public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private ImportService Imports { get; set; } = null!;
@@ -31,7 +20,6 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
     private static Stream Export()
         => File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Fixtures", "settleup-shared-payment.csv"));
 
-    /// <summary>The same column order the real export uses.</summary>
     private static CsvColumnMapping Mapping() => new(
         DateColumn: 7, DescriptionColumn: 5, AmountColumn: 1,
         CurrencyColumn: 2, PaidByColumn: 0,
@@ -45,10 +33,8 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
     [Fact]
     public void The_amount_parser_refuses_a_list_instead_of_concatenating_it()
     {
-        // 4025 was the answer before, and it looked like a number.
         CsvValueParser.ParseAmount("40;25", null).ShouldBeNull();
 
-        // A single amount still reads, and a list read as a list adds up.
         CsvValueParser.ParseAmount("40.86", null).ShouldBe(40.86m);
         CsvValueParser.ParseAmountList("40;25", null).ShouldBe([40m, 25m]);
     }
@@ -60,7 +46,6 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
 
         var result = await Imports.CommitCsvAsync(user.Id, Export(), Commit());
 
-        // 40.86 + 65 + 1500. The transfer is not spending and is not in it.
         var expenses = await NewContext().Expenses
             .Where(e => e.GroupId == result.GroupId).ToListAsync();
 
@@ -84,14 +69,11 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
             .Where(e => e.GroupId == result.GroupId && e.Description == "Frying pans")
             .ToListAsync();
 
-        // One pair of frying pans, one expense: 65 of them, paid 40 by one person
-        // and 25 by the other.
         shared.ShouldHaveSingleItem();
         shared[0].Amount.ShouldBe(65m);
         shared[0].Payers.Select(y => (members[y.MemberId], y.Amount))
             .ShouldBe([("Emma", 40m), ("Nicolas", 25m)], ignoreOrder: true);
 
-        // Named for the larger contribution, which is what the lists show.
         members[shared[0].PaidByMemberId].ShouldBe("Emma");
     }
 
@@ -110,7 +92,6 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
         var splits = await context.ExpenseSplits
             .Where(s => s.ExpenseId == shared).ToListAsync();
 
-        // "32.5;32.5" of a 65 row: half each, and the shares add up to the row.
         splits.Sum(s => s.Amount).ShouldBe(65m);
         splits.Select(s => s.Amount).ShouldBe([32.50m, 32.50m], ignoreOrder: true);
     }
@@ -138,9 +119,6 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
             expenses.SelectMany(e => e.Payers).Where(y => y.MemberId == memberId).Sum(y => y.Amount)
             - splits.Where(s => s.MemberId == memberId).Sum(s => s.Amount);
 
-        // Emma put in 40 and owed 32.50, so she is 7.50 up; Nicolas is 7.50 down.
-        // The same as the export says, which is the only thing that makes an import
-        // worth having.
         NetOf(members["Emma"]).ShouldBe(7.50m);
         NetOf(members["Nicolas"]).ShouldBe(-7.50m);
     }
@@ -150,8 +128,6 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
     {
         var user = await TestData.SeedUserAsync(Db);
 
-        // Two figures, one name: there is no saying who put in which, and picking
-        // one would be an invention nobody could see afterwards.
         var preview = await Imports.PreviewCsvAsync(user.Id, Row("Emma", "40;25"),
             new CsvPreviewRequest(null, Mapping(), new Dictionary<string, Guid?>(), "CAD"));
 
@@ -163,10 +139,6 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
     {
         var user = await TestData.SeedUserAsync(Db);
 
-        // Whether a row was shared is decided by the amount cell, not by the number
-        // of names: a payer cell can hold a comma for reasons of its own - a name
-        // written surname first - and reading that as two payers would flag rows
-        // that are perfectly ordinary.
         var preview = await Imports.PreviewCsvAsync(user.Id, Row("Doe, John", "65"),
             new CsvPreviewRequest(null, Mapping(), new Dictionary<string, Guid?>(), "CAD"));
 
@@ -175,7 +147,6 @@ public class SharedPaymentImportTests(PostgresFixture fixture) : ServiceTestBase
         row.Problems.ShouldNotContain(p => p.Contains("amounts"));
     }
 
-    /// <summary>One row in the export's own column order, as a stream.</summary>
     private static Stream Row(string paidBy, string amount)
     {
         var text = "\"Who paid\",\"Amount\",\"Currency\",\"For whom\",\"Split amounts\",\"Purpose\","

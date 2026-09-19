@@ -14,14 +14,6 @@ using SplitEverything.Infrastructure.Sync;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// Magic-link invites, presented either as an emailed URL or as a QR code of the
-/// same token.
-///
-/// The link alone never grants access: redeeming it requires a Google sign-in, and
-/// an invite pinned to an address only works for that address, so a forwarded link
-/// is useless to anyone else.
-/// </summary>
 public sealed class InviteService(
     AppDbContext db,
     ISyncWriter writer,
@@ -100,9 +92,6 @@ public sealed class InviteService(
 
         await GroupAccess.RequireMemberAsync(db, userId, invite.GroupId, ct);
 
-        // The token itself is only ever known to the creator, so the QR encodes the
-        // stored id and the reader resolves it. Anything else would need the
-        // plaintext token, which we deliberately do not keep.
         var url = BuildUrl(invite.Id.ToString("N"));
 
         using var generator = new QRCodeGenerator();
@@ -141,14 +130,9 @@ public sealed class InviteService(
         if (invite.InvitedEmail is not null
             && !string.Equals(invite.InvitedEmail, user.Email, StringComparison.OrdinalIgnoreCase))
         {
-            // A pinned invite is for one person; a leaked link must not be enough.
             throw new ForbiddenException("This invite was issued to a different email address.");
         }
 
-        // Deliberately ignores the tombstone: someone who was removed and comes back
-        // must reclaim their original row. Inserting a second one would collide with
-        // the one-membership-per-user index, and would orphan whatever history is
-        // still attached to the old row.
         var existing = await db.GroupMembers.FirstOrDefaultAsync(m =>
             m.GroupId == invite.GroupId && m.UserId == userId, ct);
 
@@ -188,8 +172,6 @@ public sealed class InviteService(
             if (member.UserId is not null && member.UserId != userId)
                 throw new ValidationException("That member has already been claimed.");
 
-            // Claim the placeholder rather than adding a second row, so the history
-            // an import attached to this name stays attached to this person.
             member.UserId = userId;
             member.Status = MembershipStatus.Active;
             member.JoinedAt = clock.UtcNow;
@@ -252,8 +234,6 @@ public sealed class InviteService(
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync(ct);
 
-        // The token is deliberately absent: only its hash was kept, so a listing
-        // cannot reveal a usable link.
         return invites
             .Where(i => i.UseCount < i.MaxUses)
             .Select(i => new InviteDto(i.Id, groupId, group.Name, string.Empty,
@@ -261,8 +241,6 @@ public sealed class InviteService(
                 i.ExpiresAt, i.MaxUses, i.UseCount))
             .ToList();
     }
-
-    // ---- internals -------------------------------------------------------
 
     private async Task<GroupInvite> FindAsync(string token, CancellationToken ct)
     {
@@ -274,8 +252,6 @@ public sealed class InviteService(
         var invite = await db.GroupInvites.FirstOrDefaultAsync(i => i.TokenHash == Hash(trimmed), ct);
         if (invite is not null) return invite;
 
-        // The QR form carries the invite id rather than the token, since the
-        // plaintext token only ever existed in the creation response.
         if (Guid.TryParseExact(trimmed, "N", out var inviteId)
             || Guid.TryParse(trimmed, out inviteId))
         {
@@ -296,11 +272,6 @@ public sealed class InviteService(
     private static string Hash(string token)
         => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
-    /// <summary>
-    /// The landing URL for an invite. The segment is the plaintext token when we
-    /// have it, and the invite id for a QR code, where we do not: FindAsync
-    /// resolves either.
-    /// </summary>
     private string BuildUrl(string tokenOrInviteId)
         => $"{options.AppBaseUrl.TrimEnd('/')}/join/{tokenOrInviteId}";
 

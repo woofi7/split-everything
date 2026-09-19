@@ -12,10 +12,6 @@ public interface IJwtTokenService
 {
     (string Token, DateTimeOffset ExpiresAt) CreateAccessToken(User user, string? deviceId);
 
-    /// <summary>
-    /// Returns the plaintext to hand the client and the hash to store. The plaintext
-    /// is never persisted, so a database leak does not yield usable sessions.
-    /// </summary>
     (string Token, string Hash, DateTimeOffset ExpiresAt) CreateRefreshToken();
 
     string HashRefreshToken(string token);
@@ -67,7 +63,6 @@ public sealed class JwtTokenService(AuthOptions options, IClock clock) : IJwtTok
         => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 }
 
-/// <summary>Claim names spelled out, so the shape of our token is readable here.</summary>
 internal static class JwtRegisteredClaimNames
 {
     public const string Subject = "sub";

@@ -3,15 +3,6 @@ import { flushPromises, mount } from '@vue/test-utils'
 import UpdatePrompt from '@/components/ui/UpdatePrompt.vue'
 import { pwa, resetPwa } from '../support/pwaRegister'
 
-/**
- * A new version is waiting.
- *
- * A service worker that has downloaded a new build waits for every page using the
- * old one to close, and on a phone a page is never closed: the app sat on whatever
- * version it was installed with. That is how a client ends up older than the server
- * it is talking to.
- */
-
 const mountPrompt = async () => {
   const wrapper = mount(UpdatePrompt, { global: { stubs: { teleport: true } } })
   await flushPromises()
@@ -64,7 +55,6 @@ describe('UpdatePrompt', () => {
     await wrapper.find('[data-testid="dismiss-update"]').trigger('click')
     await flushPromises()
 
-    // Nothing is lost by waiting: the outbox holds what has not been sent.
     expect(wrapper.find('[data-testid="update-prompt"]').exists()).toBe(false)
     expect(pwa.applied).toBe(false)
   })

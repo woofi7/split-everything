@@ -29,7 +29,6 @@ from datetime import datetime, timedelta, timezone
 
 DEFAULT_API = "http://localhost:5080/api"
 
-# Fixed, so a re-run produces the same figures and a screenshot stays comparable.
 random.seed(20260901)
 
 
@@ -96,8 +95,6 @@ def spread(months_ago, day, hour=19):
     return min(when, datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
 
 
-# (description, amount, months_ago, day, split) where split is None for an equal
-# share, or a list of weights in member order for the type named alongside.
 FLAT = [
     ("Rent", 1520.00, 3, 1, ("Shares", [2, 1, 1])),
     ("Hydro Quebec", 96.42, 3, 3, None),
@@ -253,7 +250,6 @@ def add_expense(api, group, payer, members, row, currency):
             "importFingerprint": None,
             "importBatchId": None,
         },
-        # A split the server will not accept should not take the whole run with it.
         tolerate=True,
     )
 
@@ -274,17 +270,12 @@ def seed_group(api, name, currency, cast, rows, icon=None, colour=None):
         "placeholderMemberNames": [],
     })
 
-    # Real accounts, added the way the app adds them.
     for person in cast:
         api.request("POST", f"/groups/{group['id']}/members/user", {"userId": person.user["id"]})
 
     group = api.request("GET", f"/groups/{group['id']}")
     members = [m["id"] for m in group["members"]]
 
-    # Whose session records each expense, keyed by their member id in this group.
-    # The payer adds their own, because that is who would have: everything filed
-    # by one person leaves an activity feed with a single author, which is both
-    # untrue and useless for anything that colours by who did it.
     sessions = {}
     for member in group["members"]:
         if member["userId"] == api.user["id"]:
@@ -297,8 +288,6 @@ def seed_group(api, name, currency, cast, rows, icon=None, colour=None):
     print(f"  {name}: created with {len(members)} people, {len(rows)} expenses")
 
     for index, row in enumerate(rows):
-        # Rotated rather than random, so everyone pays a fair share of the months
-        # and the stacked chart has more than one colour in every bar.
         payer = members[index % len(members)]
         add_expense(sessions.get(payer, api), group, payer, members, row, currency)
 
@@ -310,7 +299,6 @@ def settle(api, group, from_index, to_index, amount, months_ago, day, note):
     if len(members) <= max(from_index, to_index):
         return
 
-    # Recorded by whoever paid, which is who would have opened the app to do it.
     payer = next(
         (m for m in group["members"] if m["id"] == members[from_index]),
         None,
@@ -356,7 +344,6 @@ def main():
     user = owner.sign_in()
     print(f"Signed in as {user['email']}\n")
 
-    # Each on its own device id: the server refuses to move one between accounts.
     cast = {}
     for index, (email, name) in enumerate([
         ("emma@test.com", "Emma"),

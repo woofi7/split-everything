@@ -20,13 +20,8 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Api;
 
-/// <summary>
-/// End to end over HTTP: routing, JSON, auth, authorization and the error handler.
-/// </summary>
 public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 {
-    // ---- health and auth -------------------------------------------------
-
     [Fact]
     public async Task Health_is_public()
     {
@@ -63,7 +58,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
     [Fact]
     public async Task A_token_signed_with_the_wrong_key_is_rejected()
     {
-        // Forged with a different secret: the signature check has to catch it.
         var forged = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
                      "eyJzdWIiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDAiLCJleHAiOjk5OTk5OTk5OTl9." +
                      "Zm9yZ2VkLXNpZ25hdHVyZQ";
@@ -159,8 +153,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         refreshed!.AccessToken.ShouldNotBe(tokens.AccessToken);
     }
 
-    // ---- groups ----------------------------------------------------------
-
     [Fact]
     public async Task Creating_a_group_returns_201_with_a_location()
     {
@@ -245,8 +237,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
-
-    // ---- expenses --------------------------------------------------------
 
     [Fact]
     public async Task An_expense_can_be_created_and_read_back_over_http()
@@ -356,8 +346,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         history!.ShouldHaveSingleItem().Revision.ShouldBe(1);
     }
 
-    // ---- settlements and balances ---------------------------------------
-
     [Fact]
     public async Task A_group_balance_offers_a_simplified_plan_over_http()
     {
@@ -416,8 +404,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    // ---- invites ---------------------------------------------------------
-
     [Fact]
     public async Task An_invite_can_be_created_previewed_and_redeemed_over_http()
     {
@@ -429,7 +415,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         created.EnsureSuccessStatusCode();
         var invite = await created.Content.ReadFromJsonAsync<InviteDto>(Json);
 
-        // The preview is deliberately public, so the sign-in page can name the group.
         var anonymous = Factory.CreateClient();
         var preview = await anonymous.GetFromJsonAsync<InvitePreviewDto>($"/api/invites/{invite!.Token}", Json);
         preview!.GroupName.ShouldBe("Roommates");
@@ -464,8 +449,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         (await Client.PostAsync("/api/invites/nonsense/redeem", null))
             .StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
-
-    // ---- sync ------------------------------------------------------------
 
     [Fact]
     public async Task An_offline_batch_can_be_pushed_over_http()
@@ -525,8 +508,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         (await NewContext().Devices.FirstAsync(d => d.Id == TestData.DeviceA))
             .LastAckedServerSeq.ShouldBe(3);
     }
-
-    // ---- stats, activity, categories, notifications ----------------------
 
     [Fact]
     public async Task The_stats_dashboard_is_readable_over_http()
@@ -589,8 +570,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         var list = await Client.GetFromJsonAsync<List<PushSubscriptionDto>>("/api/notifications", Json);
         list!.ShouldHaveSingleItem().Endpoint.ShouldBe("https://push.example/abc");
     }
-
-    // ---- receipts and imports -------------------------------------------
 
     [Fact]
     public async Task A_receipt_can_be_uploaded_and_downloaded_over_http()
@@ -738,8 +717,6 @@ public class ApiEndpointTests(PostgresFixture fixture) : ApiTestBase(fixture)
         response.EnsureSuccessStatusCode();
         (await response.Content.ReadFromJsonAsync<RecurringExpenseDto>(Json))!.Description.ShouldBe("Rent");
     }
-
-    // ---- helpers ---------------------------------------------------------
 
     private async Task<GroupDto> CreateGroupAsync(string name = "Roommates", params string[] placeholders)
     {

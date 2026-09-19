@@ -8,15 +8,6 @@ import {
   watchForInstallPrompt,
 } from '@/native/install'
 
-/**
- * Installing the app on the device reading it.
- *
- * This is a PWA, but a browser only offers to install one from a secure origin, so
- * read from a plain address on the local network it looks like an ordinary page.
- * Chrome says it can by firing an event, once, early; Safari never says anything and
- * has to be told what to tap.
- */
-
 const define = (target: object, name: string, value: unknown) => {
   const had = Object.getOwnPropertyDescriptor(target, name)
   Object.defineProperty(target, name, { value, configurable: true })
@@ -72,7 +63,6 @@ describe('installing the app', () => {
   })
 
   it('says a plain address cannot install anything', () => {
-    // No service worker outside a secure origin, so no installable app either.
     prompts.push(define(window, 'isSecureContext', false))
 
     expect(canBeInstalled()).toBe(false)
@@ -124,7 +114,6 @@ describe('installing the app', () => {
 
       expect(await install()).toBe('accepted')
       expect(asked()).toBe(true)
-      // The offer is spent: a second attempt needs the browser to offer again.
       expect(canInstall.value).toBe(false)
       expect(await install()).toBe('unavailable')
     } finally {

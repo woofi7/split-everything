@@ -5,15 +5,6 @@ import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
 import { settle, signInForTests, waitFor } from '../support/viewHarness'
 
-/**
- * A local write has to reach the server on its own.
- *
- * The rest of the store suite calls sync() by hand, which cannot catch a mutation
- * that queues an operation and then nothing ever drains it. Without a trigger here
- * an expense sits marked "waiting" until the app is reloaded, and because a pull
- * skips any row with unsent local work, it stays that way.
- */
-
 const groupId = 'group-1'
 const alice = 'member-alice'
 const bob = 'member-bob'
@@ -89,10 +80,8 @@ const draft = {
 
 describe('a local write syncs itself', () => {
   let api: ReturnType<typeof fakeSyncApi>
-
   beforeEach(async () => {
     setActivePinia(createPinia())
-    // The sync path refuses to talk to the server as nobody.
     signInForTests()
     await resetDatabase()
     await seedGroup()
@@ -118,8 +107,6 @@ describe('a local write syncs itself', () => {
     const store = storeWith()
 
     const expense = await store.add(draft)
-    // The store's own copy, not the queue: the queue empties first and the store
-    // catches up when the drain rehydrates it.
     await waitFor(() => store.pendingCount === 0 && store.forGroup(groupId)[0]?.pending === false)
 
     expect((await db.expenses.get(expense.id))!.pending).toBe(false)
@@ -132,13 +119,11 @@ describe('a local write syncs itself', () => {
     const store = storeWith()
     api = fakeSyncApi()
 
-    // A push that never answers. If add() waited on it, this test would hang.
     api.push.mockImplementation(() => new Promise(() => {}))
     store.attachSync(new SyncEngine(api, () => true))
 
     const expense = await store.add(draft)
 
-    // Written, on screen, and still marked unsent, with the push outstanding.
     expect(expense.pending).toBe(true)
     expect(store.forGroup(groupId)).toHaveLength(1)
     expect(await db.outbox.count()).toBe(1)

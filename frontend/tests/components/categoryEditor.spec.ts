@@ -17,13 +17,6 @@ const categories = [
   category('dining', 'Dining out', ['resto']),
 ]
 
-/**
- * Editing the list of things an expense can be filed under.
- *
- * One editor for both lists there are - a group's own and the server's - because
- * they are the same list with a different owner, and two of them would be two
- * places to fix the next thing wrong with it.
- */
 describe('the category editor', () => {
   const mountEditor = (props = {}) =>
     mount(CategoryEditor, {
@@ -63,8 +56,6 @@ describe('the category editor', () => {
     await wrapper.find('[data-testid="category-name"]').setValue('Epicerie')
     await wrapper.find('[data-testid="save-categories"]').trigger('click')
 
-    // The key is what the expenses are filed under: renaming must not unfile a
-    // year of them.
     expect(saved(wrapper)?.[0]).toMatchObject({ key: 'groceries', name: 'Epicerie' })
   })
 
@@ -112,7 +103,6 @@ describe('the category editor', () => {
     await wrapper.findAll('[data-testid="category-up"]')[0].trigger('click')
     await wrapper.findAll('[data-testid="category-down"]')[1].trigger('click')
 
-    // Nothing moved, so there is nothing to save.
     expect(wrapper.find('[data-testid="save-categories"]').exists()).toBe(false)
   })
 
@@ -153,8 +143,6 @@ describe('the category editor', () => {
 
     await wrapper.setProps({ categories })
 
-    // The group screen loads its categories a moment after it renders, and an
-    // editor that missed them would show an empty list over a full one.
     expect(rows(wrapper)).toHaveLength(2)
   })
 

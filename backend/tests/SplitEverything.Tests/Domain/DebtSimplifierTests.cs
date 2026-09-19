@@ -34,7 +34,6 @@ public class DebtSimplifierTests
     [Fact]
     public void A_debt_chain_collapses_into_one_transfer()
     {
-        // A owes B, B owes C the same amount: B drops out entirely.
         var transfers = DebtSimplifier.Simplify([
             new MemberBalance(A, -30m),
             new MemberBalance(B, 0m),
@@ -103,7 +102,6 @@ public class DebtSimplifierTests
             var ids = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
             var amounts = ids.Select(_ => Math.Round((decimal)(random.NextDouble() * 400 - 200), 2)).ToList();
 
-            // Force the balances to sum to zero, as a real group's always do.
             amounts[^1] -= amounts.Sum();
 
             var balances = ids.Zip(amounts, (id, amount) => new MemberBalance(id, amount)).ToList();
@@ -161,7 +159,6 @@ public class DebtSimplifierTests
     [Fact]
     public void Ties_are_broken_by_member_id_so_two_devices_agree()
     {
-        // B and C are owed exactly the same; the plan must not depend on list order.
         List<MemberBalance> balances = [new(A, -20m), new(B, 10m), new(C, 10m)];
 
         DebtSimplifier.Simplify(balances)

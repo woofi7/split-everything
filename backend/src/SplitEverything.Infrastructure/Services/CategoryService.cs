@@ -8,19 +8,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// The categories an expense can be filed under.
-///
-/// One table, two scopes. Rows with no group are the server's own list; rows with
-/// one belong to that group. A group has no rows until somebody there edits the
-/// list, and the edit takes a copy of whatever the server's list was at that
-/// moment - so a household that renamed "Dining out" to "Resto" keeps it, and a
-/// later change to the server's list leaves them alone.
-///
-/// Whole lists in and out, like the names left out of the totals: this is edited as
-/// a list on one screen, the order of that list is the order it is shown in, and a
-/// patch of one line would be a merge nobody asked for.
-/// </summary>
 public sealed class CategoryService(AppDbContext db, IAdminService admins) : ICategoryService
 {
     private const int MostCategories = 30;
@@ -36,9 +23,6 @@ public sealed class CategoryService(AppDbContext db, IAdminService admins) : ICa
     public async Task<IReadOnlyList<CategoryDto>> SetForGroupAsync(
         Guid userId, Guid groupId, SetCategoriesRequest request, CancellationToken ct = default)
     {
-        // A member, not an admin. It decides how spending is filed on a screen
-        // everybody reads and changes nothing about the money, which is the same
-        // line the names left out of the totals are drawn on.
         await GroupAccess.RequireMemberAsync(db, userId, groupId, ct);
         var group = await GroupAccess.RequireGroupAsync(db, groupId, ct);
         GroupAccess.RequireWritable(group);
@@ -79,7 +63,6 @@ public sealed class CategoryService(AppDbContext db, IAdminService admins) : ICa
         return await ReadAsync(null, ct);
     }
 
-    /// <summary>The group's own list, or the server's for a group that has not edited it.</summary>
     private async Task<IReadOnlyList<CategoryDto>> ResolveForGroupAsync(
         Guid groupId, CancellationToken ct)
     {
@@ -89,8 +72,6 @@ public sealed class CategoryService(AppDbContext db, IAdminService admins) : ICa
 
     private async Task<IReadOnlyList<CategoryDto>> ReadAsync(Guid? groupId, CancellationToken ct)
     {
-        // Read the rows, then read the keywords out of them here: the JSON is ours
-        // to parse and not something to ask the database to understand.
         var rows = await db.Categories
             .AsNoTracking()
             .Where(c => c.GroupId == groupId)
@@ -110,15 +91,6 @@ public sealed class CategoryService(AppDbContext db, IAdminService admins) : ICa
             throw new ForbiddenException("This is for whoever runs this server.");
     }
 
-    /// <summary>
-    /// A cleaned list, in the order it was sent.
-    ///
-    /// The order is the sort order: the editor is a list somebody arranges, and
-    /// asking them for a number as well would be asking them to say the same thing
-    /// twice. Keys are made from names when none was sent, which is what happens
-    /// for a category being invented, and made unique so two "Ski" rows cannot
-    /// collide and lose one another's expenses.
-    /// </summary>
     private static List<CleanCategory> Clean(IReadOnlyList<CategoryInputDto>? input)
     {
         var rows = input ?? [];
@@ -136,8 +108,6 @@ public sealed class CategoryService(AppDbContext db, IAdminService admins) : ICa
             if (key.Length == 0)
                 throw new ValidationException($"\"{name}\" needs letters or numbers in its name.");
 
-            // Two rows that would answer to the same key are two rows that would
-            // silently share their expenses.
             if (!taken.Add(key))
                 throw new ValidationException($"There is more than one \"{name}\" in that list.");
 
@@ -176,12 +146,6 @@ public sealed class CategoryService(AppDbContext db, IAdminService admins) : ICa
             KeywordsJson = JsonSerializer.Serialize(category.Keywords),
         };
 
-    /// <summary>
-    /// A key from a name: lower case, letters and digits, dashes for the rest.
-    ///
-    /// Accents are folded rather than dropped, so "Épicerie" is "epicerie" and not
-    /// "picerie" - this is written in French as often as in English.
-    /// </summary>
     private static string Slug(string value)
     {
         var folded = value.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
@@ -219,7 +183,6 @@ public sealed class CategoryService(AppDbContext db, IAdminService admins) : ICa
         }
         catch (JsonException)
         {
-            // A hand-edited row is not a reason to fail the screen.
             return [];
         }
     }

@@ -31,7 +31,6 @@ describe('SignInView', () => {
     delete (window as unknown as { google?: unknown }).google
   })
 
-  /** Puts a stand-in for Google Identity Services on the page. */
   function withGoogle(): { renderButton: ReturnType<typeof vi.fn>; fire: (credential?: string) => void } {
     mockClientId = 'test-client-id'
     let callback: ((response: { credential?: string }) => void) | undefined
@@ -86,8 +85,6 @@ describe('SignInView', () => {
     })
     await settle()
 
-    // The device already knows whose it is. Asking is a question it has the
-    // answer to, so it answers it and leaves.
     expect(api.post).toHaveBeenCalledWith(
       '/auth/dev',
       expect.objectContaining({ email: 'alice@example.com' }),
@@ -123,7 +120,6 @@ describe('SignInView', () => {
     })
     await settle()
 
-    // Not "welcome back, continue as Alice": there is nothing to confirm.
     expect(textOf(wrapper)).not.toContain('Continue as')
     expect(wrapper.find('[data-testid="continue-as"]').exists()).toBe(false)
   })
@@ -170,7 +166,6 @@ describe('SignInView', () => {
     })
     await settle()
 
-    // Nothing to reconnect to, so nothing is attempted and the form is the page.
     expect(api.post).not.toHaveBeenCalledWith('/auth/dev', expect.anything())
     expect(replace).not.toHaveBeenCalled()
     expect(wrapper.find('input[type="email"]').exists()).toBe(true)
@@ -186,8 +181,6 @@ describe('SignInView', () => {
     })
     await settle()
 
-    // An address is not a credential. Where Google is the only way in, the
-    // credential has to come from Google, so the page stays.
     expect(api.post).not.toHaveBeenCalledWith('/auth/dev', expect.anything())
     expect(replace).not.toHaveBeenCalled()
     expect(wrapper.find('input[type="email"]').exists()).toBe(false)
@@ -200,8 +193,6 @@ describe('SignInView', () => {
       rememberedAccount: { email: 'alice@example.com', displayName: 'Alice', avatarUrl: null },
     })
 
-    // So the chooser opens on the right account rather than every account signed
-    // into the browser.
     expect(google.initializeOptions()?.login_hint).toBe('alice@example.com')
   })
 
@@ -213,12 +204,8 @@ describe('SignInView', () => {
 
   it('says so when the Google script did not load', async () => {
     const { wrapper } = await mountView(SignInView, { signedIn: false })
-    // The screen fetches Google's library before it can know, and a script that
-    // cannot be fetched settles a beat later.
     await waitFor(() => wrapper.find('[role="alert"]').exists())
 
-    // Blocked scripts and offline devices are normal; the page must say why
-    // there is no button rather than showing nothing.
     expect(wrapper.find('[role="alert"]').text()).toContain('Google sign-in is unavailable')
   })
 
@@ -236,10 +223,6 @@ describe('SignInView', () => {
 
     await mountView(SignInView, { signedIn: false })
 
-    // Not a stylistic width. At 200 and above Google swaps this HTML button for a
-    // cross-origin iframe whose canvas paints opaque white on our coloured page,
-    // and nothing on this side can recolour it. Widening this puts the white slab
-    // back for everyone who has a Google session.
     const options = renderButton.mock.calls[0][1] as { width: number; theme: string }
     expect(options.width).toBeLessThan(200)
     expect(options.theme).toBe('filled_black')
@@ -251,8 +234,6 @@ describe('SignInView', () => {
 
     const { wrapper } = await mountView(SignInView, { signedIn: false })
 
-    // Without a client id there is nothing to render, and silence would look like
-    // a broken page.
     expect(wrapper.find('[role="alert"]').text()).toContain('unavailable')
   })
 
@@ -336,8 +317,6 @@ describe('SignInView', () => {
     fire('google-credential')
     await settle()
 
-    // An open redirect would let a crafted link bounce someone off-site with a
-    // fresh session in hand.
     expect(replace).toHaveBeenCalledWith('/dashboard')
   })
 
@@ -387,7 +366,6 @@ describe('SignInView', () => {
 
     const { wrapper } = await mountView(SignInView, { api, signedIn: false })
 
-    // Showing "Google is unavailable" next to a working form would be confusing.
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 
@@ -515,8 +493,6 @@ describe('JoinView', () => {
     await wrapper.find('button[type="button"]').trigger('click')
     await settle()
 
-    // The target carries the intent to join, so coming back finishes the job
-    // rather than asking for the same tap a second time.
     expect(push).toHaveBeenCalledWith({
       name: 'sign-in',
       query: { redirect: '/join/invite-token?join=1' },
@@ -524,9 +500,6 @@ describe('JoinView', () => {
   })
 
   it('joins on its own when the visitor comes back from signing in', async () => {
-    // The spec's flow is one decision: open the link, sign in, you are in the
-    // group. Landing back on the same page with the same button still to press
-    // reads as though signing in did nothing.
     query = { join: '1' }
     const api = preview()
     api.post.mockResolvedValue({ groupId: 'group-1' })
@@ -542,7 +515,6 @@ describe('JoinView', () => {
     const api = preview()
     api.post.mockResolvedValue({ groupId: 'group-1' })
 
-    // No intent recorded: they should see what they are joining and decide.
     const { wrapper } = await mountView(JoinView, { api, signedIn: true })
     await settle()
 

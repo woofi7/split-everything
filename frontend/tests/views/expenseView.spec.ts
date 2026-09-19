@@ -46,7 +46,6 @@ describe('ExpenseView', () => {
       ],
     })
 
-    // Not "Alice paid": the pans were bought by the two of them.
     expect(textOf(wrapper)).toContain('Alice and Bob paid on')
   })
 
@@ -69,8 +68,6 @@ describe('ExpenseView', () => {
       ],
     })
 
-    // What each paid is a different question from what each owes, and the answer to
-    // the second is already on screen below.
     const breakdown = wrapper.find('[data-testid="payer-breakdown"]').text()
     expect(breakdown).toContain('40.00')
     expect(breakdown).toContain('25.00')
@@ -151,7 +148,6 @@ describe('ExpenseView', () => {
     const text = textOf(wrapper)
     expect(text).toContain('Items')
     expect(text).toContain('Starter')
-    // Quantity is multiplied in the line total.
     expect(text).toContain('50.00')
   })
 
@@ -193,8 +189,6 @@ describe('ExpenseView', () => {
     const input = wrapper.find('input[type="text"]')
     await input.setValue('Noted')
     await wrapper.find('form').trigger('submit')
-    // Posting queues the comment and kicks a background drain, so the box clears
-    // a few turns later. Waiting on the box itself rather than counting turns.
     await waitFor(() => (input.element as HTMLInputElement).value === '')
 
     expect((input.element as HTMLInputElement).value).toBe('')
@@ -210,8 +204,6 @@ describe('ExpenseView', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    // Said at the top of the screen rather than under the box, which is where the
-    // thumb that just pressed the button is.
     expect(saidOnScreen().join(' ')).toContain('A comment needs some text')
     expect(textOf(wrapper)).toContain('Comments (0)')
   })
@@ -225,8 +217,6 @@ describe('ExpenseView', () => {
     await wrapper.find('[data-testid="delete-expense"]').trigger('click')
     await settle(1)
 
-    // An expense is somebody else's balance as well as yours, and the only way
-    // back is to add it again from memory.
     expect((await db.expenses.get('expense-1'))?.isDeleted).toBe(false)
     expect(replace).not.toHaveBeenCalled()
     expect(textOf(wrapper)).toContain('Delete this expense?')
@@ -265,8 +255,6 @@ describe('ExpenseView', () => {
     await wrapper.find('[data-testid="delete-expense"]').trigger('click')
     await settle(1)
     await wrapper.find('[data-testid="confirm-delete"]').trigger('click')
-    // The redirect is the last thing to happen, so it is the only safe signal
-    // that the whole action finished.
     await waitFor(() => replace.mock.calls.length > 0)
 
     expect((await db.expenses.get('expense-1'))?.isDeleted).toBe(true)
@@ -360,7 +348,6 @@ describe('ExpenseView card colour', () => {
     })
     await settle()
 
-    // Opening an expense should not change whose it appears to be.
     const style = wrapper.find('[data-testid="expense-card"]').attributes('style') ?? ''
     expect(style).toContain('color-mix')
     expect(style).toContain('--surface-raised')
@@ -375,8 +362,6 @@ describe('ExpenseView split type', () => {
     })
     await settle()
 
-    // Two expenses with identical shares can have been divided by quite different
-    // rules, and the rule is what someone checks when the numbers look wrong.
     expect(wrapper.find('[data-testid="split-type"]').text()).toBe('By percentage')
   })
 
@@ -439,7 +424,6 @@ describe('ExpenseView split type', () => {
     })
     await settle()
 
-    // Equal has no weight to show; an empty label beside each name would be noise.
     expect(textOf(wrapper)).not.toContain('shares')
   })
 })

@@ -16,8 +16,6 @@ public class SyncLogEntryConfiguration : IEntityTypeConfiguration<SyncLogEntry>
         builder.Property(e => e.VectorClockJson).HasColumnType("jsonb").IsRequired();
         builder.Property(e => e.PayloadJson).HasColumnType("jsonb").IsRequired();
 
-        // The delta pull is "everything in this group after cursor N", so the
-        // (group, seq) pair is both the uniqueness guarantee and the read path.
         builder.HasIndex(e => new { e.GroupId, e.ServerSeq }).IsUnique();
         builder.HasIndex(e => new { e.EntityType, e.EntityId });
         builder.HasIndex(e => e.LineageId);

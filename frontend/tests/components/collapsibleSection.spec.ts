@@ -2,13 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CollapsibleSection from '@/components/ui/CollapsibleSection.vue'
 
-/**
- * A settings section that keeps itself out of the way.
- *
- * Fourteen categories, each with a name, an icon, a colour and a line of
- * keywords, is a list that buries everything under it on a screen people open to
- * change one thing.
- */
 describe('a collapsible section', () => {
   const mountSection = (props = {}) =>
     mount(CollapsibleSection, {

@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { compileNamePattern, matchesAnyNamePattern } from '@/domain/namePatterns'
 
-/**
- * Matching a typed pattern against an expense name.
- *
- * Globs, not regular expressions. "Loyer*" is what somebody writes when they mean
- * "anything starting with Loyer"; a regex reads it as "Loye then any number of r",
- * which matches "Loye" and misses every rent there has ever been.
- */
 describe('matching a name against a pattern', () => {
   const matches = (pattern: string, name: string) => compileNamePattern(pattern)(name)
 
@@ -24,7 +17,6 @@ describe('matching a name against a pattern', () => {
 
   describe('a pattern with a star', () => {
     it('matches from the beginning', () => {
-      // The case that started this: Loyer* is not "Loye" and some r's.
       expect(matches('Loyer*', 'Loyer aout')).toBe(true)
       expect(matches('Loyer*', 'Loyer')).toBe(true)
       expect(matches('Loyer*', 'Paiement loyer')).toBe(false)
@@ -51,7 +43,6 @@ describe('matching a name against a pattern', () => {
   })
 
   it('treats punctuation as itself rather than as a pattern', () => {
-    // A regex would read the dot as "any character" and the brackets as a group.
     expect(matches('Rent (flat)', 'Rent (flat) August')).toBe(true)
     expect(matches('a.b', 'axb')).toBe(false)
     expect(matches('a.b', 'a.b August')).toBe(true)

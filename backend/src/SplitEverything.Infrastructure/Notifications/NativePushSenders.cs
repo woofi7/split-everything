@@ -6,13 +6,6 @@ using SplitEverything.Domain.Common;
 
 namespace SplitEverything.Infrastructure.Notifications;
 
-/// <summary>
-/// FCM HTTP v1 for the Android shell.
-///
-/// Left as a thin, configuration-gated sender: with no credentials it reports
-/// success and does nothing, so a homelab install without Firebase set up still
-/// works over Web Push instead of erroring on every notification.
-/// </summary>
 public sealed class FcmPushSender(
     HttpClient http,
     PushOptions options,
@@ -52,7 +45,6 @@ public sealed class FcmPushSender(
 
         if (response.IsSuccessStatusCode) return true;
 
-        // FCM answers 404 for a token the app no longer holds.
         var gone = response.StatusCode is System.Net.HttpStatusCode.NotFound;
         logger.Log(gone ? LogLevel.Information : LogLevel.Warning,
             "FCM send failed with {Status}", response.StatusCode);
@@ -75,10 +67,6 @@ public interface IFcmAccessTokenProvider
     Task<string?> GetAsync(CancellationToken ct = default);
 }
 
-/// <summary>
-/// Exchanges the service-account JSON for an OAuth access token, cached until it
-/// nears expiry.
-/// </summary>
 public sealed class FcmAccessTokenProvider(PushOptions options, IClock clock) : IFcmAccessTokenProvider
 {
     private string? _token;
@@ -96,9 +84,6 @@ public sealed class FcmAccessTokenProvider(PushOptions options, IClock clock) : 
         {
             if (_token is not null && _expiresAt > clock.UtcNow.AddMinutes(2)) return _token;
 
-            // CredentialFactory rather than GoogleCredential.FromJson, which is
-            // deprecated: it accepted any credential type from a json blob, and the
-            // factory makes the caller name what it is expecting.
             var credential = Google.Apis.Auth.OAuth2.CredentialFactory
                 .FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(options.FcmServiceAccountJson)
                 .ToGoogleCredential()
@@ -115,10 +100,6 @@ public sealed class FcmAccessTokenProvider(PushOptions options, IClock clock) : 
     }
 }
 
-/// <summary>
-/// APNs for the iOS shell. Uses token-based auth over HTTP/2, and like FCM is a
-/// no-op until credentials are configured.
-/// </summary>
 public sealed class ApnsPushSender(
     HttpClient http,
     PushOptions options,
@@ -149,8 +130,6 @@ public sealed class ApnsPushSender(
                 {
                     alert = new { title = message.Title, body = message.Body },
                     sound = "default",
-                    // Wakes the app so the sync engine can pull the change itself
-                    // rather than trusting the notification payload.
                     contentAvailable = 1
                 },
                 url = message.Url
@@ -165,7 +144,6 @@ public sealed class ApnsPushSender(
         using var response = await http.SendAsync(request, ct);
         if (response.IsSuccessStatusCode) return true;
 
-        // 410 Gone means the device token is dead for good.
         var gone = response.StatusCode is System.Net.HttpStatusCode.Gone;
         logger.Log(gone ? LogLevel.Information : LogLevel.Warning,
             "APNs send failed with {Status}", response.StatusCode);
@@ -187,8 +165,6 @@ public sealed class ApnsJwtProvider(PushOptions options, IClock clock) : IApnsJw
 
     public Task<string> GetAsync(CancellationToken ct = default)
     {
-        // Apple rejects tokens older than an hour and rate-limits regeneration, so
-        // one token is reused for most of that window.
         if (_token is not null && clock.UtcNow - _issuedAt < TimeSpan.FromMinutes(45))
             return Task.FromResult(_token);
 

@@ -4,16 +4,6 @@ using SplitEverything.Domain.Common;
 
 namespace SplitEverything.Domain.Sync;
 
-/// <summary>
-/// A per-device logical clock: device id -> monotonic counter.
-///
-/// Every syncable entity carries one. Comparing two clocks tells us whether one
-/// revision causally follows the other, or whether the two were written
-/// concurrently (a true conflict that a human must resolve).
-///
-/// The clock is immutable; every mutation returns a new instance so that a
-/// revision's clock can never be edited after the fact.
-/// </summary>
 public sealed class VectorClock : IEquatable<VectorClock>
 {
     private readonly SortedDictionary<string, long> _counters;
@@ -41,7 +31,6 @@ public sealed class VectorClock : IEquatable<VectorClock>
 
     public long this[string deviceId] => _counters.TryGetValue(deviceId, out var v) ? v : 0;
 
-    /// <summary>Bumps this device's counter by one, leaving every other entry untouched.</summary>
     public VectorClock Tick(string deviceId)
     {
         if (string.IsNullOrWhiteSpace(deviceId))
@@ -52,11 +41,6 @@ public sealed class VectorClock : IEquatable<VectorClock>
         return new VectorClock(next);
     }
 
-    /// <summary>
-    /// Pointwise maximum of two clocks. This is the join used after a successful
-    /// sync, and the basis of merge reconciliation: joining two group logs keeps
-    /// the furthest-known point for every device on either side.
-    /// </summary>
     public VectorClock Merge(VectorClock other)
     {
         var next = new SortedDictionary<string, long>(_counters, StringComparer.Ordinal);
@@ -87,24 +71,15 @@ public sealed class VectorClock : IEquatable<VectorClock>
         return ClockOrdering.Equal;
     }
 
-    /// <summary>True when this clock has seen everything <paramref name="other"/> has seen.</summary>
     public bool Dominates(VectorClock other)
     {
         var ordering = CompareWith(other);
         return ordering is ClockOrdering.After or ClockOrdering.Equal;
     }
 
-    /// <summary>
-    /// True when <paramref name="other"/> contains at least one event this clock
-    /// has not observed - i.e. the remote revision is worth pulling.
-    /// </summary>
     public bool HasUnseenEventsFrom(VectorClock other)
         => other._counters.Any(entry => entry.Value > this[entry.Key]);
 
-    /// <summary>
-    /// Restricts the clock to a set of devices. Used when splitting a group so the
-    /// partitioned log keeps only the causal history relevant to its own devices.
-    /// </summary>
     public VectorClock Restrict(IEnumerable<string> deviceIds)
     {
         var keep = new HashSet<string>(deviceIds, StringComparer.Ordinal);

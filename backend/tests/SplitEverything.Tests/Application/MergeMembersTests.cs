@@ -10,18 +10,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// Folding one member into another.
-///
-/// The same person lands in a group twice: once as a name a CSV import invented
-/// from an export, and again as the account they later signed up with. Both halves
-/// carry expenses, so neither can simply be deleted.
-///
-/// The dangerous cases are the collisions. A split and an item share are each
-/// keyed by member and unique per expense, so an expense both halves were part of
-/// has two rows that have to become one. Getting that wrong either throws on the
-/// unique index or silently loses half of what someone owed.
-/// </summary>
 public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob, Guid Ghost)> SetupAsync()
@@ -86,7 +74,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
     public async Task Two_shares_of_one_expense_become_one()
     {
         var (userId, group, alice, bob, ghost) = await SetupAsync();
-        // Both halves of the same person were on this: 10 each of 30.
         var expense = await Expenses.CreateAsync(userId, Expense(group.Id, alice, 30m, alice, bob, ghost));
 
         await Groups.MergeMembersAsync(userId, group.Id, Merge(ghost, bob));
@@ -94,8 +81,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var fresh = NewContext();
         var splits = await fresh.ExpenseSplits.Where(s => s.ExpenseId == expense.Id).ToListAsync();
 
-        // One row, holding both halves. Two rows would break the unique index;
-        // one row holding only half would quietly lose 10 from the balance.
         splits.Count(s => s.MemberId == bob).ShouldBe(1);
         splits.First(s => s.MemberId == bob).Amount.ShouldBe(20m);
     }
@@ -122,8 +107,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
 
         await Groups.MergeMembersAsync(userId, group.Id, Merge(ghost, bob));
 
-        // A payment from someone to themselves says nothing. It only meant
-        // anything while the two were different people.
         var fresh = NewContext();
         (await fresh.Settlements.FirstAsync(s => s.Id == settlement.Id)).IsDeleted.ShouldBeTrue();
     }
@@ -175,8 +158,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var before = await NewContext().SyncLog.CountAsync(e => e.EntityId == expense.Id);
         await Groups.MergeMembersAsync(userId, group.Id, Merge(ghost, bob));
 
-        // Otherwise a phone that already has this expense keeps showing the old
-        // payer for good: a pull only sends what changed since its cursor.
         var after = await NewContext().SyncLog.CountAsync(e => e.EntityId == expense.Id);
         after.ShouldBeGreaterThan(before);
     }
@@ -191,8 +172,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
 
         var merged = await Groups.MergeMembersAsync(userId, group.Id, Merge(ghost, bob));
 
-        // A default keyed by a member who no longer exists would silently drop that
-        // share out of every future expense.
         var values = merged.DefaultSplitValues.ShouldNotBeNull();
         values.ShouldNotContainKey(ghost);
         values[bob].ShouldBe(5m);
@@ -221,9 +200,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var (userId, group, alice, bob, ghost) = await SetupAsync();
         var expense = await Expenses.CreateAsync(userId, Expense(group.Id, ghost, 30m, alice, ghost));
 
-        // Removing a member deactivates it rather than deleting it, precisely
-        // because it still holds expenses. That leftover is the most likely thing
-        // anyone wants to merge, so being removed cannot disqualify it.
         await Groups.RemoveMemberAsync(userId, group.Id, ghost);
         await Groups.MergeMembersAsync(userId, group.Id, Merge(ghost, bob));
 
@@ -237,8 +213,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var (userId, group, _, bob, ghost) = await SetupAsync();
         await Groups.RemoveMemberAsync(userId, group.Id, bob);
 
-        // Everything ends up on the target, and a removed member is one nobody
-        // can see: the history would be there and invisible.
         var refusal = await Should.ThrowAsync<ValidationException>(
             () => Groups.MergeMembersAsync(userId, group.Id, Merge(ghost, bob)));
 
@@ -259,8 +233,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
     {
         var (userId, group, alice, bob, _) = await SetupAsync();
 
-        // A group has to keep an owner, and the surviving member may not have an
-        // account at all. Merging the other way round does the same job.
         await Should.ThrowAsync<ValidationException>(
             () => Groups.MergeMembersAsync(userId, group.Id, Merge(alice, bob)));
     }
@@ -284,7 +256,6 @@ public class MergeMembersTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         fresh.GroupMembers.Add(TestData.Member(group.Id, other.Id, "Mallory"));
         await fresh.SaveChangesAsync();
 
-        // It rewrites everyone's balances, so it is not a thing any member can do.
         await Should.ThrowAsync<ForbiddenException>(
             () => Groups.MergeMembersAsync(other.Id, group.Id, Merge(ghost, bob)));
     }

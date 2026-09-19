@@ -1,21 +1,6 @@
 import Papa from 'papaparse'
 import { parseAmountInput } from '@/domain/money'
 
-/**
- * Bank and credit-card statement parsing, entirely in the browser.
- *
- * The privacy constraint from the spec drives the whole design: the statement file
- * never leaves the device. Nothing here uploads, and nothing here calls out. The
- * only thing that ever reaches the API is the list of expense records the user
- * confirmed in the review wizard.
- *
- * Statement layouts vary wildly, so every step is heuristic and every row carries
- * its problems for the user to correct. Automated table extraction from a PDF is
- * inherently unreliable; the manual column-mapping fallback is the real answer,
- * and these parsers exist to make the common cases quick rather than to be right
- * every time.
- */
-
 export interface StatementRow {
   rowNumber: number
   date: Date | null
@@ -58,8 +43,6 @@ export async function parseStatementCsv(text: string): Promise<StatementParseRes
 
   const parsed = Papa.parse<string[]>(text.trim(), {
     skipEmptyLines: 'greedy',
-    // PapaParse sniffs the delimiter, which handles the comma/semicolon split
-    // between North American and European exports without asking the user.
     delimitersToGuess: [',', ';', '\t', '|'],
   })
 
@@ -102,7 +85,6 @@ function guessMapping(headers: string[]): StatementMapping {
   return {
     date: find('date') >= 0 ? find('date') : 0,
     description: find('description') >= 0 ? find('description') : 1,
-    // Some exports have no single amount column, only debit and credit.
     amount: amount >= 0 ? amount : debit >= 0 ? debit : 2,
     debit: debit >= 0 ? debit : undefined,
     credit: credit >= 0 ? credit : undefined,
@@ -124,7 +106,6 @@ function toStatementRow(raw: string[], rowNumber: number, mapping: StatementMapp
     const debit = parseAmountInput(cell(mapping.debit))
     const credit = parseAmountInput(cell(mapping.credit))
 
-    // A credit is money coming back, so it carries the opposite sign.
     if (debit !== null && debit !== 0) amount = Math.abs(debit)
     else if (credit !== null && credit !== 0) amount = -Math.abs(credit)
     else amount = parseAmountInput(cell(mapping.amount))
@@ -156,11 +137,6 @@ const MONTHS: Record<string, number> = {
   jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 }
 
-/**
- * Reads the date layouts real statements use. Returns null rather than guessing
- * wrong, so the row is flagged for the user instead of being filed under the
- * wrong month.
- */
 export function parseFlexibleDate(value: string, fallbackYear?: number): Date | null {
   if (!value || !value.trim()) return null
   const trimmed = value.trim()
@@ -175,7 +151,6 @@ export function parseFlexibleDate(value: string, fallbackYear?: number): Date | 
   if (slashed) {
     const first = Number(slashed[1])
     const second = Number(slashed[2])
-    // Ambiguous by design: a value over 12 can only be the day.
     const [day, month] = first > 12 ? [first, second] : [second, first]
     return utcDate(Number(slashed[3]), month - 1, day)
   }
@@ -197,20 +172,12 @@ function utcDate(year: number, month: number, day: number): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-/** Lines that are summary rows rather than transactions. */
 const NON_TRANSACTION = [
   'balance', 'total', 'subtotal', 'statement', 'page ', 'account number',
   'minimum payment', 'credit limit', 'available credit', 'interest rate',
   'previous statement', 'amount due', 'payment due',
 ]
 
-/**
- * Pulls transactions out of a PDF's extracted text.
- *
- * Line-oriented and deliberately conservative: a line needs a leading date and a
- * trailing amount to count. Summary lines are skipped by keyword, because reading
- * a closing balance as a purchase is the most damaging mistake this can make.
- */
 export function extractTransactionsFromText(text: string, statementYear: number): StatementRow[] {
   if (!text || !text.trim()) return []
 
@@ -258,10 +225,6 @@ export function extractTransactionsFromText(text: string, statementYear: number)
     })
   }
 
-  // A statement that spans the new year prints month names without a year, in
-  // chronological order. If January appears after December, those December lines
-  // belong to the previous year - otherwise they would be filed eleven months
-  // late. Deciding this needs the whole page, hence the second pass.
   const firstJanuary = candidates.findIndex((c) => c.monthName === 'jan')
   const lastDecember = candidates.map((c) => c.monthName).lastIndexOf('dec')
   const wrapsYear = firstJanuary >= 0 && lastDecember >= 0 && lastDecember < firstJanuary

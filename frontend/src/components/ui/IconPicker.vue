@@ -7,7 +7,6 @@ import { fuzzySearch } from '@/domain/fuzzySearch'
 
 const props = defineProps<{
   open: boolean
-  /** Currently chosen Font Awesome name, if any. */
   modelValue?: string | null
   title?: string
 }>()
@@ -23,7 +22,6 @@ const activeIndex = ref(0)
 const searchInput = useTemplateRef<HTMLInputElement>('searchInput')
 const dialog = useTemplateRef<HTMLElement>('dialog')
 
-/** The element that had focus before opening, so it can be given it back. */
 let previouslyFocused: HTMLElement | null = null
 
 const results = computed(() =>
@@ -34,12 +32,6 @@ const results = computed(() =>
   })),
 )
 
-/**
- * Sections, but only when nothing has been typed.
- *
- * Once there is a query the order is relevance, and grouping would fight it by
- * pushing a strong match below a weaker one in an earlier section.
- */
 const sections = computed(() => {
   if (query.value.trim().length > 0) {
     return [{ heading: null as string | null, icons: results.value }]
@@ -54,7 +46,6 @@ const sections = computed(() => {
   return grouped
 })
 
-/** Flat order, which is what the arrow keys walk. */
 const flat = computed(() => sections.value.flatMap((section) => section.icons))
 
 const activeIcon = computed(() => flat.value[activeIndex.value]?.icon ?? null)
@@ -74,16 +65,12 @@ watch(
       ICONS.findIndex((icon) => icon.name === props.modelValue),
     )
 
-    // Focus the search box, not the grid: typing is the fast path.
     await nextTick()
     searchInput.value?.focus()
   },
-  // immediate, so a picker mounted already open still highlights the current
-  // selection and takes focus rather than sitting inert.
   { immediate: true },
 )
 
-// Retyping should not leave the highlight pointing at a row that scrolled away.
 watch(query, () => {
   activeIndex.value = 0
 })
@@ -113,7 +100,6 @@ function move(delta: number): void {
   const total = flat.value.length
   if (total === 0) return
 
-  // Wraps, so holding an arrow key never dead-ends.
   activeIndex.value = (activeIndex.value + delta + total) % total
   scrollActiveIntoView()
 }
@@ -122,14 +108,11 @@ async function scrollActiveIntoView(): Promise<void> {
   await nextTick()
 
   const active = dialog.value?.querySelector('[data-active="true"]')
-  // Guarded because scrolling is a nicety: not every environment implements it,
-  // and keyboard navigation must not depend on it working.
   if (active && typeof active.scrollIntoView === 'function') {
     active.scrollIntoView({ block: 'nearest' })
   }
 }
 
-/** Columns in the grid, so up and down move a row rather than one cell. */
 const COLUMNS = 6
 
 function onKeydown(event: KeyboardEvent): void {
@@ -168,12 +151,6 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-/**
- * Keeps Tab inside the dialog.
- *
- * Without this, tabbing walks out into the page behind, which for a modal means
- * a keyboard user can operate controls they cannot see.
- */
 function trapFocus(event: KeyboardEvent): void {
   const focusable = dialog.value?.querySelectorAll<HTMLElement>(
     'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -192,7 +169,6 @@ function trapFocus(event: KeyboardEvent): void {
   }
 }
 
-/** Highlights the characters the search matched, so a hit is explainable. */
 function highlight(text: string, indices: number[]): Array<{ text: string; match: boolean }> {
   if (indices.length === 0) return [{ text, match: false }]
 
@@ -215,7 +191,6 @@ function highlight(text: string, indices: number[]): Array<{ text: string; match
   return parts
 }
 
-/** The text to show under an icon: whichever field the search actually matched. */
 function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: number[] }) {
   const fields = iconSearchFields(result.icon)
   const text = fields[result.fieldIndex] ?? result.icon.label
@@ -223,7 +198,6 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
   return { parts: highlight(text, result.indices), isKeyword: result.fieldIndex > 0 }
 }
 </script>
-
 <template>
   <Teleport to="body">
     <div
@@ -231,9 +205,7 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
       class="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
       @keydown="onKeydown"
     >
-      <!-- The backdrop closes, which is what tapping outside a sheet should do. -->
       <div class="absolute inset-0" aria-hidden="true" @click="close" />
-
       <div
         ref="dialog"
         class="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-2xl border bg-[var(--surface-raised)] sm:rounded-2xl"
@@ -254,7 +226,6 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
           >{{ t('Close') }}
           </button>
         </header>
-
         <div class="p-4 pb-2">
           <label class="sr-only" for="icon-search">{{ t('Search icons') }}</label>
           <input
@@ -275,7 +246,6 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
             {{ results.length }} {{ results.length === 1 ? 'icon' : 'icons' }}
           </p>
         </div>
-
         <div id="icon-results" class="flex-1 overflow-y-auto px-4 pb-2" role="listbox" :aria-label="t('Icons')">
           <template v-for="section in sections" :key="section.heading ?? 'results'">
             <h3
@@ -284,7 +254,6 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
             >
               {{ section.heading }}
             </h3>
-
             <ul class="mb-2 grid grid-cols-6 gap-1">
               <li v-for="result in section.icons" :key="result.icon.name">
                 <button
@@ -317,11 +286,9 @@ function captionFor(result: { icon: IconChoice; fieldIndex: number; indices: num
               </li>
             </ul>
           </template>
-
           <p v-if="results.length === 0" class="py-8 text-center text-sm text-[var(--text-muted)]">{{ t('No icon matches that. Try a plainer word, like food or travel.') }}
           </p>
         </div>
-
         <footer
           class="flex items-center justify-between gap-3 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
           style="border-color: var(--border)"

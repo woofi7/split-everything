@@ -11,10 +11,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Api;
 
-/// <summary>
-/// The hub decides which connections see which changes, so its membership checks
-/// are the boundary that keeps one group's activity out of another's clients.
-/// </summary>
 public class SyncHubTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private const string ConnectionId = "connection-1";

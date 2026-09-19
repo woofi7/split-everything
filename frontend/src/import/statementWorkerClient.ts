@@ -7,13 +7,6 @@ export interface ParseProgress {
   ratio: number
 }
 
-/**
- * Talks to the parsing worker.
- *
- * The worker exists so a multi-page PDF or an OCR pass cannot freeze the UI,
- * which matters most on a phone. This wrapper keeps that a detail: callers await
- * rows and get progress callbacks.
- */
 export class StatementWorkerClient {
   private worker: Worker | null = null
 
@@ -68,7 +61,6 @@ export class StatementWorkerClient {
     })
   }
 
-  /** Ends the worker, which also drops the parsed statement from its memory. */
   dispose(): void {
     this.worker?.terminate()
     this.worker = null

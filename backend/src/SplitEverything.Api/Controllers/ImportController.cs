@@ -6,13 +6,6 @@ using SplitEverything.Application.Services;
 
 namespace SplitEverything.Api.Controllers;
 
-/// <summary>
-/// Two importers, deliberately asymmetric.
-///
-/// A Settle Up CSV is uploaded and parsed here. A bank statement is not: it is
-/// parsed in the browser and only the confirmed rows are posted, so there is no
-/// endpoint on this controller that accepts a statement file at all.
-/// </summary>
 public sealed class ImportController(
     ICurrentUser currentUser,
     IImportService imports) : ApiControllerBase(currentUser)
@@ -47,7 +40,6 @@ public sealed class ImportController(
             stream, commit with { SourceLabel = commit.SourceLabel ?? file.FileName }, ct));
     }
 
-    /// <summary>Commits the rows a user confirmed in the client-side statement wizard.</summary>
     [HttpPost("statement/commit")]
     public async Task<ActionResult<ImportCommitResult>> CommitStatement(
         StatementCommitRequest request, CancellationToken ct)
@@ -80,10 +72,6 @@ public sealed class ImportController(
         return file.OpenReadStream();
     }
 
-    /// <summary>
-    /// The mapping travels as a JSON form field alongside the file, since a
-    /// multipart request cannot carry a JSON body as well.
-    /// </summary>
     private static T Deserialize<T>(string json)
     {
         try

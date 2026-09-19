@@ -27,22 +27,6 @@ const preview = ref<InvitePreview | null>(null)
 const error = ref<string | null>(null)
 const isJoining = ref(false)
 
-/**
- * The invite landing page is public: someone who has never opened the app has to
- * see which group they were invited to before deciding to sign in. Joining still
- * requires Google, so the link alone grants nothing.
- */
-
-/**
- * Set on the way to sign-in, and read on the way back.
- *
- * Without it, signing in returns to this page with the same button still to
- * press, which reads as though signing in did nothing. The spec's flow is one
- * decision: open the link, sign in, you are in the group.
- *
- * It travels in the URL rather than in memory so it survives the full page load
- * that a sign-in redirect can involve.
- */
 const wantsToJoin = computed(() => route.query.join === '1')
 
 onMounted(async () => {
@@ -53,8 +37,6 @@ onMounted(async () => {
     return
   }
 
-  // Only after signing in for this invite. Someone who merely opened the link
-  // should see which group it is and decide for themselves.
   if (wantsToJoin.value && auth.isSignedIn && preview.value.isRedeemable) await redeem()
 })
 
@@ -85,7 +67,6 @@ async function redeem(): Promise<void> {
   }
 }
 </script>
-
 <template>
   <AppShell :title="t('Join a group')" :show-nav="false">
     <div v-if="preview" class="flex flex-col items-center gap-5 py-8 text-center">
@@ -95,7 +76,6 @@ async function redeem(): Promise<void> {
       >
         {{ preview.iconName || preview.groupName.slice(0, 2).toUpperCase() }}
       </span>
-
       <div>
         <h2 class="text-xl font-semibold">{{ preview.groupName }}</h2>
         <p class="mt-1 text-sm text-[var(--text-muted)]">
@@ -104,7 +84,6 @@ async function redeem(): Promise<void> {
           this group.
         </p>
       </div>
-
       <button
         v-if="preview.isRedeemable"
         type="button"
@@ -116,14 +95,10 @@ async function redeem(): Promise<void> {
           ? isJoining ? t('Joining') : t('Join this group')
           : t('Sign in with Google to join') }}
       </button>
-
       <p v-else class="text-sm text-owing">{{ t('This invite is no longer valid. Ask for a new link.') }}
       </p>
-
     </div>
-
     <p v-else-if="error" class="py-8 text-center text-sm text-owing" role="alert">{{ error }}</p>
-
     <p v-else class="py-8 text-center text-sm text-[var(--text-muted)]">{{ t('Checking that invite') }}</p>
   </AppShell>
 </template>

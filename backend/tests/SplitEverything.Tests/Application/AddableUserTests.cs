@@ -8,13 +8,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// Adding someone who already has an account.
-///
-/// The other route into a group is an invite link, which suits someone who has
-/// never opened the app. For a person who is already here, sending a link and
-/// waiting is the wrong shape: they should be findable and addable directly.
-/// </summary>
 public class AddableUserTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private async Task<(Guid OwnerId, GroupDto Group)> SetupAsync()
@@ -69,7 +62,6 @@ public class AddableUserTests(PostgresFixture fixture) : ServiceTestBase(fixture
         await Groups.RemoveMemberAsync(ownerId, group.Id, member.Id);
         var addable = await Groups.ListAddableUsersAsync(ownerId, group.Id);
 
-        // They left, so they can be asked back.
         addable.ShouldHaveSingleItem().DisplayName.ShouldBe("Bob");
     }
 
@@ -89,7 +81,6 @@ public class AddableUserTests(PostgresFixture fixture) : ServiceTestBase(fixture
     [Fact]
     public async Task Lists_everyone_but_the_caller_when_no_group_is_named()
     {
-        // The new-group screen has no group yet.
         var (ownerId, _) = await SetupAsync();
         await TestData.SeedUserAsync(Db, "Bob", "bob@example.com", googleSub: "google-bob@example.com");
 
@@ -160,8 +151,6 @@ public class AddableUserTests(PostgresFixture fixture) : ServiceTestBase(fixture
 
         var again = await Groups.AddUserMemberAsync(ownerId, group.Id, new AddUserMemberRequest(bob.Id));
 
-        // A second row would collide with the one-membership-per-user index and
-        // orphan whatever history is attached to the first.
         again.Id.ShouldBe(member.Id);
         (await Db.GroupMembers.CountAsync(m => m.GroupId == group.Id && m.UserId == bob.Id)).ShouldBe(1);
 

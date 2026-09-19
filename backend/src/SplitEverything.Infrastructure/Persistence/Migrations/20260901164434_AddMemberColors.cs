@@ -4,10 +4,8 @@
 
 namespace SplitEverything.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddMemberColors : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
@@ -22,13 +20,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                 type: "text",
                 nullable: true);
 
-            // Every existing member gets a colour of their own, in the order they
-            // joined, cycling the palette in a group with more people than colours.
-            //
-            // Without this a client falls back to deriving one from the member id,
-            // which is what it did before and which every screen computed from a
-            // different list. Backfilling means a group's colours may shift once,
-            // which is worth it for a value that is now explicit and editable.
             migrationBuilder.Sql("""
                 WITH ordered AS (
                     SELECT
@@ -50,7 +41,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                 """);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

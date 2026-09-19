@@ -102,8 +102,6 @@ describe('api client', () => {
   })
 
   it('refreshes once and retries after a 401', async () => {
-    // Refresh is delegated to the auth store, so it consumes no fetch of its own:
-    // the 401 is followed directly by the retried request.
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ title: 'Unauthorized' }, 401))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
@@ -172,8 +170,6 @@ describe('api client', () => {
 
     await Promise.all([concurrent.get('/groups'), concurrent.get('/expenses')])
 
-    // Two parallel 401s must not trigger two refreshes: the second would rotate
-    // the token the first just issued and invalidate the whole chain.
     expect(refreshed).toHaveBeenCalledTimes(1)
   })
 
@@ -212,7 +208,6 @@ describe('api client', () => {
 
     const [, init] = fetchMock.mock.calls[0]
     expect(init.body).toBeInstanceOf(FormData)
-    // The browser must set the multipart boundary itself.
     expect(new Headers(init.headers).has('Content-Type')).toBe(false)
   })
 })
@@ -260,8 +255,6 @@ describe('probing for a session', () => {
 
     const result = await client.probe('/auth/refresh')
 
-    // Signing the app out and pushing to sign-in on the way in would throw away a
-    // public page someone had deliberately opened, an invite link most of all.
     expect(result).toBeNull()
     expect(onUnauthorized).not.toHaveBeenCalled()
     expect(refreshAccessToken).not.toHaveBeenCalled()
@@ -288,15 +281,6 @@ describe('probing for a session', () => {
   })
 })
 
-/**
- * A stalled request is not a slow one.
- *
- * A phone that sleeps its wifi or changes network mid-request leaves the
- * connection open and silent. fetch has no timeout of its own, so nothing ever
- * settled: the sync indicator span the rest of the page's life, and because a
- * flush and a token refresh are each single-flight, every later one waited behind
- * a promise that was never going to resolve.
- */
 describe('an error with no body', () => {
   function clientOn(status: number) {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(null, { status })) as never
@@ -309,8 +293,6 @@ describe('an error with no body', () => {
   }
 
   it('explains a route the server does not have', async () => {
-    // What a frontend newer than its backend looks like from the UI. "The server
-    // returned 405" sent someone looking for a bug in the app.
     const error = await clientOn(405).post('/groups/1/members/merge', {}).catch((e) => e as ApiError)
 
     expect(error.message).toContain('older version')
@@ -331,8 +313,6 @@ describe('an error with no body', () => {
 
 describe('a request that never answers', () => {
   let fetchMock: ReturnType<typeof vi.fn>
-
-  /** A connection that goes quiet: it answers only the abort. */
   function stalls() {
     return vi.fn(
       (_url: string, init: RequestInit) =>
@@ -380,8 +360,6 @@ describe('a request that never answers', () => {
     const caught = clientWith(1_000).post('/sync/push', {}).catch((e: unknown) => e as ApiError)
     await vi.advanceTimersByTimeAsync(1_100)
 
-    // Not a refusal: the server never said no, so the operation is still good and
-    // is sent again later. A hard error would discard it.
     expect((await caught).isOffline).toBe(true)
     vi.useRealTimers()
   })
@@ -424,22 +402,11 @@ describe('a request that answers in time', () => {
     await client.get('/groups')
     await vi.advanceTimersByTimeAsync(60_000)
 
-    // The deadline has to be cleared, or a long-lived page accumulates a timer
-    // per request and aborts a signal nobody is listening to any more.
     expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false)
     vi.useRealTimers()
   })
 })
 
-/**
- * What counts as being offline.
- *
- * "Offline" on screen should mean the server could not be reached. A server that
- * answered - refused, rate limited, complained about a payload - is not offline, and
- * saying so sends somebody looking at their wifi for a problem that is not there.
- * That is exactly how a rate limit showed up: as an app claiming to be offline on a
- * phone with four bars.
- */
 describe('telling unreachable from refused', () => {
   it('reads a transport failure as offline', () => {
     expect(looksOffline(new TypeError('Failed to fetch'))).toBe(true)

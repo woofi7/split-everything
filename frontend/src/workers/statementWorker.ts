@@ -1,17 +1,6 @@
 /// <reference lib="webworker" />
 import { parseStatementCsv, extractTransactionsFromText, type StatementRow } from '@/import/statementParser'
 
-/**
- * Statement parsing off the UI thread.
- *
- * A multi-page PDF, and especially OCR of a scanned one, takes seconds of solid
- * CPU. On a phone through Capacitor that would freeze the app, so all of it runs
- * here and the main thread only receives rows.
- *
- * Nothing in this worker touches the network. The statement stays on the device by
- * construction: there is no code path out of here except postMessage.
- */
-
 export type StatementWorkerRequest =
   | { kind: 'csv'; id: string; text: string }
   | { kind: 'pdf'; id: string; buffer: ArrayBuffer; statementYear: number }
@@ -50,7 +39,6 @@ async function parsePdf(
   post({ kind: 'progress', id: request.id, stage: 'Reading the PDF', ratio: 0.05 })
 
   const pdfjs = await import('pdfjs-dist')
-  // The worker script is bundled alongside, so PDF.js does not try to fetch one.
   const workerSrc = await import('pdfjs-dist/build/pdf.worker.mjs?url')
   pdfjs.GlobalWorkerOptions.workerSrc = workerSrc.default
 
@@ -61,9 +49,6 @@ async function parsePdf(
     const page = await document.getPage(pageNumber)
     const content = await page.getTextContent()
 
-    // PDF.js returns positioned fragments, not lines. Grouping by vertical
-    // position rebuilds the rows a statement was laid out as, which the
-    // line-oriented extractor depends on.
     text += `${rebuildLines(content.items as Array<{ str: string; transform: number[] }>)}\n`
 
     post({
@@ -77,7 +62,6 @@ async function parsePdf(
   let rows = extractTransactionsFromText(text, request.statementYear)
   if (rows.length > 0) return { rows, usedOcr: false }
 
-  // No usable text layer: the statement is a scan, so fall back to OCR.
   post({ kind: 'progress', id: request.id, stage: 'No text found, reading the images', ratio: 0.6 })
 
   const ocrText = await runOcr(request, document)
@@ -88,8 +72,6 @@ async function parsePdf(
 
 async function runOcr(
   request: Extract<StatementWorkerRequest, { kind: 'pdf' }>,
-  // The library's own document type, imported for the type only: a hand-written
-  // shape of the two methods used below drifts from it the moment it changes.
   document: import('pdfjs-dist').PDFDocumentProxy,
 ): Promise<string> {
   const { createWorker } = await import('tesseract.js')
@@ -106,12 +88,6 @@ async function runOcr(
       const context = canvas.getContext('2d')
       if (!context) throw new Error('This device cannot render the PDF for reading.')
 
-      /*
-       * Both the canvas and its context, which the library now asks for. It used
-       * to take the context alone, and typing the document properly is what
-       * surfaced that: an OffscreenCanvas is not the HTMLCanvasElement the types
-       * name, but it is what a worker has and what the renderer actually uses.
-       */
       await page.render({
         canvas: canvas as unknown as HTMLCanvasElement,
         canvasContext: context as unknown as CanvasRenderingContext2D,
@@ -136,13 +112,11 @@ async function runOcr(
   }
 }
 
-/** Groups positioned text fragments back into lines by their y coordinate. */
 function rebuildLines(items: Array<{ str: string; transform: number[] }>): string {
   const lines = new Map<number, string[]>()
 
   for (const item of items) {
     if (!item.str) continue
-    // Rounded, because glyphs on one visual line differ by fractions of a point.
     const y = Math.round(item.transform[5])
     const existing = lines.get(y)
     if (existing) existing.push(item.str)

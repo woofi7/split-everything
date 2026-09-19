@@ -9,29 +9,9 @@ import { notify, report } from '@/ui/toasts'
 import { useAuthStore } from '@/stores/auth'
 import type { AddableUser } from '@/api/types'
 
-/**
- * The Settle Up export import.
- *
- * The server has parsed these for a while with nothing to reach it. The shape of
- * this screen comes from a real export rather than from the API: the purpose of a
- * row is the thing worth reading, the people are names rather than accounts, and
- * a row can be a transfer, which is a settlement rather than money spent.
- *
- * The file never leaves the browser between steps, but it does go to the API on
- * each one: preview and commit both re-parse it server-side, so it is held here
- * rather than uploaded once and stored.
- */
-
 const emit = defineEmits<{
   imported: [result: { groupId: string; createdExpenses: number; createdSettlements: number }]
   cancel: []
-  /**
-   * Whether this importer has a file in hand.
-   *
-   * The screen offers two ways in, and once one is being used the other is a
-   * second question nobody asked. Reported rather than inferred, because the file
-   * lives in here.
-   */
   active: [value: boolean]
 }>()
 
@@ -88,14 +68,6 @@ const target = ref<'new' | 'existing'>('new')
 const newGroupName = ref('')
 const existingGroupId = ref('')
 
-/**
- * The destination as one value, for the dropdown over the rows.
- *
- * The step above asks it as a radio pair plus a name, which is the right shape
- * when the answer is still being composed. Over the rows it is one question with
- * one answer, so it is one control, reading and writing the same two refs rather
- * than keeping a third.
- */
 const destination = computed(() =>
   target.value === 'new' ? 'new' : existingGroupId.value,
 )
@@ -110,18 +82,8 @@ function chooseDestination(value: string): void {
   existingGroupId.value = value
 }
 
-/**
- * Exported name to whoever it is, as one value per name.
- *
- * Three answers, and they are not the same thing, so the value says which:
- * null creates somebody under that name, `member:<id>` is somebody already in the
- * group being imported into, and `user:<id>` is an account anywhere in this app.
- * An export is another group's history, so the third is the common case: the
- * people in it usually have accounts here and only the names came across.
- */
 const nameMapping = ref<Record<string, string | null>>({})
 
-/** Everyone with an account here, so a name can be bound to the real person. */
 const accounts = ref<AddableUser[]>([])
 const skipped = ref<Set<number>>(new Set())
 
@@ -132,19 +94,10 @@ const members = computed(() => {
   return groups.membersOf(existingGroupId.value).filter((member) => member.status === 'Active')
 })
 
-/**
- * Accounts not already offered as a member of the target group.
- *
- * A member who has an account is the same person, so offering both would be two
- * ways to say one thing and only one of them would carry the history.
- */
 const otherAccounts = computed(() => {
   const taken = new Set(members.value.map((member) => member.userId).filter(Boolean))
   const offered = accounts.value.filter((person) => !taken.has(person.id))
 
-  // Yourself, added here rather than by the server. That list answers "who could
-  // I add to this group", which you are not, and this question is "who is this
-  // name in the export", which you very often are: your own name is in the file.
   const me = auth.user
   if (me && !taken.has(me.id) && !offered.some((person) => person.id === me.id)) {
     offered.unshift({
@@ -155,25 +108,16 @@ const otherAccounts = computed(() => {
     })
   }
 
-  // Yourself first. One of these names is almost always yours, and this list runs
-  // to a dozen accounts with two Alices and two Nicolases in it.
   return offered.sort((left, right) =>
     Number(right.id === auth.user?.id) - Number(left.id === auth.user?.id),
   )
 })
 
-/**
- * How an account reads in the list.
- *
- * The email is there because two accounts are called Alice and two are called
- * Nicolas, and the note is there because one of them is the person reading it.
- */
 function accountLabel(person: { id: string; displayName: string; email: string }): string {
   const mine = person.id === auth.user?.id ? ' - you' : ''
   return `${person.displayName} (${person.email})${mine}`
 }
 
-/** Split back into the two shapes the API takes. */
 function memberMappingForRequest(): Record<string, string | null> {
   return Object.fromEntries(
     Object.entries(nameMapping.value).map(([name, value]) => [
@@ -217,15 +161,11 @@ async function onFile(event: Event): Promise<void> {
     const result = await useApi().upload<Analysis>('/import/csv/analyze', { file: chosen })
     analysis.value = result
 
-    // The file name is the group name in every export the app produces.
     newGroupName.value = chosen.name.replace(/\.csv$/i, '').trim()
     existingGroupId.value = groups.visibleGroups[0]?.id ?? ''
     emit('active', true)
     nameMapping.value = Object.fromEntries(result.detectedMemberNames.map((name) => [name, null]))
 
-    // Everybody here, so a name from the export can be bound to the real person.
-    // A failure leaves the list empty rather than stopping the import: the field
-    // still works, it just offers fewer answers.
     try {
       accounts.value = await groups.addableUsers()
     } catch {
@@ -235,12 +175,10 @@ async function onFile(event: Event): Promise<void> {
     report(caught, t('Could not read that export.'))
   } finally {
     busy.value = null
-    // Cleared so choosing the same file again re-reads it.
     input.value = ''
   }
 }
 
-/** What the server needs to parse the rows the way this screen is set up. */
 function mapping() {
   const suggested = analysis.value?.suggestedMapping ?? {}
   const at = (key: string, fallback: number | null = null) => {
@@ -298,8 +236,6 @@ async function loadPreview(): Promise<void> {
       }),
     })
 
-    // Anything already recorded starts off skipped: importing it again is the one
-    // outcome nobody wants, and it is still one tap to put back.
     skipped.value = new Set(
       preview.value.rows.filter((row) => row.isDuplicate).map((row) => row.rowNumber),
     )
@@ -355,16 +291,8 @@ async function commit(): Promise<void> {
 const dateOf = (value: string | null) =>
   value ? new Date(value).toLocaleDateString(intlLocale.value) : t('No date')
 </script>
-
 <template>
   <section class="flex flex-col gap-4">
-    <!-- Outside the steps: a file that cannot be read fails before there is a
-         step two to report it in. -->
-    <!--
-      What it is doing, with something moving beside it. An import of four hundred
-      rows takes seconds, and a line of static text through those seconds reads as
-      a tap that did not land.
-    -->
     <p
       v-if="busy"
       data-testid="import-busy"
@@ -374,13 +302,10 @@ const dateOf = (value: string | null) =>
       <Spinner />
       {{ busy }}
     </p>
-
-    <!-- Step one: the file. -->
     <div v-if="!analysis" class="surface-card p-4">
       <h2 class="font-medium">{{ t('A Settle Up export') }}</h2>
       <p class="mt-1 text-sm text-[var(--text-muted)]">{{ t('Export a group from Settle Up and choose the file here. Nothing is imported until you have seen the rows.') }}
       </p>
-
       <label
         class="btn btn-press btn-secondary mt-3 w-full cursor-pointer"
         style="border-color: var(--border)"
@@ -388,7 +313,6 @@ const dateOf = (value: string | null) =>
         <input type="file" accept=".csv,text/csv" class="hidden" @change="onFile" />
       </label>
     </div>
-
     <template v-else>
       <div class="surface-card p-4">
         <div class="flex items-baseline justify-between gap-3">
@@ -402,15 +326,11 @@ const dateOf = (value: string | null) =>
           {{ analysis.headers.length }}. Currency {{ currency }}.
         </p>
       </div>
-
-      <!-- Step two: where it goes. -->
       <div class="surface-card flex flex-col gap-3 p-4">
         <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Import into') }}</h2>
-
         <label class="flex items-center gap-2 text-sm">
           <input v-model="target" type="radio" value="new" />{{ t('A new group') }}
         </label>
-
         <input
           v-if="target === 'new'"
           v-model="newGroupName"
@@ -421,11 +341,9 @@ const dateOf = (value: string | null) =>
           class="tap-target rounded-lg border bg-[var(--surface)] px-3 text-sm"
           style="border-color: var(--border)"
         />
-
         <label class="flex items-center gap-2 text-sm">
           <input v-model="target" type="radio" value="existing" />{{ t('An existing group') }}
         </label>
-
         <select
           v-if="target === 'existing'"
           v-model="existingGroupId"
@@ -438,13 +356,10 @@ const dateOf = (value: string | null) =>
           </option>
         </select>
       </div>
-
-      <!-- Step three: who is who. -->
       <div class="surface-card flex flex-col gap-3 p-4">
         <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('People in the export') }}</h2>
         <p class="text-xs text-[var(--text-muted)]">{{ t('Settle Up exports names, not accounts. Anyone left unmatched is added to the group under that name, and can claim it later from an invite.') }}
         </p>
-
         <div
           v-for="name in analysis.detectedMemberNames"
           :key="name"
@@ -452,7 +367,6 @@ const dateOf = (value: string | null) =>
           class="flex items-center justify-between gap-3"
         >
           <span class="truncate text-sm">{{ name }}</span>
-
           <select
             v-model="nameMapping[name]"
             class="tap-target max-w-[55%] rounded-lg border bg-[var(--surface)] px-2 text-xs"
@@ -460,7 +374,6 @@ const dateOf = (value: string | null) =>
             :aria-label="`Who is ${name}`"
           >
             <option :value="null">{{ t('Add as a new person') }}</option>
-
             <optgroup v-if="members.length > 0" :label="t('Already in this group')">
               <option
                 v-for="member in members"
@@ -470,13 +383,6 @@ const dateOf = (value: string | null) =>
                 {{ member.displayName }}
               </option>
             </optgroup>
-
-            <!--
-              Everybody with an account here, not only the target group's members.
-              An export is another group's history: the people in it usually have
-              accounts already and only their names came across, so binding a name
-              to the real person is the point rather than the exception.
-            -->
             <optgroup v-if="otherAccounts.length > 0" :label="t('Everyone here')">
               <option
                 v-for="person in otherAccounts"
@@ -489,8 +395,6 @@ const dateOf = (value: string | null) =>
           </select>
         </div>
       </div>
-
-      <!-- Step four: the rows. -->
       <template v-if="preview">
         <div class="surface-card flex flex-col gap-3 p-3">
           <p class="text-sm">
@@ -502,13 +406,6 @@ const dateOf = (value: string | null) =>
               , {{ preview.problemCount }} need fixing
             </template>
           </p>
-
-          <!--
-            Where the lot is going, next to the count of it. It is asked earlier as
-            well, but this is where the rows are actually read, and reading them
-            without knowing which group they are about to join is reading half the
-            question.
-          -->
           <label class="flex flex-col gap-1">
             <span class="text-xs text-[var(--text-muted)]">{{ t('Import all of these into') }}</span>
             <select
@@ -525,7 +422,6 @@ const dateOf = (value: string | null) =>
             </select>
           </label>
         </div>
-
         <ul class="flex flex-col gap-2">
           <li
             v-for="row in preview.rows"
@@ -537,38 +433,25 @@ const dateOf = (value: string | null) =>
           >
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <!-- The purpose first: it is the only part that says what this was. -->
                 <p
                   class="truncate text-sm font-medium"
                   :class="skipped.has(row.rowNumber) ? 'line-through' : ''"
                 >
                   {{ row.description }}
                 </p>
-
-                <!--
-                  Who it came from and who it was for, said rather than implied.
-                  These were a tail on the date line, which is where the two things
-                  a person checks a row against were hardest to read.
-
-                  A transfer names one person on each side; an expense names the
-                  payer and everybody who shared it.
-                -->
                 <dl class="mt-1 grid grid-cols-[2.5rem_1fr] gap-x-2 text-xs">
                   <dt class="text-[var(--text-muted)]">{{ t('From') }}</dt>
                   <dd data-testid="row-from" class="truncate">
                     {{ row.paidByName ?? 'Not named' }}
                   </dd>
-
                   <dt class="text-[var(--text-muted)]">To</dt>
                   <dd data-testid="row-to" class="truncate">
                     {{ row.participantNames.length > 0 ? row.participantNames.join(', ') : 'Not named' }}
                   </dd>
                 </dl>
-
                 <p class="mt-1 text-xs text-[var(--text-muted)]">
                   {{ dateOf(row.spentAt) }}
                 </p>
-
                 <p v-if="row.isSettlement" class="text-xs text-accent">{{ t('Settlement, not an expense') }}
                 </p>
                 <p v-if="row.isDuplicate" class="text-xs text-[var(--text-muted)]">{{ t('Already recorded') }}
@@ -577,7 +460,6 @@ const dateOf = (value: string | null) =>
                   {{ row.problems.join('; ') }}
                 </p>
               </div>
-
               <div class="flex shrink-0 flex-col items-end gap-2">
                 <MoneyAmount
                   :amount="row.amount ?? 0"
@@ -585,7 +467,6 @@ const dateOf = (value: string | null) =>
                   size="sm"
                   :class="skipped.has(row.rowNumber) ? 'line-through' : ''"
                 />
-
                 <button
                   type="button"
                   data-testid="toggle-row"
@@ -602,7 +483,6 @@ const dateOf = (value: string | null) =>
           </li>
         </ul>
       </template>
-
       <div class="flex gap-2">
         <button
           type="button"
@@ -611,7 +491,6 @@ const dateOf = (value: string | null) =>
           @click="reset(); emit('cancel')"
         >{{ t('Cancel') }}
         </button>
-
         <button
           v-if="!preview"
           type="button"
@@ -623,7 +502,6 @@ const dateOf = (value: string | null) =>
           <Spinner v-if="busy !== null" />
           {{ t('See the rows') }}
         </button>
-
         <button
           v-else
           type="button"

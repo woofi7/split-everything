@@ -17,8 +17,6 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.Property(c => c.ColorHex).HasMaxLength(9).IsRequired();
         builder.Property(c => c.KeywordsJson).HasColumnType("jsonb");
 
-        // One key per scope: the server's list and each group's own are separate
-        // namespaces, and a group overriding "groceries" means exactly that.
         builder.HasIndex(c => new { c.GroupId, c.Key }).IsUnique();
 
         builder.HasOne(c => c.Group)

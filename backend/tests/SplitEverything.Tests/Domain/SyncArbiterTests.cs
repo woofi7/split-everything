@@ -3,10 +3,6 @@ using SplitEverything.Domain.Sync;
 
 namespace SplitEverything.Tests.Domain;
 
-/// <summary>
-/// The decision the whole offline story rests on: given what is stored and what
-/// just arrived, does the incoming revision win, lose, or need a human?
-/// </summary>
 public class SyncArbiterTests
 {
     private static VectorClock Clock(params (string Device, long Value)[] entries)
@@ -112,7 +108,6 @@ public class SyncArbiterTests
     [Fact]
     public void Bookkeeping_fields_are_not_reported_as_conflicts()
     {
-        // These change on every write; asking the user about them would be noise.
         var stored = """{"description":"Dinner","updatedAt":"2026-01-01T00:00:00Z","serverSeq":4,"vectorClockJson":"{}"}""";
         var incoming = """{"description":"Dinner","updatedAt":"2026-02-02T00:00:00Z","serverSeq":9,"vectorClockJson":"{\"a\":1}"}""";
 

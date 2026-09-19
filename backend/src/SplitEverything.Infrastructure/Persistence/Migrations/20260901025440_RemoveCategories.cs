@@ -5,17 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SplitEverything.Infrastructure.Persistence.Migrations
 {
-    /// <summary>
-    /// Drops categories from the schema.
-    ///
-    /// This loses data and is meant to: the category on every expense goes with the
-    /// column, and both category tables are dropped outright. Down rebuilds the
-    /// shape but cannot bring the values back, so it leaves every expense
-    /// uncategorised. Nothing in the app reads any of it any more.
-    /// </summary>
     public partial class RemoveCategories : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
@@ -41,7 +32,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                 table: "expenses");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<Guid>(

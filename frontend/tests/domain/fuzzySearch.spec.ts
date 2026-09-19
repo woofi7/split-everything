@@ -11,7 +11,6 @@ describe('fuzzy match', () => {
   })
 
   it('matches characters spread through the target', () => {
-    // The point of fuzzy matching: initials and abbreviations find things.
     expect(fuzzyMatch('hs', 'house')).not.toBeNull()
     expect(fuzzyMatch('bt', 'bus ticket')).not.toBeNull()
   })
@@ -26,8 +25,6 @@ describe('fuzzy match', () => {
   })
 
   it('refuses characters that are present but out of order', () => {
-    // Subsequence matching, deliberately: order carries meaning when someone
-    // types an abbreviation.
     expect(fuzzyMatch('esuoh', 'house')).toBeNull()
   })
 
@@ -50,7 +47,6 @@ describe('fuzzy match', () => {
   })
 
   it('ignores whitespace in the query', () => {
-    // People type spaces when they pause; they should not break the match.
     expect(fuzzyMatch('h s', 'house')?.indices).toEqual([0, 3])
   })
 })
@@ -71,7 +67,6 @@ describe('fuzzy scoring', () => {
   })
 
   it('rewards matching at a word boundary', () => {
-    // "bt" should prefer "bus ticket" over "abbot", where the letters are buried.
     expect(score('bt', 'bus ticket')).toBeGreaterThan(score('bt', 'abbot'))
   })
 
@@ -110,7 +105,6 @@ describe('fuzzy search over a list', () => {
   })
 
   it('matches on a keyword as well as the name', () => {
-    // Nobody looking for a house types "house" if they think of it as home.
     expect(search('home')).toContain('house')
   })
 

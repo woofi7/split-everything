@@ -11,14 +11,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// What an expense can be filed under.
-///
-/// Two lists in one table: the server's own, which every group starts from, and a
-/// group's, which exists only once somebody there has edited it. The copy that
-/// happens at that moment is the whole design - a household that renames "Dining
-/// out" to "Resto" did not ask to have it renamed back by the next release.
-/// </summary>
 public class CategoryServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private IAdminService NobodyAdministers()
@@ -36,7 +28,6 @@ public class CategoryServiceTests(PostgresFixture fixture) : ServiceTestBase(fix
         return admins;
     }
 
-    /// <summary>The list a fresh server has, which the migration puts there.</summary>
     private async Task SeedGlobalAsync()
     {
         Db.Categories.AddRange(CategorySeed.BuildGlobalCategories());
@@ -80,8 +71,6 @@ public class CategoryServiceTests(PostgresFixture fixture) : ServiceTestBase(fix
         var categories = await NewService().GetForGroupAsync(ownerId, group.Id);
         var groceries = categories.Single(c => c.Key == "groceries");
 
-        // Written for where this is used: a keyword list that knows none of the
-        // local names never fires.
         groceries.Keywords.ShouldContain("metro");
         groceries.Keywords.ShouldContain("iga");
     }
@@ -100,7 +89,6 @@ public class CategoryServiceTests(PostgresFixture fixture) : ServiceTestBase(fix
 
         await service.SetForGroupAsync(ownerId, group.Id, new SetCategoriesRequest(theirs));
 
-        // The server's list changes underneath them, and theirs does not move.
         await service.SetGlobalAsync(ownerId, new SetCategoriesRequest(
             [new CategoryInputDto("Everything", "everything")]));
 
@@ -118,8 +106,6 @@ public class CategoryServiceTests(PostgresFixture fixture) : ServiceTestBase(fix
         var updated = await NewService().SetForGroupAsync(memberId, group.Id,
             new SetCategoriesRequest([new CategoryInputDto("Ski")]));
 
-        // The same line the names left out of the totals are drawn on: it decides
-        // how spending is filed, not what anybody owes.
         updated.ShouldHaveSingleItem().Key.ShouldBe("ski");
     }
 
@@ -159,8 +145,6 @@ public class CategoryServiceTests(PostgresFixture fixture) : ServiceTestBase(fix
         var updated = await NewService().SetForGroupAsync(memberId, group.Id,
             new SetCategoriesRequest([new CategoryInputDto("Épicerie du coin")]));
 
-        // Folded rather than stripped: this is written in French as often as in
-        // English, and "picerie-du-coin" is nobody's idea of a key.
         updated.ShouldHaveSingleItem().Key.ShouldBe("epicerie-du-coin");
     }
 
@@ -190,8 +174,6 @@ public class CategoryServiceTests(PostgresFixture fixture) : ServiceTestBase(fix
                 new CategoryInputDto("Moose"),
             ]));
 
-        // The editor is a list somebody arranges; asking for a number as well would
-        // be asking them to say the same thing twice.
         updated.Select(c => c.Name).ShouldBe(["Zebra", "Apple", "Moose"]);
     }
 
@@ -247,8 +229,6 @@ public class CategoryServiceTests(PostgresFixture fixture) : ServiceTestBase(fix
 
         var back = await NewService().SetForGroupAsync(memberId, group.Id, new SetCategoriesRequest([]));
 
-        // Clearing your own list is how you stop keeping one, not how you end up
-        // with no categories at all.
         back.Count.ShouldBe(CategorySeed.Categories.Count);
         (await Db.Categories.CountAsync(c => c.GroupId == group.Id)).ShouldBe(0);
     }

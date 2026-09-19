@@ -1,27 +1,7 @@
 import { intlLocale } from '@/i18n'
-/**
- * The time buckets the stats endpoint hands over, and what to call them.
- *
- * A bucket is a date on a calendar rather than an instant: the day itself, the
- * Monday of its week, or the first of its month. Read as midnight UTC and then
- * rendered anywhere west of that, the first of a month becomes the last of the
- * month before, so every one of these builds its date from the parts of the string
- * and never parses it as a time.
- *
- * The endpoint answers with the buckets it has, which are the ones something
- * happened in. A chart wants the ones in between as well, or its axis is not time
- * at all: two bars side by side could be a day apart or a month.
- */
 
 export type Granularity = 'day' | 'week' | 'month'
 
-/**
- * How many buckets are worth drawing.
- *
- * A decade of days is three and a half thousand bars, which is not a chart and is
- * a lot of DOM on a phone. Past this the gaps are left out rather than the chart
- * abandoned: a crowded axis beats a frozen screen.
- */
 const MAX_BUCKETS = 400
 
 export function parseBucket(bucket: string): Date {
@@ -36,21 +16,12 @@ export function toBucket(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-/**
- * The bucket a date belongs to: the day itself, the Monday of its week, or the
- * first of its month.
- *
- * The same rule the server applies, in the same order, so a chart computed here
- * from the local replica lines up with one computed there rather than drawing the
- * same spending in different columns.
- */
 export function bucketOf(when: string | Date, granularity: Granularity): string {
   const date = when instanceof Date ? new Date(when) : new Date(when)
 
   if (granularity === 'month') return toBucket(new Date(date.getFullYear(), date.getMonth(), 1))
 
   if (granularity === 'week') {
-    // Weeks start Monday, which is what a bill-splitting week looks like.
     const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
     return toBucket(monday)
@@ -59,7 +30,6 @@ export function bucketOf(when: string | Date, granularity: Granularity): string 
   return toBucket(new Date(date.getFullYear(), date.getMonth(), date.getDate()))
 }
 
-/** The bucket after this one, a day, a week or a month along. */
 export function nextBucket(bucket: string, granularity: Granularity): string {
   const date = parseBucket(bucket)
 
@@ -69,7 +39,6 @@ export function nextBucket(bucket: string, granularity: Granularity): string {
   return toBucket(date)
 }
 
-/** The last day this bucket covers: itself, its Sunday, or the end of its month. */
 export function bucketEnd(bucket: string, granularity: Granularity): Date {
   const date = parseBucket(nextBucket(bucket, granularity))
   date.setDate(date.getDate() - 1)
@@ -77,13 +46,6 @@ export function bucketEnd(bucket: string, granularity: Granularity): Date {
   return date
 }
 
-/**
- * What to write under a bar.
- *
- * A month is named and nothing else, because the year is the same for every bar
- * beside it and a chart of twelve "Sep 26"s reads as a table. A day and a week are
- * both dated by their first day.
- */
 export function formatBucket(bucket: string, granularity: Granularity): string {
   const date = parseBucket(bucket)
 
@@ -92,13 +54,6 @@ export function formatBucket(bucket: string, granularity: Granularity): string {
   return date.toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
 }
 
-/**
- * A month as a heading over a list, rather than a label under a bar.
- *
- * The year comes along only when it is not the current one. On a chart the axis
- * says which year it is; a list that runs back two years has nothing else to say
- * it, and "January" twice over is a list nobody can read.
- */
 export function formatMonthHeading(bucket: string, today: Date = new Date()): string {
   const date = parseBucket(bucket)
   const thisYear = date.getFullYear() === today.getFullYear()
@@ -109,12 +64,6 @@ export function formatMonthHeading(bucket: string, today: Date = new Date()): st
   )
 }
 
-/**
- * What the bucket covers, spelled out for whoever asked about it.
- *
- * A week is a stretch of time rather than a date, and a bar labelled by its Monday
- * says nothing about where it ends. A day and a month already say it.
- */
 export function formatBucketRange(bucket: string, granularity: Granularity): string {
   if (granularity !== 'week') return formatBucket(bucket, granularity)
 
@@ -127,14 +76,6 @@ export function formatBucketRange(bucket: string, granularity: Granularity): str
   return `${from} - ${to}`
 }
 
-/**
- * The buckets between the first and the last, so the axis is time rather than a
- * list of the days something happened on.
- *
- * The answer falls back to what it was given rather than dropping anything: a
- * bucket off the grid this walks (a week that is not a Monday, say) would be lost,
- * and a wrong chart is worse than a gappy one.
- */
 export function fillBuckets<T extends { bucket: string }>(
   points: readonly T[],
   granularity: Granularity,
@@ -154,7 +95,6 @@ export function fillBuckets<T extends { bucket: string }>(
     cursor = nextBucket(cursor, granularity)
   }
 
-  // Everything it was given has to still be in there.
   const kept = new Set(filled.map((point) => point.bucket))
   if (points.some((point) => !kept.has(point.bucket))) return [...points]
 

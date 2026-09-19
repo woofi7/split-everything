@@ -2,15 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SpendPie from '@/components/ui/SpendPie.vue'
 
-/**
- * Spend per group, as a pie.
- *
- * A list of totals says how much each group cost; a pie says how the spending is
- * distributed, which is the question a dashboard exists to answer. Drawn as plain
- * SVG arcs: a chart library would be a large dependency for one figure, in an app
- * that has to work offline.
- */
-
 const slices = [
   { id: 'a', label: 'Roommates', amount: 600, colorHex: '#4f46e5' },
   { id: 'b', label: 'Ski trip', amount: 300, colorHex: '#0ea5e9' },
@@ -37,8 +28,6 @@ describe('SpendPie', () => {
   it('sizes each wedge by its share of the total', () => {
     const wrapper = mountPie()
 
-    // 600 of 1000 is a little over half, so the largest wedge has to cross the
-    // halfway point, which is what the large-arc flag records.
     const largest = wrapper.findAll('[data-testid="wedge"]')[0]
     expect(largest.attributes('d')).toContain('A')
   })
@@ -60,8 +49,6 @@ describe('SpendPie', () => {
   })
 
   it('draws a single group as a full circle rather than an arc', () => {
-    // An arc of exactly 360 degrees collapses to nothing, because its start and
-    // end points are the same.
     const wrapper = mountPie({ slices: [slices[0]] })
 
     expect(wrapper.findAll('[data-testid="wedge"]')).toHaveLength(0)
@@ -97,8 +84,6 @@ describe('SpendPie', () => {
     const wrapper = mountPie()
 
     const svg = wrapper.find('svg')
-    // A group rather than an image: role="img" tells a screen reader that
-    // everything inside is one picture, which hides wedges that can be pressed.
     expect(svg.attributes('role')).toBe('group')
     expect(svg.attributes('aria-label')).toContain('Roommates')
   })
@@ -115,13 +100,6 @@ describe('SpendPie', () => {
     expect(labels[0]).toContain('60%')
   })
 
-  /**
-   * The layout of the card.
-   *
-   * Names under the heading on the left, chart on the right, beside both. The
-   * chart is the tallest thing in the card, so putting the words next to it is
-   * what stops the card growing to hold a heading above them.
-   */
   describe('its arrangement', () => {
     it('renders the heading it is given, above the names', () => {
       const wrapper = mount(SpendPie, {
@@ -151,7 +129,6 @@ describe('SpendPie', () => {
         slots: { heading: 'Who paid' },
       })
 
-      // The card would otherwise lose its title exactly when it needs explaining.
       expect(wrapper.text()).toContain('Who paid')
       expect(wrapper.text()).toContain('Nothing spent yet')
       expect(wrapper.find('svg').exists()).toBe(false)
@@ -165,13 +142,6 @@ describe('SpendPie', () => {
     })
   })
 
-  /**
-   * Asking a wedge how much.
-   *
-   * A pie says how spending is spread and never says how much. A wedge is not a
-   * label either, and on a phone there is no pointer to rest on one, so the name
-   * beside it has to work as well as the wedge itself.
-   */
   describe('asking about a slice', () => {
     it('shows the total until something is picked', () => {
       const wrapper = mountPie()
@@ -198,7 +168,6 @@ describe('SpendPie', () => {
       const rows = wrapper.findAll('[data-testid="legend-row"]')
       expect(rows[1].attributes('aria-pressed')).toBe('true')
       expect(rows[1].find('[data-testid="legend-amount"]').text()).toContain('300.00')
-      // Only the one asked about.
       expect(rows[0].find('[data-testid="legend-amount"]').exists()).toBe(false)
     })
 
@@ -236,13 +205,10 @@ describe('SpendPie', () => {
 
       await wedges[0].trigger('mouseenter')
       await wedges[0].trigger('click')
-      // What a pointer really does: it is over the second one before the click.
       await wedges[0].trigger('mouseleave')
       await wedges[1].trigger('mouseenter')
       await wedges[1].trigger('click')
 
-      // Treating hover and click as one state made this read as clicking the one
-      // already chosen, so it cleared instead of switching.
       expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('300.00')
       expect(wrapper.find('[data-testid="centre-share"]').text()).toBe('30%')
     })
@@ -268,7 +234,6 @@ describe('SpendPie', () => {
       await wedge.trigger('click')
       await wedge.trigger('mouseleave')
 
-      // A tap is a decision, not a passing glance.
       expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('600.00')
     })
 
@@ -280,15 +245,12 @@ describe('SpendPie', () => {
       await wedge.trigger('click')
       await wedge.trigger('click')
 
-      // A tap has no opposite, so tapping again has to be the way out, and on a
-      // phone the tap leaves a hover behind that would otherwise keep it on show.
       expect(wrapper.find('[data-testid="centre-total"]').exists()).toBe(true)
     })
 
     it('answers the name beside the wedge as well', async () => {
       const wrapper = mountPie()
 
-      // The better target on a phone by far, and the only one a keyboard reaches.
       await wrapper.findAll('[data-testid="legend-row"]')[1].trigger('click')
 
       expect(wrapper.find('[data-testid="centre-amount"]').text()).toContain('300.00')
@@ -314,15 +276,6 @@ describe('SpendPie', () => {
     it('draws no focus ring around a tapped slice', () => {
       const wrapper = mountPie()
 
-      /*
-       * Tapping a wedge focuses it, and the ring a browser draws around a focused
-       * SVG path follows its bounding box - for a wedge reaching the centre, a
-       * rectangle over the whole chart. On a phone that was a black and white square
-       * appearing every time somebody asked what a slice was worth.
-       *
-       * The class carries the rule; asserted here because the markup is the only
-       * place it can be lost, and nothing else in a test environment paints.
-       */
       const marks = [
         ...wrapper.findAll('[data-testid="wedge"]'),
         ...wrapper.findAll('[data-testid="whole"]'),

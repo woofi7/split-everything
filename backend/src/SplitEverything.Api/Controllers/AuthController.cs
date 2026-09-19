@@ -13,7 +13,6 @@ public sealed class AuthController(
     ICurrentUser currentUser,
     IAuthService auth) : ApiControllerBase(currentUser)
 {
-    /// <summary>Exchanges a Google ID token for our own tokens.</summary>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("google")]
@@ -25,13 +24,6 @@ public sealed class AuthController(
         return Ok(result);
     }
 
-    /// <summary>
-    /// Signs in with an email address and no Google account.
-    ///
-    /// Only reachable when the flag is on, which startup forces off outside
-    /// Development. It exists so a fresh clone is usable before an OAuth client
-    /// has been registered.
-    /// </summary>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("dev")]
@@ -45,7 +37,6 @@ public sealed class AuthController(
         return Ok(result);
     }
 
-    /// <summary>What the sign-in page can offer, so it can explain itself.</summary>
     [AllowAnonymous]
     [HttpGet("capabilities")]
     public ActionResult<AuthCapabilities> Capabilities() => Ok(auth.GetCapabilities());
@@ -55,8 +46,6 @@ public sealed class AuthController(
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthTokens>> Refresh(RefreshRequest? request, CancellationToken ct)
     {
-        // The browser keeps the refresh token in an httpOnly cookie; the native
-        // shells post it in the body.
         var token = request?.RefreshToken;
         if (string.IsNullOrWhiteSpace(token))
             Request.Cookies.TryGetValue(RefreshCookieName, out token);
@@ -99,7 +88,6 @@ public sealed class AuthController(
         UpdateProfileRequest request, CancellationToken ct)
         => Ok(await auth.UpdateProfileAsync(UserId, request, ct));
 
-    /// <summary>Everything we hold about the caller, as a downloadable file.</summary>
     [HttpGet("me/export")]
     public async Task<IActionResult> Export(CancellationToken ct)
     {
@@ -127,11 +115,6 @@ public sealed class AuthController(
         => Response.Cookies.Append(RefreshCookieName, tokens.RefreshToken, new CookieOptions
         {
             HttpOnly = true,
-            // Marked Secure only when the request arrived over one. A browser
-            // silently drops a Secure cookie sent over plain HTTP, which is how a
-            // phone testing against a LAN address is reached, so setting it
-            // unconditionally meant that device never held a session at all.
-            // Production is behind TLS, so this is Secure there.
             Secure = Request.IsHttps,
             SameSite = SameSiteMode.Lax,
             Expires = tokens.RefreshTokenExpiresAt,

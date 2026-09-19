@@ -12,15 +12,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// The server's own administration.
-///
-/// Every other read in this application is scoped by membership, which is right and
-/// leaves the person whose machine this is unable to answer the questions only they
-/// can be asked: what is on the disk, and can this abandoned group go. So this is
-/// the one place that reads across groups, and the one place that destroys data -
-/// which is why most of what follows is about who is refused.
-/// </summary>
 public class AdminServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private const string AdminEmail = "nicolas@example.com";
@@ -34,7 +25,6 @@ public class AdminServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var admin = await TestData.SeedUserAsync(Db, "Nicolas", AdminEmail);
         var other = await TestData.SeedUserAsync(Db, "Emma", "emma@example.com");
 
-        // A group the administrator is not in, which is the whole point.
         var theirs = await Groups.CreateAsync(other.Id,
             new CreateGroupRequest("Their flat", "CAD", null, null, null, ["Roommate"]));
 
@@ -59,8 +49,6 @@ public class AdminServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var admin = new AdminService(Db, new AdminOptions(),
             Substitute.For<IReceiptStorage>(), Logger<AdminService>());
 
-        // The default, and the right answer for a fresh clone: an empty list must
-        // never read as "everybody".
         (await admin.IsAdminAsync(adminId)).ShouldBeFalse();
         await Should.ThrowAsync<ForbiddenException>(() => admin.GetGroupsAsync(adminId));
     }
@@ -113,8 +101,6 @@ public class AdminServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var (_, otherId, theirs) = await SetupAsync();
         var admin = NewAdmin();
 
-        // Their own group, which they can read perfectly well through the ordinary
-        // endpoints. Not through this one.
         await Should.ThrowAsync<ForbiddenException>(() => admin.GetGroupsAsync(otherId));
         await Should.ThrowAsync<ForbiddenException>(() => admin.GetGroupAsync(otherId, theirs.Id));
         await Should.ThrowAsync<ForbiddenException>(() => admin.DeleteGroupAsync(otherId, theirs.Id));
@@ -136,7 +122,6 @@ public class AdminServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         detail.Members.Select(m => m.DisplayName).ShouldBe(["Emma", "Roommate"], ignoreOrder: true);
         detail.RecentExpenses.ShouldHaveSingleItem().Description.ShouldBe("Groceries");
 
-        // Reading it is not joining it: nobody new appears in their balances.
         var members = await Db.GroupMembers.CountAsync(m => m.GroupId == theirs.Id);
         members.ShouldBe(2);
     }
@@ -146,7 +131,6 @@ public class AdminServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
     {
         var (adminId, _, theirs) = await SetupAsync();
 
-        // Archiving is the reversible step and the one its own members can take.
         await Should.ThrowAsync<ValidationException>(
             () => NewAdmin().DeleteGroupAsync(adminId, theirs.Id));
 
@@ -168,9 +152,6 @@ public class AdminServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
 
         await NewAdmin().DeleteGroupAsync(adminId, theirs.Id);
 
-        // The group, and every table that hangs off it. The member rows are the
-        // ones that matter here: what somebody paid for points at them, and the
-        // constraints refuse rather than cascade, so a wrong order fails loudly.
         (await Db.Groups.AnyAsync(g => g.Id == theirs.Id)).ShouldBeFalse();
         (await Db.GroupMembers.AnyAsync(m => m.GroupId == theirs.Id)).ShouldBeFalse();
         (await Db.Expenses.AnyAsync(e => e.GroupId == theirs.Id)).ShouldBeFalse();

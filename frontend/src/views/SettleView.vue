@@ -38,21 +38,9 @@ const plan = computed(() => expenses.settleUpPlan(groupId.value))
 const memberName = (memberId: string) =>
   members.value.find((member) => member.id === memberId)?.displayName ?? 'Unknown'
 
-/**
- * What the two of them owe each other everywhere else.
- *
- * Two people who share more than one group can owe each other in both directions
- * at once - the flat one way, a trip the other - and paying both in full is two
- * transfers where none is needed. This screen is already about settling with
- * somebody, so it is where the app should say so.
- *
- * Only for a person with an account: a placeholder exists in one group and nowhere
- * else, so there is nothing of theirs to look up in another.
- */
 const crossGroup = ref<CrossGroupBalance | null>(null)
 const isOffsetting = ref(false)
 
-/** The other side of this settlement, when that is a person with an account. */
 const otherUserId = computed(() => {
   const mine = members.value.find((member) => member.userId === auth.user?.id)?.id
   const other = [toMemberId.value, fromMemberId.value].find(
@@ -68,11 +56,8 @@ async function loadCrossGroup(): Promise<void> {
 
   try {
     const balance = await expenses.crossGroupBalance(otherUserId.value)
-    // Only worth a word when there is something to cancel; a single group between
-    // two people is the ordinary case and needs no explaining.
     crossGroup.value = balance.offsets.length > 0 ? balance : null
   } catch {
-    // A convenience on top of a screen that works without it.
     crossGroup.value = null
   }
 }
@@ -105,10 +90,6 @@ async function offsetAcrossGroups(): Promise<void> {
     await loadCrossGroup()
     await expenses.hydrate()
 
-    // The form was filled from a suggestion the offset has just made obsolete.
-    // Left standing, the button under it records the same debt a second time,
-    // which is what happened the first time this shipped: the offset went in, the
-    // amount stayed on screen, and it was settled again six seconds later.
     followThePlan()
   } catch (caught) {
     report(caught, t('Could not cancel those out.'))
@@ -117,13 +98,6 @@ async function offsetAcrossGroups(): Promise<void> {
   }
 }
 
-/**
- * Points the form at what is still outstanding, or empties it when nothing is.
- *
- * The amount box is the dangerous part of this screen: it holds a number somebody
- * tapped a while ago, and the button below it is "record a payment of exactly
- * that".
- */
 function followThePlan(): void {
   const next = plan.value.find(
     (transfer) =>
@@ -141,7 +115,6 @@ function usePlan(transfer: { fromMemberId: string; toMemberId: string; amount: n
   amountInput.value = String(transfer.amount)
 }
 
-/** The last few, newest first: enough to spot one entered twice. */
 const recentSettlements = computed(() => expenses.settlementsForGroup(groupId.value).slice(0, 6))
 
 const settledOn = (when: string) =>
@@ -177,7 +150,6 @@ async function save(): Promise<void> {
   }
 }
 </script>
-
 <template>
   <AppShell
     :title="t('Settle up')"
@@ -207,20 +179,10 @@ async function save(): Promise<void> {
         </li>
       </ul>
     </section>
-
-    <!--
-      The balance these two hold everywhere else.
-
-      Shown only when some of it faces the other way, because that is the only
-      time there is anything to do about it: a debt in one group and the opposite
-      debt in another are the same two people, and settling both in full is two
-      transfers where none is needed.
-    -->
     <section v-if="crossGroup" data-testid="cross-group" class="surface-card mb-5 p-4">
       <h2 class="mb-1 text-sm font-medium text-[var(--text-muted)]">{{ t('You also owe each other elsewhere') }}</h2>
       <p class="mb-3 text-xs text-[var(--text-muted)]">{{ t('{name} and you have balances facing both ways. Cancelling them out moves no money: it writes a settlement in each group so what is really outstanding sits in one place.', { name: crossGroup.withName }) }}
       </p>
-
       <ul class="mb-3 flex flex-col gap-1.5 text-sm">
         <li
           v-for="entry in crossGroup.groups"
@@ -239,8 +201,6 @@ async function save(): Promise<void> {
           <MoneyAmount :amount="Math.abs(entry.net)" :currency="entry.currency" size="sm" />
         </li>
       </ul>
-
-
       <button
         type="button"
         data-testid="offset-across-groups"
@@ -256,14 +216,6 @@ async function save(): Promise<void> {
         }}
       </button>
     </section>
-
-    <!--
-      What this group has already been told about.
-      
-      A settlement could be written and never seen again: the balance moved and
-      there was nothing on any screen to say why, or to press when it was wrong.
-      Which is how one recorded twice stayed recorded twice.
-    -->
     <section v-if="recentSettlements.length > 0" class="surface-card mb-5 p-4">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Already settled') }}</h2>
       <ul class="flex flex-col gap-2 text-sm">
@@ -297,7 +249,6 @@ async function save(): Promise<void> {
         </li>
       </ul>
     </section>
-
     <form class="flex flex-col gap-5" @submit.prevent="save">
       <label class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">{{ t('Who paid') }}</span>
@@ -311,7 +262,6 @@ async function save(): Promise<void> {
           </option>
         </select>
       </label>
-
       <label class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">{{ t('Who received it') }}</span>
         <select
@@ -324,7 +274,6 @@ async function save(): Promise<void> {
           </option>
         </select>
       </label>
-
       <label class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">Amount ({{ currency }})</span>
         <input
@@ -336,7 +285,6 @@ async function save(): Promise<void> {
           style="border-color: var(--border)"
         />
       </label>
-
       <label class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">{{ t('Note') }}</span>
         <input
@@ -348,8 +296,6 @@ async function save(): Promise<void> {
           style="border-color: var(--border)"
         />
       </label>
-
-
       <button
         type="submit"
         class="btn btn-press btn-primary w-full"

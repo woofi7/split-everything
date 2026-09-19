@@ -40,8 +40,6 @@ public class GroupMemberConfiguration : IEntityTypeConfiguration<GroupMember>
         builder.Property(m => m.VectorClockJson).HasColumnType("jsonb").IsRequired();
         builder.Property(m => m.LastWriterDeviceId).HasMaxLength(64);
 
-        // One membership per user per group. Placeholder rows (null user) are exempt,
-        // since a group can hold several unclaimed names.
         builder.HasIndex(m => new { m.GroupId, m.UserId })
             .IsUnique()
             .HasFilter("user_id IS NOT NULL");
@@ -80,7 +78,6 @@ public class GroupInviteConfiguration : IEntityTypeConfiguration<GroupInvite>
             .WithMany(g => g.Invites)
             .HasForeignKey(i => i.GroupId)
             .OnDelete(DeleteBehavior.Cascade);
-
     }
 }
 

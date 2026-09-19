@@ -44,7 +44,6 @@ public sealed class GroupService(
             MemberPalette.Assign([]));
         db.GroupMembers.Add(owner);
 
-        // Filled as they are made, so two of them never take the same colour.
         var placeholderColors = new List<string?>();
         var placeholders = (request.PlaceholderMemberNames ?? [])
             .Select(n => n?.Trim())
@@ -62,8 +61,6 @@ public sealed class GroupService(
             .ToList();
         db.GroupMembers.AddRange(placeholders);
 
-        // Save first so the group row exists: the sequence allocator updates it in
-        // place, and the log entries carry a foreign key to it.
         await db.SaveChangesAsync(ct);
 
         var deviceId = DeviceFor(userId);
@@ -131,16 +128,6 @@ public sealed class GroupService(
             group.ThemeName);
     }
 
-    /// <summary>
-    /// The stored default split values, or null. Unreadable JSON is treated as no
-    /// default rather than as an error: it would only ever mean a shape from an
-    /// older version, and refusing to load a group over it would be absurd.
-    /// </summary>
-    /// <summary>
-    /// The stored patterns, or null. Unreadable JSON is treated as none rather than
-    /// as an error, the same as the default split above it: refusing to load a group
-    /// over a display rule would be absurd.
-    /// </summary>
     internal static IReadOnlyList<string>? ReadIgnoredNamePatterns(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
@@ -226,17 +213,12 @@ public sealed class GroupService(
         if (request.Name is not null)
             group.Name = GroupAccess.RequireText(request.Name, "Group name", 120);
 
-        // For the optional text fields, null means "not supplied" in a patch, so it
-        // cannot also mean "clear". An empty string is the explicit clear -
-        // otherwise the remove button in the icon picker would silently do nothing.
         if (request.Description is not null)
             group.Description = Clearable(request.Description, "Description", 2000);
         if (request.IconName is not null)
             group.IconName = Clearable(request.IconName, "Icon name", 48);
         if (request.ColorHex is not null)
             group.ColorHex = Clearable(request.ColorHex, "Colour", 9) ?? "#4f46e5";
-        // An empty string clears it, which puts the group back to wearing whatever
-        // colour each person chose for their own account.
         if (request.ThemeName is not null)
             group.ThemeName = ReadTheme(request.ThemeName);
         if (request.BaseCurrency is not null)
@@ -246,9 +228,6 @@ public sealed class GroupService(
         {
             group.DefaultSplitType = defaultSplit;
 
-            // Only meaningful alongside a type. An equal split needs none, and an
-            // empty map is the explicit clear, the same convention as the text
-            // fields above.
             group.DefaultSplitValuesJson = defaultSplit == SplitType.Equal
                 ? null
                 : await BuildDefaultSplitValuesAsync(groupId, request.DefaultSplitValues, ct);
@@ -269,10 +248,6 @@ public sealed class GroupService(
     public async Task<GroupDto> SetIgnoredNamesAsync(
         Guid userId, Guid groupId, SetIgnoredNamesRequest request, CancellationToken ct = default)
     {
-        // A member, not an admin. This changes what a total reads on a screen and
-        // nothing about the money: no amount moves, no balance changes, and the
-        // expenses it leaves out are still listed, still owed and still settled the
-        // same way. Everything else on the settings screen stays an admin's.
         await GroupAccess.RequireMemberAsync(db, userId, groupId, ct);
         var group = await GroupAccess.RequireGroupAsync(db, groupId, ct);
         GroupAccess.RequireWritable(group);
@@ -288,30 +263,6 @@ public sealed class GroupService(
         return await GetAsync(userId, groupId, ct);
     }
 
-    /// <summary>
-    /// Reads an optional text field from a patch: trimmed, or null when the caller
-    /// sent an empty string to clear it. Rejects anything too long for the column
-    /// rather than letting the database truncate it into something meaningless.
-    /// </summary>
-    /// <summary>
-    /// Validates and serialises the default split values.
-    ///
-    /// Members are checked against the group: a value for someone who is not in it
-    /// would sit in the group forever, silently ignored by every form that read it.
-    /// </summary>
-    /// <summary>
-    /// Validates and serialises the patterns to leave out of the highlights.
-    ///
-    /// The patterns are globs, not regular expressions: a name matches if it contains
-    /// the text, and a star stands for any run of characters. "Loyer*" is what a
-    /// person writes when they mean "anything starting with Loyer", and reading that
-    /// as a regex would match "Loye" and miss every rent there has ever been. So
-    /// there is nothing here that can fail to compile, and nothing that can be made
-    /// to backtrack for a second either.
-    ///
-    /// Bounded all the same: a group setting is not a place to store a program, and
-    /// ten patterns of two hundred characters is far more than the job needs.
-    /// </summary>
     private static string? BuildIgnoredNamePatterns(IReadOnlyList<string> patterns)
     {
         const int MaxPatterns = 10;
@@ -369,14 +320,6 @@ public sealed class GroupService(
         return trimmed;
     }
 
-    /// <summary>
-    /// The accent a group is to wear, or null for none.
-    ///
-    /// Refused rather than stored when it is not a theme this app has: the client
-    /// turns the name into shades, so a name it does not know would leave the group
-    /// with no colour at all and nothing to say why. Empty clears it, the same
-    /// convention as the text fields above.
-    /// </summary>
     private static string? ReadTheme(string? name)
     {
         var wanted = name?.Trim() ?? string.Empty;
@@ -404,8 +347,6 @@ public sealed class GroupService(
             group.IsArchived = archived;
             group.ArchivedAt = archived ? clock.UtcNow : null;
 
-            // allowArchived: the unarchive write itself targets an archived group, so
-            // the freeze must not lock the door behind it.
             await writer.RecordAsync(group, SyncEntityType.Group, groupId, SyncOperation.Update,
                 DeviceFor(userId), userId, GroupPayload(group), allowArchived: true, ct: ct);
 
@@ -431,10 +372,6 @@ public sealed class GroupService(
         var invitee = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, ct)
                       ?? throw new NotFoundException($"User {request.UserId}");
 
-        // Deliberately ignores the tombstone, the same as redeeming an invite:
-        // someone who was removed and comes back has to reclaim their original row.
-        // A second one would collide with the one-membership-per-user index and
-        // orphan whatever history still points at the first.
         var existing = await db.GroupMembers
             .FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == invitee.Id, ct);
 
@@ -480,8 +417,6 @@ public sealed class GroupService(
     public async Task<IReadOnlyList<AddableUserDto>> ListAddableUsersAsync(
         Guid userId, Guid? groupId, CancellationToken ct = default)
     {
-        // Membership is the gate. Without it, naming a group id would tell a
-        // stranger who is in it by omission.
         if (groupId is { } id) await GroupAccess.RequireMemberAsync(db, userId, id, ct);
 
         var taken = groupId is { } forGroup
@@ -503,17 +438,6 @@ public sealed class GroupService(
         => new(member.Id, member.UserId, member.DisplayName, avatarUrl,
             member.Role, member.Status, member.UserId is null, 0m, member.ColorHex);
 
-    /// <summary>
-    /// Folds one member into another.
-    ///
-    /// Everything the source paid, owed, was owed and said becomes the target's,
-    /// and the source is removed. It exists because the same person can end up in
-    /// a group twice: once as a name a CSV import invented, and again as the
-    /// account they signed up with.
-    ///
-    /// One way only. Nothing records which rows moved, so nothing can move them
-    /// back, which is why the caller has to mean it.
-    /// </summary>
     public async Task<GroupDto> MergeMembersAsync(
         Guid userId, Guid groupId, MergeMembersRequest request, CancellationToken ct = default)
     {
@@ -527,16 +451,10 @@ public sealed class GroupService(
         var source = await RequireMemberAsync(groupId, request.SourceMemberId, ct);
         var target = await RequireMemberAsync(groupId, request.TargetMemberId, ct);
 
-        // The group has to keep an owner, and the owner is never the one to lose.
         if (source.Role == GroupRole.Owner)
             throw new ValidationException(
                 "The group owner cannot be merged away. Merge the other person into the owner instead.");
 
-        // The source may well be a removed member: removing one deactivates it
-        // rather than deleting it precisely because it still holds expenses, and
-        // folding that into a real account is what this is for. The target is the
-        // other way round, because everything ends up on it and a removed member
-        // is one nobody can see.
         if (target.Status == MembershipStatus.Removed)
             throw new ValidationException(
                 $"{target.DisplayName} has been removed from this group, so nothing can be merged into them.");
@@ -544,10 +462,6 @@ public sealed class GroupService(
         var deviceId = DeviceFor(userId);
         var summary = $"Merged {source.DisplayName} into {target.DisplayName}";
 
-        // Expenses first, with everything hanging off them. A split and an item
-        // share are both keyed by member and both may already exist for the
-        // target, in which case the two become one rather than colliding on the
-        // unique index they share.
         var expenses = await db.Expenses
             .Include(e => e.Payers)
             .Include(e => e.Splits)
@@ -593,8 +507,6 @@ public sealed class GroupService(
             if (settlement.FromMemberId == source.Id) settlement.FromMemberId = target.Id;
             if (settlement.ToMemberId == source.Id) settlement.ToMemberId = target.Id;
 
-            // A payment from someone to themselves says nothing. It only ever meant
-            // anything while the two were different people.
             var operation = settlement.FromMemberId == settlement.ToMemberId
                 ? SyncOperation.Delete
                 : SyncOperation.Update;
@@ -616,9 +528,6 @@ public sealed class GroupService(
                 ct: ct);
         }
 
-        // Not synced, so repointed without a log entry, but still repointed: a
-        // recurring expense left pointing at a removed member would come due and
-        // fail, and the activity feed would name nobody.
         await db.RecurringExpenses
             .Where(r => r.GroupId == groupId && r.PaidByMemberId == source.Id)
             .ExecuteUpdateAsync(set => set.SetProperty(r => r.PaidByMemberId, target.Id), ct);
@@ -627,8 +536,6 @@ public sealed class GroupService(
             .Where(a => a.GroupId == groupId && a.ActorMemberId == source.Id)
             .ExecuteUpdateAsync(set => set.SetProperty(a => a.ActorMemberId, target.Id), ct);
 
-        // An invite still out there would otherwise hand its taker a member row
-        // that no longer exists.
         await db.GroupInvites
             .Where(i => i.GroupId == groupId && i.ClaimsMemberId == source.Id)
             .ExecuteUpdateAsync(set => set.SetProperty(i => i.ClaimsMemberId, target.Id), ct);
@@ -640,8 +547,6 @@ public sealed class GroupService(
                 deviceId, userId, GroupPayload(group), ct: ct);
         }
 
-        // Nothing points at the source any more, so it goes rather than lingering
-        // as a person with no history who cannot be told apart from a real one.
         source.Status = MembershipStatus.Removed;
         source.LeftAt = clock.UtcNow;
         await writer.RecordAsync(source, SyncEntityType.GroupMember, groupId, SyncOperation.Delete,
@@ -658,11 +563,6 @@ public sealed class GroupService(
         return await GetAsync(userId, groupId, ct);
     }
 
-    /// <summary>
-    /// Moves the source's share of an expense onto the target, adding to whatever
-    /// the target already had. Two shares of one expense held by what turns out to
-    /// be one person are one share.
-    /// </summary>
     private void MergeSplits(Expense expense, Guid sourceId, Guid targetId)
     {
         var mine = expense.Splits.FirstOrDefault(s => s.MemberId == sourceId);
@@ -679,8 +579,6 @@ public sealed class GroupService(
         theirs.Amount += mine.Amount;
         theirs.AmountInBaseCurrency += mine.AmountInBaseCurrency;
 
-        // The input is what someone typed: two shares, two percentages or two
-        // exact amounts all add up. Null means the split type does not take one.
         theirs.InputValue = mine.InputValue is null && theirs.InputValue is null
             ? null
             : (theirs.InputValue ?? 0m) + (mine.InputValue ?? 0m);
@@ -689,10 +587,6 @@ public sealed class GroupService(
         db.ExpenseSplits.Remove(mine);
     }
 
-    /// <summary>
-    /// The same for an itemised line, where a share is membership rather than an
-    /// amount: being on it twice is being on it once.
-    /// </summary>
     private void MergeShares(ExpenseItem item, Guid sourceId, Guid targetId)
     {
         var mine = item.Shares.FirstOrDefault(s => s.MemberId == sourceId);
@@ -708,10 +602,6 @@ public sealed class GroupService(
         mine.MemberId = targetId;
     }
 
-    /// <summary>
-    /// Moves the source's weight in the group default onto the target. Returns
-    /// whether anything changed, so the group is only re-recorded when it did.
-    /// </summary>
     private static bool MergeDefaultSplitValues(Group group, Guid sourceId, Guid targetId)
     {
         var stored = ReadDefaultSplitValues(group.DefaultSplitValuesJson);
@@ -760,8 +650,6 @@ public sealed class GroupService(
 
         if (hasHistory)
         {
-            // Deactivate rather than delete: their past expenses still need a payer,
-            // and other members' balances depend on those rows.
             member.Status = MembershipStatus.Removed;
             member.LeftAt = clock.UtcNow;
             await writer.RecordAsync(member, SyncEntityType.GroupMember, groupId, SyncOperation.Update,
@@ -803,10 +691,6 @@ public sealed class GroupService(
             l.TargetGroupId, names.GetValueOrDefault(l.TargetGroupId), l.OccurredAt, l.Note)).ToList();
     }
 
-    /// <summary>
-    /// Net position per member, in the group base currency. Shared by the group
-    /// read, the list and the balance endpoint so they cannot disagree.
-    /// </summary>
     internal async Task<Dictionary<Guid, decimal>> ComputeBalancesAsync(
         Guid groupId, IEnumerable<Guid> memberIds, string currency, CancellationToken ct)
     {
@@ -854,11 +738,6 @@ public sealed class GroupService(
         UpdatedAt = clock.UtcNow
     };
 
-    /// <summary>
-    /// The colours already spoken for in a group, so the next member gets a free
-    /// one. Read from the database and from what is about to be added, because a
-    /// group being created has neither saved yet.
-    /// </summary>
     private async Task<List<string?>> TakenColorsAsync(
         Guid groupId, IEnumerable<GroupMember>? pending = null, CancellationToken ct = default)
     {
@@ -873,7 +752,6 @@ public sealed class GroupService(
         return stored;
     }
 
-    /// <summary>Changes one member's colour in one group.</summary>
     public async Task<GroupMemberDto> SetMemberColorAsync(
         Guid userId, Guid groupId, Guid memberId, SetMemberColorRequest request,
         CancellationToken ct = default)
@@ -886,8 +764,6 @@ public sealed class GroupService(
                          .FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == groupId, ct)
                      ?? throw new NotFoundException($"Member {memberId}");
 
-        // Your own colour is yours to pick. Anyone else's is an admin decision,
-        // because it is a change to what everybody in the group sees.
         var isOwn = actor.Id == member.Id;
         if (!isOwn && actor.Role is not (GroupRole.Owner or GroupRole.Admin))
             throw new ForbiddenException("Only an owner or an admin can change someone else's colour.");
@@ -896,9 +772,6 @@ public sealed class GroupService(
         if (!MemberPalette.IsKnown(wanted))
             throw new ValidationException("That is not one of the colours to choose from.");
 
-        // Swapped rather than refused when it is taken: refusing would mean
-        // reading the whole group's colours before picking, and a swap leaves
-        // everybody with a colour of their own either way.
         var holder = await db.GroupMembers.FirstOrDefaultAsync(
             m => m.GroupId == groupId && m.Id != memberId && m.ColorHex != null
                  && m.ColorHex.ToLower() == wanted.ToLower(), ct);
@@ -926,19 +799,12 @@ public sealed class GroupService(
             updated.Role, updated.Status, updated.IsPlaceholder, 0m, updated.ColorHex);
     }
 
-    /// <summary>
-    /// Server-side writes still need a device id for the vector clock. A stable
-    /// per-user pseudo device keeps API-originated changes causally ordered against
-    /// the same user's real devices instead of inventing a new one every request.
-    /// </summary>
     internal static string DeviceFor(Guid userId) => $"server:{userId:N}";
 
     internal static object GroupPayload(Group group) => new
     {
         group.Id, group.Name, group.Description, group.BaseCurrency,
         group.IconName, group.ColorHex, group.ThemeName, group.IsArchived, group.LineageId,
-        // In the payload so another device learns the group's default split from
-        // the delta pull rather than only on a full read.
         DefaultSplitType = (int)group.DefaultSplitType,
         group.DefaultSplitValuesJson,
         group.IgnoredNamePatternsJson,

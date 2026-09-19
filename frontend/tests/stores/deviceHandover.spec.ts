@@ -4,18 +4,6 @@ import { useAuthStore } from '@/stores/auth'
 import { db, deviceIdNow, getDeviceId, resetDatabase } from '@/offline/db'
 import { ApiError } from '@/api/client'
 
-/**
- * Signing in as someone else on a device that has already been used.
- *
- * A device id keys every vector clock, so the server refuses to move one between
- * accounts, and it is right to: two accounts writing under one id would interleave
- * their histories. The consequence was that a phone could only ever hold one
- * account for as long as the install lived, which for a personal phone is wrong.
- *
- * A different account on the same install is a new install. It gets a new device
- * id, and the replica left behind belongs to the previous account, so it goes.
- */
-
 const alice = {
   id: 'user-1',
   email: 'alice@example.com',
@@ -37,10 +25,6 @@ const tokens = {
 const deviceTaken = () =>
   new ApiError(403, 'Forbidden', 'That device is registered to another account.')
 
-/**
- * Refuses the first sign-in the way the server does, then accepts the next one,
- * which is what a fresh device id earns.
- */
 function apiRefusingOnce(user = bob) {
   let refused = false
 
@@ -108,7 +92,6 @@ describe('handing a device to another account', () => {
     await store.signInAsDeveloper('bob@example.com')
     const adopted = deviceIdNow()
 
-    // Read back from storage rather than from memory, since the next start will.
     expect(await getDeviceId()).toBe(adopted)
   })
 
@@ -120,7 +103,6 @@ describe('handing a device to another account', () => {
 
     await store.signInAsDeveloper('bob@example.com')
 
-    // Otherwise the new account opens the app looking at someone else's groups.
     expect(await db.groups.count()).toBe(0)
   })
 
@@ -180,7 +162,6 @@ describe('handing a device to another account', () => {
 
     await expect(store.signInAsDeveloper('')).rejects.toThrow('An email address is required.')
 
-    // A typo must not cost someone their offline data.
     expect(await db.groups.count()).toBe(1)
     expect(api.post).toHaveBeenCalledTimes(1)
   })

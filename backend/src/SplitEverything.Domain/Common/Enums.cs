@@ -14,9 +14,6 @@ public enum MembershipStatus
     Removed = 2
 }
 
-/// <summary>
-/// How an expense total is divided between participants.
-/// </summary>
 public enum SplitType
 {
     Equal = 0,
@@ -61,13 +58,9 @@ public enum SyncOperation
     Create = 0,
     Update = 1,
     Delete = 2,
-    /// <summary>Entity moved from one group to another, carrying its history.</summary>
     Transfer = 3,
-    /// <summary>Marker entry written when two group logs are reconciled into one.</summary>
     Merge = 4,
-    /// <summary>Marker entry written when one group log is partitioned into two.</summary>
     Split = 5,
-    /// <summary>Marker entry replacing a range of compacted history.</summary>
     Snapshot = 6
 }
 
@@ -80,23 +73,14 @@ public enum SyncEntityType
     ExpenseItem = 4,
     Settlement = 5,
     ExpenseComment = 6,
-    // 7 was CategoryRule, and categories are gone. The number is not reused: the
-    // ones above and below keep theirs, so nothing that was written down means
-    // something different now.
     UserPreference = 8
 }
 
-/// <summary>
-/// Result of comparing two vector clocks.
-/// </summary>
 public enum ClockOrdering
 {
     Equal = 0,
-    /// <summary>Left happened after right.</summary>
     After = 1,
-    /// <summary>Left happened before right.</summary>
     Before = 2,
-    /// <summary>Neither dominates: a true conflict needing resolution.</summary>
     Concurrent = 3
 }
 

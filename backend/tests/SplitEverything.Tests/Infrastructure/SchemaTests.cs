@@ -8,10 +8,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Infrastructure;
 
-/// <summary>
-/// The schema guarantees the sync engine relies on. These are asserted against real
-/// Postgres because they are all constraints the in-memory provider silently ignores.
-/// </summary>
 public class SchemaTests(PostgresFixture fixture) : DatabaseTestBase(fixture)
 {
     [Fact]
@@ -68,8 +64,6 @@ public class SchemaTests(PostgresFixture fixture) : DatabaseTestBase(fixture)
         var user = await TestData.SeedUserAsync(Db);
         var (group, _) = await TestData.SeedGroupAsync(Db, user, "Alice");
 
-        // The partial index must exempt null user ids, or a Settle Up import of
-        // several names-only members would fail on the second row.
         Db.GroupMembers.Add(TestData.Member(group.Id, null, "Bob"));
         Db.GroupMembers.Add(TestData.Member(group.Id, null, "Carol"));
         await Db.SaveChangesAsync();
@@ -85,8 +79,6 @@ public class SchemaTests(PostgresFixture fixture) : DatabaseTestBase(fixture)
         Db.Expenses.Add(TestData.Expense(group.Id, members["Bob"], 50m));
         await Db.SaveChangesAsync();
 
-        // The database itself must refuse this, not only EF's change tracker: a
-        // member with history has to survive as a row or balances lose their payer.
         var ex = await Should.ThrowAsync<PostgresException>(() =>
             Db.Database.ExecuteSqlAsync(
                 $"DELETE FROM group_members WHERE id = {members["Bob"]}"));
@@ -306,7 +298,6 @@ public class SchemaTests(PostgresFixture fixture) : DatabaseTestBase(fixture)
 
         reloaded.SpentAt.ToUniversalTime().ShouldBe(spentAt.ToUniversalTime());
     }
-
 
     private async Task<string?> ScalarAsync(string sql)
     {

@@ -3,23 +3,9 @@ import { ref } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
 
-/**
- * A settings section that keeps itself out of the way.
- *
- * Some of these are lists - fourteen categories, each with a name, an icon, a
- * colour and a line of keywords - and a screen that shows them all at once buries
- * everything underneath them. They are also the settings somebody changes twice a
- * year, so closed is the right resting state: the heading says what is in there
- * and how much of it, which is all a reader scrolling past needs.
- *
- * The same shape as the month headings on the group screen, down to the chevron
- * that turns, because it is the same gesture doing the same thing.
- */
-
 const props = withDefaults(
   defineProps<{
     title: string
-    /** Said on the heading, so a closed section is not silent about its contents. */
     count?: number | string | null
     open?: boolean
     testid?: string
@@ -29,7 +15,6 @@ const props = withDefaults(
 
 const isOpen = ref(props.open)
 </script>
-
 <template>
   <section class="surface-card mb-4">
     <button
@@ -55,7 +40,6 @@ const isOpen = ref(props.open)
       >{{ count }}
       </span>
     </button>
-
     <div v-if="isOpen" :data-testid="props.testid" class="px-4 pb-4">
       <slot />
     </div>

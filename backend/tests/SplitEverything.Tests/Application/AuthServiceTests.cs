@@ -158,7 +158,6 @@ public class AuthServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var signIn = await Auth.SignInWithGoogleAsync(SignIn());
         var second = await Auth.RefreshAsync(new RefreshRequest(signIn.Tokens.RefreshToken, TestData.DeviceA));
 
-        // Replay of the old token means it leaked; the live one goes too.
         await Should.ThrowAsync<ForbiddenException>(
             () => Auth.RefreshAsync(new RefreshRequest(signIn.Tokens.RefreshToken, TestData.DeviceA)));
 
@@ -202,8 +201,6 @@ public class AuthServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var second = await Auth.SignInWithGoogleAsync(SignIn(deviceId: TestData.DeviceB));
         await Auth.SignOutAsync(first.Tokens.RefreshToken);
 
-        // Presenting a deliberately signed-out token twice must not be mistaken for
-        // reuse of a rotated one, or one sign-out would log the user out everywhere.
         await Should.ThrowAsync<ForbiddenException>(
             () => Auth.RefreshAsync(new RefreshRequest(first.Tokens.RefreshToken, TestData.DeviceA)));
         await Should.ThrowAsync<ForbiddenException>(
@@ -358,7 +355,6 @@ public class AuthServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
 
         await Auth.DeleteMyAccountAsync(signIn.User.Id);
 
-        // Alice's row survives as a placeholder, so the owner is still owed 50.
         var balance = await Settlements.GetGroupBalanceAsync(owner.Id, group.Id);
         balance.Balances.First(b => b.MemberId == ownerMember).Net.ShouldBe(50m);
         var placeholder = await NewContext().GroupMembers.FirstAsync(m => m.Id == aliceMember.Id);

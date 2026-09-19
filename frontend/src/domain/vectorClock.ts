@@ -1,14 +1,5 @@
-/**
- * Client-side vector clock, mirroring SplitEverything.Domain.Sync.VectorClock.
- *
- * The client needs its own copy so it can decide locally whether a pending edit
- * is still based on the newest revision it knows about. Without that, every
- * offline edit would be pushed blind and the user would only learn about a
- * conflict after a round trip.
- */
 
 export type VectorClock = Record<string, number>
-
 export type ClockOrdering = 'equal' | 'after' | 'before' | 'concurrent'
 
 export function emptyClock(): VectorClock {
@@ -34,7 +25,6 @@ export function tickClock(clock: VectorClock, deviceId: string): VectorClock {
   return { ...normalizeClock(clock), [deviceId]: (clock[deviceId] ?? 0) + 1 }
 }
 
-/** Pointwise maximum: the join applied after a successful sync. */
 export function mergeClocks(left: VectorClock, right: VectorClock): VectorClock {
   const merged = { ...normalizeClock(left) }
 

@@ -6,7 +6,6 @@ const props = withDefaults(
   defineProps<{
     amount: number
     currency: string
-    /** Colours the amount green when owed to you and red when you owe. */
     signed?: boolean
     size?: 'sm' | 'md' | 'lg'
   }>(),
@@ -31,7 +30,6 @@ const sizeClass = computed(
     })[props.size],
 )
 </script>
-
 <template>
   <span
     :class="[toneClass, sizeClass, 'tabular-nums whitespace-nowrap']"

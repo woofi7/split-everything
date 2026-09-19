@@ -3,18 +3,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useGroupsStore } from '@/stores/groups'
 import { resetDatabase } from '@/offline/db'
 
-/**
- * The group the app is about.
- *
- * Most people have one group they use constantly and a few they barely touch.
- * Making every screen ask which group turns that common case into a chore, so one
- * group is the main one and the screens follow it.
- *
- * A device preference rather than account state: which group you are looking at is
- * about this screen in your hand, and it must survive a reload without waiting on
- * the network.
- */
-
 const summary = (id: string, name: string, archived = false) => ({
   id,
   name,
@@ -53,7 +41,6 @@ describe('the main group', () => {
 
     await store.loadAll()
 
-    // Nobody has chosen yet, and asking on arrival would be worse than choosing.
     expect(store.mainGroupId).toBe('g1')
     expect(store.mainGroup?.name).toBe('Roommates')
   })
@@ -88,7 +75,6 @@ describe('the main group', () => {
     store.attachApi(fakeApi([summary('g1', 'Roommates')]) as never)
     await store.loadAll()
 
-    // Left pointing at a group that no longer exists, every screen would be empty.
     expect(store.mainGroupId).toBe('g1')
   })
 
@@ -115,7 +101,6 @@ describe('the main group', () => {
 
     store.setMainGroup('nonexistent')
 
-    // Better to stay where we are than to point every screen at nothing.
     expect(store.mainGroupId).toBe('g1')
   })
 
@@ -130,12 +115,6 @@ describe('the main group', () => {
     expect(store.mainGroupId).toBe('g1')
   })
 
-  /**
-   * Stepping through the groups, which is what a swipe across the screen does.
-   *
-   * In the order they are listed, so the cycle is one the picker already shows,
-   * and wrapping around, so a swipe never does nothing.
-   */
   describe('cycling through the groups', () => {
     const three = () =>
       fakeApi([summary('g1', 'Alpha'), summary('g2', 'Beta'), summary('g3', 'Gamma')])
@@ -179,14 +158,11 @@ describe('the main group', () => {
       store.cycleMainGroup(1)
       store.cycleMainGroup(1)
 
-      // What makes it usable without counting.
       expect(store.mainGroupId).toBe('g1')
     })
 
     it('follows the order the groups are listed in', async () => {
       const { store } = storeWith(
-        // Outstanding first, whatever their names: that is the listed order, and
-        // an order of its own would match nothing on screen.
         fakeApi([
           { ...summary('g1', 'Alpha') },
           { ...summary('g2', 'Beta'), myNetBalance: -20 },
@@ -212,7 +188,6 @@ describe('the main group', () => {
       const { store } = storeWith(fakeApi([summary('g1', 'Alpha')]))
       await store.loadAll()
 
-      // Nothing to move to, so nothing should flash up saying it moved.
       expect(store.cycleMainGroup(1)).toBeNull()
       expect(store.mainGroupId).toBe('g1')
     })

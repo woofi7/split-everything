@@ -12,14 +12,6 @@ using SplitEverything.Infrastructure.Sync;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// Rent, subscriptions and anything else on a schedule.
-///
-/// A rule is a template plus a next-run cursor; a worker materialises real
-/// expenses from it. Occurrences are backfilled rather than skipped when the app
-/// was down, and the cursor advances only for occurrences actually written, so a
-/// crash mid-run cannot lose a month.
-/// </summary>
 public sealed class RecurringExpenseService(
     AppDbContext db,
     ISyncWriter writer,
@@ -70,7 +62,6 @@ public sealed class RecurringExpenseService(
             StartsOn = request.StartsOn,
             EndsOn = request.EndsOn,
             MaxOccurrences = request.MaxOccurrences,
-            // The first run is the start date itself, so a rule starting today fires today.
             NextRunAt = request.StartsOn,
             CreatedAt = clock.UtcNow,
             UpdatedAt = clock.UtcNow
@@ -115,8 +106,6 @@ public sealed class RecurringExpenseService(
     {
         var rule = await LoadAsync(userId, id, ct);
 
-        // Tombstoned, not removed: the expenses it already generated point at it and
-        // deleting the rule must not rewrite history.
         rule.IsDeleted = true;
         rule.DeletedAt = clock.UtcNow;
 
@@ -136,14 +125,12 @@ public sealed class RecurringExpenseService(
         foreach (var rule in due)
         {
             var group = await db.Groups.FirstOrDefaultAsync(g => g.Id == rule.GroupId, ct);
-            // An archived group is frozen; the rule stays but stops producing.
             if (group is null || group.IsArchived) continue;
 
             var until = rule.EndsOn is { } endsOn && endsOn < asOf ? endsOn : asOf;
 
             var occurrences = RecurrenceSchedule.Occurrences(
                 rule.StartsOn,
-                // Strictly after the last one written, so a re-run is a no-op.
                 rule.LastRunAt ?? rule.StartsOn.AddTicks(-1),
                 until,
                 rule.Unit, rule.Interval, rule.DayOfMonth, rule.DayOfWeek);
@@ -227,8 +214,6 @@ public sealed class RecurringExpenseService(
             });
         }
 
-        // No user is acting, so the rule itself is the writing device: occurrences
-        // stay causally ordered without borrowing someone's identity.
         var deviceId = $"recurring:{rule.Id:N}";
 
         await writer.RecordAsync(expense, SyncEntityType.Expense, rule.GroupId,

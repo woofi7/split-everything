@@ -15,8 +15,6 @@ public sealed class ActivityService(AppDbContext db, IClock clock) : IActivitySe
     public async Task<Paged<ActivityEntryDto>> ListAsync(
         Guid userId, Guid? groupId, PageRequest page, CancellationToken ct = default)
     {
-        // Scope to the groups the caller is actually in, so the feed can never leak
-        // activity from a group they were removed from.
         var visibleGroupIds = db.GroupMembers
             .Where(m => m.UserId == userId && m.Status == MembershipStatus.Active && !m.IsDeleted)
             .Select(m => m.GroupId);
@@ -73,8 +71,6 @@ public sealed class ActivityService(AppDbContext db, IClock clock) : IActivitySe
             OccurredAt = clock.UtcNow
         });
 
-        // Not saved here: the caller owns the transaction, so the feed entry lands
-        // with the change it describes or not at all.
         return Task.CompletedTask;
     }
 }

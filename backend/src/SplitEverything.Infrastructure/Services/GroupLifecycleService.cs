@@ -13,19 +13,6 @@ using SplitEverything.Infrastructure.Sync;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// Moves history between group logs without breaking causality.
-///
-/// The shared rules across all four operations:
-/// - Entities move; they are never deleted and recreated. Ids, vector clocks and
-///   revision chains survive, so a device that already knew a row recognises it.
-/// - Log entries move too, keeping their original LineageId. That is what lets a
-///   split later partition a merged log back apart instead of guessing.
-/// - Moved entries are renumbered above the destination's cursor, because clients
-///   pull "everything after N" and anything below that would never be delivered.
-/// - The destination group's clock joins the clock of the history it received, so
-///   the moved revisions do not read as unseen and re-conflict.
-/// </summary>
 public sealed class GroupLifecycleService(
     AppDbContext db,
     ISyncWriter writer,
@@ -47,8 +34,6 @@ public sealed class GroupLifecycleService(
 
         if (!string.Equals(source.BaseCurrency, target.BaseCurrency, StringComparison.OrdinalIgnoreCase))
         {
-            // Every stored base amount was computed against the group's own base
-            // currency. Merging across currencies would reinterpret all of them.
             throw new ValidationException(
                 $"Both groups must share a base currency to merge ({source.BaseCurrency} vs {target.BaseCurrency}).");
         }
@@ -65,7 +50,6 @@ public sealed class GroupLifecycleService(
         var movedEntries = await MoveLogEntriesAsync(
             db.SyncLog.Where(e => e.GroupId == source.Id), source.Id, target.Id, ct);
 
-        // Join the clocks so nothing the source knew reads as unseen in the target.
         target.Clock = target.Clock.Merge(source.Clock);
 
         source.IsArchived = true;
@@ -134,8 +118,6 @@ public sealed class GroupLifecycleService(
         if (settlements.Any(s => s.GroupId != source.Id))
             throw new ValidationException("Every settlement must belong to the group being split.");
 
-        // Everyone touched by the moved history has to exist in the new group, or a
-        // split would leave dangling payers and broken balances.
         var neededMemberIds = expenses
             .SelectMany(e => e.Splits.Select(s => s.MemberId).Append(e.PaidByMemberId))
             .Concat(settlements.SelectMany(s => new[] { s.FromMemberId, s.ToMemberId }))
@@ -155,8 +137,6 @@ public sealed class GroupLifecycleService(
             IconName = source.IconName,
             ColorHex = source.ColorHex,
             CreatedByUserId = userId,
-            // A fresh lineage for anything written from here on, while the moved
-            // entries keep the lineage they were born with.
             LineageId = Guid.CreateVersion7(),
             CreatedAt = clock.UtcNow,
             UpdatedAt = clock.UtcNow
@@ -175,8 +155,6 @@ public sealed class GroupLifecycleService(
                 Role = member.UserId == userId ? GroupRole.Owner : member.Role,
                 Status = member.Status,
                 JoinedAt = member.JoinedAt,
-                // Carry the clock so the copied member is not a brand new causal
-                // event on devices that already knew this person.
                 Clock = member.Clock,
                 CreatedAt = clock.UtcNow,
                 UpdatedAt = clock.UtcNow
@@ -187,7 +165,6 @@ public sealed class GroupLifecycleService(
 
         if (!memberMap.Values.Any(id => db.GroupMembers.Local.Any(m => m.Id == id && m.UserId == userId)))
         {
-            // The splitter must be able to see the group they just made.
             var actor = await db.GroupMembers.FirstAsync(m => m.GroupId == source.Id && m.UserId == userId, ct);
             if (!memberMap.ContainsKey(actor.Id))
             {
@@ -231,7 +208,6 @@ public sealed class GroupLifecycleService(
             db.SyncLog.Where(e => e.GroupId == source.Id && movedEntityIds.Contains(e.EntityId)),
             source.Id, newGroup.Id, ct);
 
-        // The new group inherits the causal knowledge of the history it took.
         var movedClock = expenses.Aggregate(VectorClock.Empty, (acc, e) => acc.Merge(e.Clock));
         newGroup.Clock = newGroup.Clock.Merge(movedClock).Merge(source.Clock);
 
@@ -315,15 +291,10 @@ public sealed class GroupLifecycleService(
                 && (e.EntityId == expense.Id || commentIds.Contains(e.EntityId))),
             fromGroupId, request.TargetGroupId, ct);
 
-        // OriginGroupId is only set the first time, so a twice-moved expense still
-        // points at where it was actually created.
         expense.OriginGroupId ??= fromGroupId;
         expense.GroupId = request.TargetGroupId;
         expense.PaidByMemberId = memberMap[expense.PaidByMemberId];
 
-        // Who paid moves with the expense. Left behind, its rows would point at
-        // members of a group this expense is no longer in, and every balance either
-        // side of the move would be wrong.
         foreach (var payer in expense.Payers)
         {
             payer.MemberId = memberMap[payer.MemberId];
@@ -352,8 +323,6 @@ public sealed class GroupLifecycleService(
             sourceGroupId: fromGroupId,
             lineageId: expense.OriginLineageId, ct: ct);
 
-        // The source log needs its own tombstone-style entry, or a device following
-        // only the old group would keep showing an expense that has left.
         await writer.RecordMarkerAsync(fromGroupId, SyncEntityType.Expense, expense.Id,
             SyncOperation.Transfer, GroupService.DeviceFor(userId), userId,
             new { movedTo = request.TargetGroupId, expense.Id },
@@ -387,8 +356,6 @@ public sealed class GroupLifecycleService(
         var joined = stale.Aggregate(VectorClock.Empty,
             (acc, entry) => acc.Merge(VectorClock.FromJson(entry.VectorClockJson)));
 
-        // The snapshot has to stand alone: a device bootstrapping from it never sees
-        // the entries it replaced, so the surviving state goes in whole.
         var state = new
         {
             groupId,
@@ -439,8 +406,6 @@ public sealed class GroupLifecycleService(
         return new CompactionResult(groupId, snapshot.Id, stale.Count, trimmed, upTo);
     }
 
-    // ---- shared movement helpers -----------------------------------------
-
     private async Task<Dictionary<Guid, Guid>> BuildMergeMemberMapAsync(
         Group source, Group target, IReadOnlyDictionary<Guid, Guid>? explicitMapping,
         string deviceId, Guid userId, CancellationToken ct)
@@ -462,8 +427,6 @@ public sealed class GroupLifecycleService(
                 continue;
             }
 
-            // Same signed-in person is unambiguous; otherwise fall back to the name,
-            // which is all a names-only import ever gave us.
             var match = member.UserId is not null
                 ? targetMembers.FirstOrDefault(t => t.UserId == member.UserId)
                 : targetMembers.FirstOrDefault(t =>
@@ -475,7 +438,6 @@ public sealed class GroupLifecycleService(
                 continue;
             }
 
-            // Nobody to match: carry the person over rather than dropping their history.
             var carried = new GroupMember
             {
                 GroupId = target.Id,
@@ -505,11 +467,6 @@ public sealed class GroupLifecycleService(
         Expense expense, Guid fromGroupId, Guid targetGroupId,
         IReadOnlyDictionary<Guid, Guid>? explicitMapping, CancellationToken ct)
     {
-        // Everyone the expense names, not only who it is split between: a second
-        // person who put money in need not be one of the people it is split
-        // between, and neither need somebody named on a line of an itemised bill.
-        // Left out, the move ended in a 500 the moment it went to rewrite their
-        // rows and found nobody to rewrite them to.
         var itemMemberIds = await db.ExpenseItemShares
             .Where(s => expense.Items.Select(i => i.Id).Contains(s.ExpenseItemId))
             .Select(s => s.MemberId)
@@ -546,8 +503,6 @@ public sealed class GroupLifecycleService(
                 : targetMembers.FirstOrDefault(t =>
                     string.Equals(t.DisplayName, member.DisplayName, StringComparison.OrdinalIgnoreCase));
 
-            // Refuse rather than guess: reassigning a debt to the wrong person is
-            // worse than making the user pick.
             map[member.Id] = match?.Id ?? throw new ValidationException(
                 $"{member.DisplayName} has no match in the destination group. Map them explicitly.");
         }
@@ -626,10 +581,6 @@ public sealed class GroupLifecycleService(
         return settlements.Count;
     }
 
-    /// <summary>
-    /// Moves log entries into another group, renumbering them above that group's
-    /// current cursor while keeping their relative order and their lineage.
-    /// </summary>
     private async Task<int> MoveLogEntriesAsync(
         IQueryable<SyncLogEntry> query, Guid fromGroupId, Guid targetGroupId, CancellationToken ct)
     {
@@ -644,14 +595,11 @@ public sealed class GroupLifecycleService(
             entry.GroupId = targetGroupId;
             entry.ServerSeq = ++next;
             entry.SourceGroupId ??= fromGroupId;
-            // LineageId is deliberately untouched.
         }
 
         target.SequenceCounter = next;
         await db.SaveChangesAsync(ct);
 
-        // Keep the entities' own cursors in step with their relocated log entries so
-        // "everything after N" still finds them.
         foreach (var entry in entries)
         {
             switch (entry.EntityType)

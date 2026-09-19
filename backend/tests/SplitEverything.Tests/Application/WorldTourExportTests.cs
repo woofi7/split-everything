@@ -8,14 +8,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// A real Settle Up export, not a hand-written approximation of one.
-///
-/// The synthetic fixtures agreed with the parser, which is the wrong thing for a
-/// fixture to agree with. This one came out of the app: UTF-16, its own column
-/// order, semicolon-separated participants paired positionally with a split-amount
-/// column, and a Type column where a row is either an expense or a transfer.
-/// </summary>
 public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private ImportService Imports { get; set; } = null!;
@@ -34,8 +26,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
     {
         var table = SettleUpCsvReader.Read(Export());
 
-        // Written as UTF-16 with a byte order mark. Read as UTF-8 every cell is
-        // interleaved with nulls and nothing matches anything.
         table.Headers.ShouldBe([
             "Who paid", "Amount", "Currency", "For whom", "Split amounts", "Purpose",
             "Category", "Date & time", "Timezone", "Exchange rate", "Converted amount",
@@ -49,7 +39,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
     {
         var table = SettleUpCsvReader.Read(Export());
 
-        // Escaped rather than written literally, so this file stays plain ASCII.
         var purposes = table.Rows.Select(r => r[5]).ToList();
         purposes.ShouldContain("Airbnb M\u00e1laga");
         purposes.ShouldContain(p => p.StartsWith("Flight Montr\u00e9al to Madrid"));
@@ -62,7 +51,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
 
         var analysis = await Imports.AnalyzeCsvAsync(user.Id, Export(), "World tour.csv");
 
-        // This export puts the payer first and the purpose sixth.
         analysis.SuggestedMapping["paidBy"].ShouldBe(0);
         analysis.SuggestedMapping["amount"].ShouldBe(1);
         analysis.SuggestedMapping["currency"].ShouldBe(2);
@@ -70,8 +58,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
         analysis.SuggestedMapping["description"].ShouldBe(5);
         analysis.SuggestedMapping["date"].ShouldBe(7);
 
-        // The two the wizard cannot work without: exact shares, and whether a row
-        // is an expense or a transfer.
         analysis.SuggestedMapping["splitAmounts"].ShouldBe(4);
         analysis.SuggestedMapping["type"].ShouldBe(11);
     }
@@ -83,7 +69,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
 
         var analysis = await Imports.AnalyzeCsvAsync(user.Id, Export(), "World tour.csv");
 
-        // Participants are semicolon separated inside one cell.
         analysis.DetectedMemberNames.ShouldBe(["Emma", "Nicolas"], ignoreOrder: true);
     }
 
@@ -144,9 +129,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
             Guid.CreateVersion7(), null, "World tour", WorldTourMapping(),
             new Dictionary<string, Guid?>(), [], true, true, "CAD", "World tour.csv"));
 
-        // Two rows in this export are Type=transfer, both "Debt settlement". Booked
-        // as expenses they would each be counted as money spent and owed, which
-        // moves every balance in the group by the wrong amount twice over.
         var expenses = await NewContext().Expenses.Where(e => e.GroupId == result.GroupId).ToListAsync();
         var settlements = await NewContext().Settlements.Where(s => s.GroupId == result.GroupId).ToListAsync();
 
@@ -174,7 +156,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
             .OrderBy(s => s.SettledAt)
             .FirstAsync();
 
-        // Emma paid Nicolas: the money moved from Emma to Nicolas.
         members[settlement.FromMemberId].ShouldBe("Emma");
         members[settlement.ToMemberId].ShouldBe("Nicolas");
     }
@@ -192,8 +173,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
             .Include(e => e.Splits)
             .SingleAsync(e => e.GroupId == result.GroupId && e.Description == "Flights YYC to YUL");
 
-        // The export says 209.43 each on 418.86. Recomputing would agree here, but
-        // an unequal split is exactly what the column exists to preserve.
         flights.Splits.Count.ShouldBe(2);
         flights.Splits.Select(s => s.Amount).ShouldAllBe(a => a == 209.43m);
     }
@@ -209,9 +188,6 @@ public class WorldTourExportTests(PostgresFixture fixture) : ServiceTestBase(fix
 
         var group = await Groups.GetAsync(user.Id, result.GroupId);
 
-        // Worked out by hand from the export: every row split between two people,
-        // less the two transfers Emma already paid. Asserting the figure rather than
-        // that the balances cancel, which they would whatever the import did.
         var nicolas = group.Members.Single(m => m.DisplayName == "Nicolas").NetBalance;
         var emma = group.Members.Single(m => m.DisplayName == "Emma").NetBalance;
 

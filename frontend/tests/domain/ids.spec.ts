@@ -2,15 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { newId } from '@/domain/ids'
 import { computeFingerprint } from '@/domain/fingerprint'
 
-/**
- * Identifiers have to work without a secure context.
- *
- * crypto.randomUUID exists only in a secure context, so it is missing when the
- * app is served over plain HTTP on a LAN address, which is exactly how it gets
- * tested on a phone. getDeviceId runs during startup, so reaching for it
- * unguarded meant the app never mounted and the screen stayed blank.
- */
-
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 const original = crypto.randomUUID
@@ -68,8 +59,6 @@ describe('computeFingerprint outside a secure context', () => {
     const withFallback = await computeFingerprint(
       new Date('2026-01-05T00:00:00Z'), 42.5, 'CAD', 'Metro')
 
-    // It decides whether a statement row is a duplicate, and it is compared with
-    // hashes the server computed, so a different answer here is worse than none.
     expect(withFallback).toBe(withPlatform)
   })
 })

@@ -1,19 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { labelForPath, previousScreen } from '@/router/backTarget'
 
-/**
- * What the back control does, and what it calls itself.
- *
- * It used to be a link to a fixed destination, so an expense opened from the
- * activity feed sent you to the dashboard on the way out - that being where an
- * expense says it belongs. Where somebody actually came from is the history.
- */
 describe('the screen behind this one', () => {
   afterEach(() => window.history.replaceState(null, ''))
 
   it('is nothing at all on a screen opened cold', () => {
-    // A shared link, a notification, or the app started fresh: going back there
-    // would leave the app, so the screen's own declared destination is used.
     expect(previousScreen()).toBeNull()
   })
 
@@ -43,8 +34,6 @@ describe('the screen behind this one', () => {
   })
 
   it('reads the longer paths as themselves, not as the group they sit under', () => {
-    // Settings lives under a group, and "Back to Group" from a screen reached
-    // through settings would name the wrong one.
     expect(labelForPath('/groups/abc/settings')).not.toBe('Group')
     expect(labelForPath('/groups/abc/expenses/def/edit')).toBe('Expense')
   })

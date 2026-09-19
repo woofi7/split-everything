@@ -1,14 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isoDate, lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpenseDate'
 
-/**
- * The date a new expense starts on.
- *
- * Remembered so a run of receipts from the same evening is typed once rather than
- * six times, and read back defensively: it is a device preference, which means it
- * is a string somebody could have edited and a storage that can refuse to answer.
- */
-
 describe('the date an expense starts on', () => {
   beforeEach(() => localStorage.clear())
   afterEach(() => vi.useRealTimers())
@@ -23,14 +15,6 @@ describe('the date an expense starts on', () => {
     expect(lastExpenseDate()).toBe('2026-03-14')
   })
 
-  /**
-   * The bound that matters.
-   *
-   * Kept for ever, this is a trap: an evening spent entering August receipts left
-   * every expense added afterwards dated in August, filed under a month heading
-   * the dashboard keeps closed. It looked exactly like an expense that had not
-   * saved, and the app said nothing.
-   */
   it('forgets a date used on an earlier day', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 8, 13, 21, 0))
@@ -55,16 +39,12 @@ describe('the date an expense starts on', () => {
   it('ignores anything that is not a calendar date', () => {
     localStorage.setItem('split-everything.last-expense-date', 'yesterday')
 
-    // A date input given nonsense shows blank with nothing to say why, so the form
-    // falls back to today instead.
     expect(lastExpenseDate()).toBeNull()
   })
 
   it('ignores the shape the first version stored, which never expired', () => {
     localStorage.setItem('split-everything.last-expense-date', '2026-08-04')
 
-    // A device that met that version starts from today rather than from whenever
-    // it last stopped typing.
     expect(lastExpenseDate()).toBeNull()
   })
 
@@ -75,9 +55,6 @@ describe('the date an expense starts on', () => {
   })
 
   it('reads today in the timezone the person is in, not in UTC', () => {
-    // Nine at night in Montreal is already tomorrow in UTC, and a form that opens
-    // on a day that has not happened yet files the expense in the wrong week of
-    // every total on the stats screen.
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-03-14T23:30:00-04:00'))
 

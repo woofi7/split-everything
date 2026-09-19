@@ -67,7 +67,6 @@ async function seedGroup(baseCurrency = 'CAD') {
 describe('expenses store', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
-    // The sync path refuses to talk to the server as nobody.
     signInForTests()
     await resetDatabase()
     await seedGroup()
@@ -95,13 +94,11 @@ describe('expenses store', () => {
 
     const expense = await store.add(draft)
 
-    // The list has to update now, not after a round trip.
     expect(store.forGroup(groupId)).toHaveLength(1)
     expect(expense.pending).toBe(true)
   })
 
   describe('an expense several people paid for', () => {
-    /** Alice put in 40, Bob put in 25: 65 in all, split evenly between them. */
     const shared = {
       ...draft,
       amount: 65,
@@ -126,8 +123,6 @@ describe('expenses store', () => {
     it('names the expense for the larger contribution', async () => {
       const store = storeWith(false)
 
-      // Bob paid more here, so it is Bob's name on the card even though the draft
-      // arrived with Alice as the nominal payer.
       const expense = await store.add({
         ...shared,
         payers: [
@@ -145,8 +140,6 @@ describe('expenses store', () => {
 
       const balances = store.balanceFor(groupId)
 
-      // 40 in and 32.50 owed is 7.50 up; the other way round is 7.50 down. Crediting
-      // one payer with the whole 65 would say 32.50.
       expect(balances.find((balance) => balance.memberId === alice)?.net).toBe(7.5)
       expect(balances.find((balance) => balance.memberId === bob)?.net).toBe(-7.5)
     })
@@ -169,8 +162,6 @@ describe('expenses store', () => {
     it('refuses contributions that do not add up to the expense', async () => {
       const store = storeWith(false)
 
-      // Both numbers came off the same screen: a disagreement means one of them is
-      // not what was typed, and picking a winner is how a total goes wrong quietly.
       await expect(
         store.add({ ...shared, amount: 70 }),
       ).rejects.toThrow(/add up/)
@@ -194,8 +185,6 @@ describe('expenses store', () => {
       const store = storeWith(false)
       const expense = await store.add(shared)
 
-      // Nothing was said about who paid, so the split of the payment stays as it
-      // was, scaled to the new total: 40/25 of 65 becomes 80/50 of 130.
       const edited = await store.edit(expense.id, { amount: 130 })
 
       expect(edited.payers).toEqual([
@@ -302,7 +291,6 @@ describe('expenses store', () => {
 
     const expense = await store.add({ ...draft, currency: 'EUR' })
 
-    // The client does not know the rate; the server freezes it on arrival.
     expect(expense.currency).toBe('EUR')
     expect(expense.exchangeRate).toBe(1)
     expect(expense.amountInBaseCurrency).toBe(expense.amount)
@@ -449,7 +437,6 @@ describe('expenses store', () => {
     await first.add(draft)
 
     setActivePinia(createPinia())
-    // The sync path refuses to talk to the server as nobody.
     signInForTests()
     const revived = useExpensesStore()
     revived.attachSync(new SyncEngine(fakeSyncApi(), () => false))

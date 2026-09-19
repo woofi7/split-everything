@@ -7,15 +7,6 @@ import {
   watchForUncaughtErrors,
 } from '@/diagnostics'
 
-/**
- * Telling the server what broke in the browser.
- *
- * A phone has no console anybody can read, so a blank screen used to be reported
- * as "it broke" and nothing else. Everything here has to be incapable of making
- * things worse: it never throws, never retries, and stops talking long before it
- * could flood anything.
- */
-
 const send = vi.fn(async () => ({}))
 
 const channel = () => ({
@@ -73,7 +64,6 @@ describe('reporting a client error', () => {
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     reportClientError({ kind: 'render', message: 'the same failure' })
 
-    // A render loop is one bug, not two hundred.
     expect(send).toHaveBeenCalledTimes(1)
   })
 

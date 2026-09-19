@@ -16,16 +16,10 @@ public sealed record PushTarget(
     string? P256dh,
     string? Auth);
 
-/// <summary>
-/// One channel of delivery. Native APNs/FCM is primary for the Capacitor shells,
-/// Web Push is the browser fallback; the dispatcher fans out to whichever
-/// subscriptions a user has registered.
-/// </summary>
 public interface IPushSender
 {
     PushChannel Channel { get; }
 
-    /// <summary>Returns false when the subscription is gone and should be pruned.</summary>
     Task<bool> SendAsync(PushTarget target, PushMessage message, CancellationToken ct = default);
 }
 

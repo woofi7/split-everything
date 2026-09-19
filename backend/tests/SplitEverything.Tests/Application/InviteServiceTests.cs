@@ -180,8 +180,6 @@ public class InviteServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
 
         var result = await Invites.RedeemAsync(joiner.Id, invite.Token);
 
-        // Claiming rather than adding is what keeps the imported history attached to
-        // the right person instead of splitting them in two.
         result.MemberId.ShouldBe(placeholder.Id);
         var claimed = await NewContext().GroupMembers.FirstAsync(m => m.Id == placeholder.Id);
         claimed.UserId.ShouldBe(joiner.Id);
@@ -265,7 +263,6 @@ public class InviteServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var invite = await Invites.CreateAsync(ownerId, group.Id, Request(email: "bob@example.com"));
         var carol = await TestData.SeedUserAsync(Db, "Carol");
 
-        // Otherwise a forwarded or leaked link would be as good as the invite.
         await Should.ThrowAsync<ForbiddenException>(() => Invites.RedeemAsync(carol.Id, invite.Token));
     }
 
@@ -344,7 +341,6 @@ public class InviteServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var png = await Invites.RenderQrCodeAsync(ownerId, invite.Id);
 
         png.Length.ShouldBeGreaterThan(0);
-        // PNG magic number, so this is really an image and not an error page.
         png[..4].ShouldBe(new byte[] { 0x89, 0x50, 0x4E, 0x47 });
     }
 
@@ -377,7 +373,6 @@ public class InviteServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
         var (ownerId, group) = await SetupAsync();
         await Invites.CreateAsync(ownerId, group.Id, Request());
 
-        // Only the creation response can show the token; it is a hash from then on.
         (await Invites.ListForGroupAsync(ownerId, group.Id))
             .ShouldHaveSingleItem().Token.ShouldBeEmpty();
     }

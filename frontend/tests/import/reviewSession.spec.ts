@@ -37,8 +37,6 @@ describe('statement review session', () => {
   it('starts every row unassigned and not split', () => {
     const session = new StatementReviewSession([row()], { rules, suggestions: [], duplicates: [] })
 
-    // Defaulting to "personal, not split" keeps the user in control: nothing is
-    // silently charged to a group.
     expect(session.rows[0].groupId).toBeNull()
     expect(session.rows[0].action).toBe('personal')
   })
@@ -121,7 +119,6 @@ describe('statement review session', () => {
 
     const payload = await session.buildCommitPayload()
 
-    // Row 3 is still "personal": not split, so not the group's business.
     expect(payload.rows).toHaveLength(1)
     expect(payload.rows[0].groupId).toBe(groupId)
   })
@@ -132,7 +129,6 @@ describe('statement review session', () => {
 
     const serialised = JSON.stringify(await session.buildCommitPayload())
 
-    // The whole point of parsing on the device: only confirmed records leave it.
     expect(serialised).not.toContain('Jan 05 UBER EATS TORONTO 42.50')
     expect(serialised).not.toContain('rawLine')
   })
@@ -181,7 +177,6 @@ describe('statement review session', () => {
 
     await session.dispose()
 
-    // Data hygiene from the spec: nothing about the statement survives the review.
     expect(session.rows).toHaveLength(0)
     expect(await db.meta.get('statement:staging')).toBeUndefined()
   })
@@ -204,13 +199,6 @@ describe('statement review session', () => {
   })
 })
 
-/**
- * Filing a statement as it is reviewed.
- *
- * This is where categories pay for themselves: two hundred lines nobody will ever
- * file by hand, and every one of them a merchant name the group's keywords
- * already know.
- */
 describe('filing the rows of a statement', () => {
   const categories = [
     {
@@ -250,7 +238,6 @@ describe('filing the rows of a statement', () => {
 
     assign(session)
 
-    // "UBER EATS" beats "UBER": a takeaway is not a taxi.
     expect(session.rows[0].categoryKey).toBe('dining')
   })
 
@@ -267,7 +254,6 @@ describe('filing the rows of a statement', () => {
     assign(session)
 
     session.setCategory(1, 'transport')
-    // Moving the row to another group must not overrule them.
     assign(session)
 
     expect(session.rows[0].categoryKey).toBe('transport')

@@ -2,19 +2,6 @@
 import { t } from '@/i18n'
 import { dismiss, toasts, type Toast } from '@/ui/toasts'
 
-/**
- * Where the app says things.
- *
- * At the top, over everything, because that is where a reader who has just pressed
- * a button is not looking - and so the only place a message can put itself in
- * front of them. Above the header rather than inside it: the header belongs to the
- * screen, and this belongs to the app.
- *
- * Teleported to the body so no screen's overflow, transform or stacking context can
- * clip it, which is exactly what happened to the inline messages this replaces.
- */
-
-/** The edge that says what kind of news this is, without relying on the colour. */
 const edgeOf = (toast: Toast) =>
   toast.kind === 'error'
     ? 'var(--color-owing)'
@@ -22,7 +9,6 @@ const edgeOf = (toast: Toast) =>
       ? 'var(--color-owed)'
       : 'var(--accent-text)'
 </script>
-
 <template>
   <Teleport to="body">
     <div
@@ -52,10 +38,8 @@ const edgeOf = (toast: Toast) =>
     </div>
   </Teleport>
 </template>
-
 <style scoped>
 .toast {
-  /* Two backgrounds would fight on a translucent surface; this one is opaque. */
   backdrop-filter: none;
 }
 
@@ -70,8 +54,6 @@ const edgeOf = (toast: Toast) =>
   transform: translateY(-0.5rem);
 }
 
-/* A message that slides is still a message; someone who has asked for less motion
-   gets it whole and still. */
 @media (prefers-reduced-motion: reduce) {
   .toast-enter-active,
   .toast-leave-active {

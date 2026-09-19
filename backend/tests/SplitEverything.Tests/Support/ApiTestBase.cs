@@ -49,7 +49,6 @@ public abstract class ApiTestBase(PostgresFixture fixture) : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    /// <summary>Signs in through the real endpoint and attaches the bearer token.</summary>
     protected async Task<AuthenticatedUser> SignInAsync(
         string name = "Alice", string? email = null, string? googleSub = null)
     {
@@ -74,7 +73,6 @@ public abstract class ApiTestBase(PostgresFixture fixture) : IAsyncLifetime
         return result.User;
     }
 
-    /// <summary>A second, independently authenticated client, for access tests.</summary>
     protected async Task<HttpClient> SignInAsAnotherUserAsync(string name)
     {
         var client = Factory.CreateClient();
@@ -113,13 +111,9 @@ public abstract class ApiTestBase(PostgresFixture fixture) : IAsyncLifetime
             "push_subscriptions", "devices", "refresh_tokens", "users", "exchange_rates"
         };
 
-        // EF cannot tell a table list from user input, and this one is the constant
-        // above: a parameter cannot carry a table name anyway, so there is nothing
-        // to parameterise here.
 #pragma warning disable EF1002
         await db.Database.ExecuteSqlRawAsync(
             $"TRUNCATE TABLE {string.Join(", ", tables)} RESTART IDENTITY CASCADE;");
 #pragma warning restore EF1002
-
     }
 }

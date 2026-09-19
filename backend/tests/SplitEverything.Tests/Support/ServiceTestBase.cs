@@ -8,20 +8,10 @@ using SplitEverything.Infrastructure.Sync;
 
 namespace SplitEverything.Tests.Support;
 
-/// <summary>
-/// Wires the real services against the real database, substituting only what
-/// crosses the network: Google, Frankfurter, email and push. Those are the
-/// boundaries worth faking; faking the database would only test the fake.
-/// </summary>
 public abstract class ServiceTestBase(PostgresFixture fixture) : DatabaseTestBase(fixture)
 {
     protected FixedClock Clock { get; } = new(new DateTimeOffset(2026, 8, 31, 10, 0, 0, TimeSpan.Zero));
 
-    /// <summary>
-    /// An install with no administrator, which is what every test is unless it says
-    /// otherwise: administration comes from configuration, so the default has to be
-    /// nobody rather than whoever the test happened to seed.
-    /// </summary>
     protected AdminOptions Admins { get; } = new();
 
     protected ICurrencyConverter Currency { get; private set; } = null!;
@@ -40,8 +30,6 @@ public abstract class ServiceTestBase(PostgresFixture fixture) : DatabaseTestBas
         await base.InitializeAsync();
 
         Currency = Substitute.For<ICurrencyConverter>();
-        // Default to a no-op conversion so tests that do not care about FX read
-        // cleanly; the currency tests override this per case.
         Currency.ConvertAsync(Arg.Any<decimal>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<DateTimeOffset?>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(

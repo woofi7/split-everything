@@ -28,15 +28,12 @@ const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
 
 onMounted(async () => {
   try {
-    // No group id: nobody is a member of a group that does not exist yet.
     addable.value = await groups.addableUsers()
   } catch {
-    // The field still adds people by name, which is all it could do before.
     addable.value = []
   }
 })
 
-/** Held until the group exists, since there is nothing to add them to yet. */
 function addPerson(person: AddableUser): void {
   if (chosen.value.some((existing) => existing.id === person.id)) return
   chosen.value.push(person)
@@ -47,7 +44,6 @@ function removePerson(index: number): void {
 }
 
 async function save(): Promise<void> {
-
   if (!name.value.trim()) {
     notify(t('Give the group a name.'), 'error')
     return
@@ -62,15 +58,10 @@ async function save(): Promise<void> {
       iconName: iconName.value,
     })
 
-    // Sequential rather than part of the create: a member row needs a group to
-    // belong to. A failure here is not worth stranding anyone on this screen for,
-    // since the group itself is already made and the settings page can finish the
-    // job.
     for (const person of chosen.value) {
       try {
         await groups.addUserMember(group.id, person.id)
       } catch {
-        // Reported on the group screen, where the roster is visible.
       }
     }
 
@@ -82,7 +73,6 @@ async function save(): Promise<void> {
   }
 }
 </script>
-
 <template>
   <AppShell :title="t('New group')" :back-to="{ name: 'dashboard' }" :back-label="t('Dashboard')">
     <form class="flex flex-col gap-5" @submit.prevent="save">
@@ -98,7 +88,6 @@ async function save(): Promise<void> {
           style="border-color: var(--border)"
         />
       </label>
-
       <div class="grid grid-cols-2 gap-3">
         <label class="flex flex-col gap-1">
           <span class="text-sm text-[var(--text-muted)]">{{ t('Currency') }}</span>
@@ -110,7 +99,6 @@ async function save(): Promise<void> {
             <option v-for="code in currencies" :key="code" :value="code">{{ code }}</option>
           </select>
         </label>
-
         <div class="flex flex-col gap-1">
           <span class="text-sm text-[var(--text-muted)]">{{ t('Icon') }}</span>
           <button
@@ -130,17 +118,14 @@ async function save(): Promise<void> {
           </button>
         </div>
       </div>
-
       <div class="flex flex-col gap-2">
         <span class="text-sm text-[var(--text-muted)]">{{ t('People. Search anyone who already has an account, or invite them once the group exists.') }}
         </span>
-
         <PersonPicker
           :candidates="addable"
           :label="t('Add someone to this group')"
           @pick="addPerson"
         />
-
         <ul
           v-if="chosen.length > 0"
           class="flex flex-wrap gap-2"
@@ -164,8 +149,6 @@ async function save(): Promise<void> {
           </li>
         </ul>
       </div>
-
-
       <button
         type="submit"
         class="btn btn-press btn-primary w-full"
@@ -174,7 +157,6 @@ async function save(): Promise<void> {
         {{ isSaving ? t('Creating') : t('Create group') }}
       </button>
     </form>
-
     <IconPicker
       v-model="iconName"
       :open="isPickingIcon"

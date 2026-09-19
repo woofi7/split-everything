@@ -13,15 +13,6 @@ using SplitEverything.Infrastructure.Sync;
 
 namespace SplitEverything.Infrastructure.Services;
 
-/// <summary>
-/// Replication endpoint for offline clients.
-///
-/// Push applies a queue of operations one at a time. Each is judged on its vector
-/// clock alone: newer wins, older is dropped as already-superseded, concurrent is
-/// recorded as a conflict and left for a human. Nothing is ever overwritten
-/// silently, and one bad operation never fails the batch - the rest of a device's
-/// queue still has to drain.
-/// </summary>
 public sealed class SyncService(
     AppDbContext db,
     ISyncWriter writer,
@@ -77,20 +68,12 @@ public sealed class SyncService(
 
                 if (outcome.Kind == OutcomeKind.Accepted)
                 {
-                    // After the save, so the row it describes exists to be read. Here
-                    // rather than in each handler, so every accepted operation is
-                    // logged once and a retry of one already applied is not logged at
-                    // all. The app writes everything through this path, so without it
-                    // the feed showed only the group and member events that go
-                    // through the REST services.
                     await LogActivityAsync(userId, operation, ct);
                     await db.SaveChangesAsync(ct);
                 }
             }
             catch (AppException ex)
             {
-                // A single unacceptable operation is reported and skipped; failing the
-                // batch would strand every later change in the device's queue.
                 db.ChangeTracker.Clear();
                 rejected.Add(new SyncRejectedDto(operation.OperationId, operation.EntityId, ex.Message, ex.Code));
             }
@@ -117,14 +100,6 @@ public sealed class SyncService(
     {
         var membership = await MembershipAsync(userId, ct);
 
-        // Every group the caller belongs to, from the caller's cursor where it has
-        // one and from the beginning where it does not.
-        //
-        // Membership decides which groups, never the cursors: a client sends a
-        // cursor per group it has heard of, so honouring only those meant a group
-        // it had not heard of yet was never sent. A group created since the last
-        // pull, or one the caller was just added to, arrived through the group
-        // endpoint and then sat there with no expenses in it, for good.
         var requested = membership.ToDictionary(
             id => id,
             id => request.GroupCursors.TryGetValue(id, out var cursor) ? cursor : 0L);
@@ -145,8 +120,6 @@ public sealed class SyncService(
                 continue;
             }
 
-            // A device behind a compaction cutoff cannot replay trimmed entries, so
-            // it bootstraps from the snapshot that replaced them instead.
             var snapshot = await db.SyncSnapshots
                 .Where(s => s.GroupId == groupId && s.UpToServerSeq > cursor && s.TrimmedAt != null)
                 .OrderByDescending(s => s.UpToServerSeq)
@@ -230,8 +203,6 @@ public sealed class SyncService(
                 ? request.MergedPayloadJson!
                 : conflict.IncomingPayloadJson;
 
-            // Force the write through: the human has now ordered these revisions, so
-            // the clock comparison that produced the conflict no longer applies.
             var operation = new SyncOperationDto(
                 Guid.NewGuid(), conflict.EntityType, conflict.EntityId, SyncOperation.Update,
                 conflict.GroupId, payload,
@@ -276,16 +247,12 @@ public sealed class SyncService(
         }
 
         var highest = groupCursors.Count == 0 ? 0L : groupCursors.Values.Max();
-        // Monotonic: a retried or out-of-order ack must never rewind the cursor and
-        // make the device replay history it already applied.
         if (highest > device.LastAckedServerSeq) device.LastAckedServerSeq = highest;
         device.LastSyncedAt = clock.UtcNow;
 
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
     }
-
-    // ---- application of a single operation --------------------------------
 
     private enum OutcomeKind { Accepted, AlreadyApplied, Conflict, Rejected }
 
@@ -373,9 +340,6 @@ public sealed class SyncService(
         if (Math.Abs(splitsTotal - payload.Amount.Value) > CurrencyPrecision.MinorUnit(currency))
             return Outcome.Reject("The splits do not add up to the expense total.", "InvalidPayload");
 
-        // Several payers, from a client that supports them. Checked as strictly as
-        // the splits are: an expense whose contributions do not add up to it would
-        // put every balance in the group out by the difference.
         if (payload.Payers.Count > 0)
         {
             if (payload.Payers.Any(y => !members.Contains(y.MemberId)))
@@ -439,13 +403,6 @@ public sealed class SyncService(
         return new Outcome(OutcomeKind.Accepted, seq, stored.Clock);
     }
 
-    /// <summary>
-    /// Who paid, from an expense that arrived from a device.
-    ///
-    /// A payload with no payers is not an expense nobody paid for: it is one from a
-    /// client that only knows about a single payer, so the member it names becomes
-    /// the only contribution.
-    /// </summary>
     private void ApplyPayers(Expense expense, SyncPayloads.ExpensePayload payload)
     {
         var incoming = payload.Payers.Count > 0
@@ -495,7 +452,6 @@ public sealed class SyncService(
             });
         }
 
-        // The name on the expense is the largest contribution, wherever it came from.
         var live = expense.Payers.Where(y => !y.IsDeleted).ToList();
         if (live.Count > 0)
         {
@@ -711,13 +667,6 @@ public sealed class SyncService(
             operation.PayloadJson, operation.VectorClock, fields, conflict.DetectedAt));
     }
 
-    /// <summary>
-    /// Records what an accepted operation did, for the activity feed.
-    ///
-    /// Reads the entity back rather than the payload, so the summary describes what
-    /// was actually stored. A row we cannot describe is skipped: the feed is a
-    /// convenience, and failing a sync push over it would cost someone their work.
-    /// </summary>
     private async Task LogActivityAsync(Guid userId, SyncOperationDto operation, CancellationToken ct)
     {
         var actor = await db.GroupMembers
@@ -824,10 +773,6 @@ public sealed class SyncService(
             .Where(g => groupIds.Contains(g.Id))
             .ToDictionaryAsync(g => g.Id, g => g.SequenceCounter, ct);
 
-    /// <summary>
-    /// EF cannot project the jsonb clock columns through the DTO's dictionaries, so
-    /// the list query returns placeholders and this fills them in.
-    /// </summary>
     private SyncConflictDto Rehydrate(SyncConflictDto dto)
     {
         var row = db.SyncConflicts.AsNoTracking().First(c => c.Id == dto.ConflictId);

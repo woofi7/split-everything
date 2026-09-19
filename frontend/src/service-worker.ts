@@ -5,17 +5,9 @@ import { createHandlerBoundToURL } from 'workbox-precaching'
 
 declare let self: ServiceWorkerGlobalScope
 
-/**
- * The PWA shell and Web Push.
- *
- * The API is deliberately never cached: reads come from IndexedDB and writes go
- * through the outbox, so a stale cached response would only ever contradict the
- * local replica. This worker caches the app shell and handles notifications.
- */
 cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
 
-// Any navigation falls back to the shell, so a deep link works offline.
 registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), {
   denylist: [/^\/api\//, /^\/hubs\//],
 }))
@@ -41,8 +33,6 @@ self.addEventListener('push', (event) => {
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       data: { url: payload.url ?? '/' },
-      // Replaces rather than stacks, so five expenses do not mean five buzzes.
-      // Cast because renotify ships in browsers but not in the DOM types yet.
       ...(payload.tag ? { renotify: true } : {}),
     } as NotificationOptions),
   )
@@ -56,7 +46,6 @@ self.addEventListener('notificationclick', (event) => {
     (async () => {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
 
-      // Focus an open tab rather than opening a second copy of the app.
       for (const client of clients) {
         if ('focus' in client) {
           await client.focus()

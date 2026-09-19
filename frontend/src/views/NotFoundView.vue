@@ -3,7 +3,6 @@ import { t } from '@/i18n'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 </script>
-
 <template>
   <AppShell :title="t('Not found')" :back-to="{ name: 'dashboard' }" :back-label="t('Dashboard')">
     <div class="py-12 text-center">

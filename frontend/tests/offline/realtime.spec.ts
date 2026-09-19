@@ -109,8 +109,6 @@ describe('realtime connection', () => {
 
     reconnectedHandler?.()
 
-    // A reconnect is exactly when the delta pull is due: the cursor, not the
-    // connection, is what guarantees nothing was missed.
     expect(onChanged).toHaveBeenCalled()
   })
 

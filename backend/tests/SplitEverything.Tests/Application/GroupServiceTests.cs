@@ -194,9 +194,6 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         await Groups.UpdateAsync(user.Id, group.Id,
             new UpdateGroupRequest(null, null, "house", null, null));
 
-        // Null means "not supplied" in a patch, so it cannot also mean "clear".
-        // An empty string is the explicit clear, or the remove button in the icon
-        // picker would silently do nothing.
         var cleared = await Groups.UpdateAsync(user.Id, group.Id,
             new UpdateGroupRequest(null, null, string.Empty, null, null));
 
@@ -217,14 +214,6 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         renamed.IconName.ShouldBe("house");
     }
 
-    /*
-     * A group's colour.
-     *
-     * Set on the group rather than on a person, so everyone in it sees the same
-     * one, and worn by the whole app while that group is the one being looked at.
-     * Which is why null has to keep meaning "none": a group that has never been
-     * given a colour must not overrule the colour somebody chose for their account.
-     */
     [Fact]
     public async Task A_group_starts_with_no_colour_of_its_own()
     {
@@ -267,8 +256,6 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var user = await TestData.SeedUserAsync(Db);
         var group = await Groups.CreateAsync(user.Id, Request());
 
-        // Or two spellings of the same colour would be two colours, and the client
-        // would recognise only one of them.
         var updated = await Groups.UpdateAsync(user.Id, group.Id,
             new UpdateGroupRequest(null, null, null, null, null, ThemeName: " TEAL "));
 
@@ -286,7 +273,6 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var cleared = await Groups.UpdateAsync(user.Id, group.Id,
             new UpdateGroupRequest(null, null, null, null, null, ThemeName: string.Empty));
 
-        // Back to each person's own account colour, which is what none means.
         cleared.ThemeName.ShouldBeNull();
     }
 
@@ -310,8 +296,6 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var user = await TestData.SeedUserAsync(Db);
         var group = await Groups.CreateAsync(user.Id, Request());
 
-        // The client turns the name into shades, so a name it does not know would
-        // leave the group with no colour at all and nothing to say why.
         await Should.ThrowAsync<ValidationException>(() => Groups.UpdateAsync(
             user.Id, group.Id,
             new UpdateGroupRequest(null, null, null, null, null, ThemeName: "chartreuse")));
@@ -327,8 +311,6 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
 
         var listed = await Groups.ListAsync(user.Id);
 
-        // The list is what every device reads on launch, and the colour has to be
-        // on it or the app opens in the wrong one and corrects itself later.
         listed.ShouldHaveSingleItem().ThemeName.ShouldBe("rose");
     }
 
@@ -351,7 +333,6 @@ public class GroupServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         var user = await TestData.SeedUserAsync(Db);
         var group = await Groups.CreateAsync(user.Id, Request());
 
-        // Truncating would store a name that resolves to no icon at all.
         await Should.ThrowAsync<ValidationException>(() => Groups.UpdateAsync(
             user.Id, group.Id, new UpdateGroupRequest(null, null, new string('a', 49), null, null)));
     }

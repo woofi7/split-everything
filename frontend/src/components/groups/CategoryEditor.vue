@@ -7,22 +7,8 @@ import { resolveIcon } from '@/domain/icons'
 import type { Category } from '@/domain/categories'
 import type { CategoryDraft } from '@/stores/groups'
 
-/**
- * The list of things an expense can be filed under, edited.
- *
- * One component for both lists there are: a group's own, and the server's, which
- * every group starts from. They are the same list with a different owner, and two
- * editors would be two places to fix the next thing wrong with it.
- *
- * The keywords are the point. A category nobody has to choose is worth having; a
- * dropdown on every expense form is the thing that got categories deleted from
- * this app in the first place, so the words that fill it in sit right beside the
- * name rather than behind anything.
- */
-
 const props = defineProps<{
   categories: Category[]
-  /** Said above the list, because who this list belongs to is the whole question. */
   description: string
   isSaving?: boolean
 }>()
@@ -41,7 +27,6 @@ const MOST = 30
 
 const rows = ref<Row[]>([])
 
-/** Reads the list into the form, which is also how Cancel works. */
 function readFromProps(): void {
   rows.value = props.categories.map((category) => ({
     key: category.key,
@@ -55,7 +40,6 @@ function readFromProps(): void {
 watch(() => props.categories, readFromProps, { immediate: true, deep: true })
 
 function add(): void {
-  // No key: this one does not exist yet, and the server makes one from the name.
   rows.value = [...rows.value, { name: '', iconName: 'tag', colorHex: '#64748b', keywords: '' }]
 }
 
@@ -63,7 +47,6 @@ function remove(index: number): void {
   rows.value = rows.value.filter((_, at) => at !== index)
 }
 
-/** Up and down rather than a drag: the order is the order they are shown in. */
 function move(index: number, by: number): void {
   const next = index + by
   if (next < 0 || next >= rows.value.length) return
@@ -109,11 +92,9 @@ function revert(): void {
   emit('revert')
 }
 </script>
-
 <template>
   <div>
     <p class="mb-3 text-xs text-[var(--text-muted)]">{{ description }}</p>
-
     <ul class="flex flex-col gap-3">
       <li
         v-for="(row, index) in rows"
@@ -130,7 +111,6 @@ function revert(): void {
           >
             <FontAwesomeIcon :icon="resolveIcon(row.iconName).definition" class="h-3.5 w-3.5" />
           </span>
-
           <input
             v-model="row.name"
             type="text"
@@ -140,12 +120,6 @@ function revert(): void {
             class="tap-target min-w-0 flex-1 rounded-lg border bg-[var(--surface-raised)] px-3 text-sm"
             style="border-color: var(--border)"
           />
-
-          <!--
-            Drawn rather than typed. A text arrow at the size of the label beside
-            it is a mark on the screen, not a control: these are pressed with a
-            thumb, so they are icons in a square somebody can see the edge of.
-          -->
           <button
             type="button"
             data-testid="category-up"
@@ -180,7 +154,6 @@ function revert(): void {
             <FontAwesomeIcon :icon="faXmark" class="h-4 w-4" />
           </button>
         </div>
-
         <div class="mt-2 flex items-center gap-2">
           <input
             v-model="row.iconName"
@@ -200,11 +173,6 @@ function revert(): void {
             :aria-label="t('Colour')"
           />
         </div>
-
-        <!--
-          The words that file an expense here on their own. Longest wins, so
-          "uber eats" beats "uber" and a takeaway is not filed as a taxi.
-        -->
         <label class="mt-2 flex flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Words that file an expense here') }}</span>
           <input
@@ -218,7 +186,6 @@ function revert(): void {
         </label>
       </li>
     </ul>
-
     <button
       v-if="rows.length < MOST"
       type="button"
@@ -228,7 +195,6 @@ function revert(): void {
       @click="add"
     >{{ t('Add a category') }}
     </button>
-
     <div v-if="isDirty" class="mt-3 flex gap-2">
       <button
         type="button"

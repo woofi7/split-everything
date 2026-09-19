@@ -9,11 +9,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// Merge, split, transfer and compaction: the operations that move history between
-/// logs. The invariant under test throughout is that no expense, revision, comment
-/// or log entry is ever recreated - it moves, keeping its causal identity.
-/// </summary>
 public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private GroupLifecycleService Lifecycle => new(Db, Writer, Activity, Clock);
@@ -33,8 +28,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         => Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, description, amount, "CAD", TestData.Jan1, SplitType.Equal,
             participants.Select(p => new SplitInputDto(p, null)).ToList(), null, null, null, null, null, null));
-
-    // ---- merge -----------------------------------------------------------
 
     [Fact]
     public async Task Merging_moves_the_source_expenses_into_the_target()
@@ -83,7 +76,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
             source.Id, target.Id,
             new Dictionary<Guid, Guid> { [sourceMe] = targetMe, [sourceBob] = targetBob }, null));
 
-        // I fronted 100 across both groups and owe half of it, so I am up 50.
         var balance = await Settlements.GetGroupBalanceAsync(user.Id, target.Id);
         balance.Balances.First(b => b.MemberId == targetMe).Net.ShouldBe(50m);
         balance.Balances.Sum(b => b.Net).ShouldBe(0m);
@@ -119,8 +111,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
             source.Id, target.Id,
             new Dictionary<Guid, Guid> { [sourceMe] = targetMe, [sourceBob] = targetBob }, null));
 
-        // Keeping the lineage is what makes a later split able to partition the
-        // merged log again instead of guessing which side an entry came from.
         (await NewContext().SyncLog.CountAsync(e =>
             e.GroupId == target.Id && e.LineageId == sourceLineage)).ShouldBeGreaterThan(0);
     }
@@ -161,8 +151,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
             source.Id, target.Id,
             new Dictionary<Guid, Guid> { [sourceMe] = targetMe, [sourceBob] = targetBob }, null));
 
-        // A device following the target pulls "everything after N", so moved history
-        // has to land above its cursor or it would never be delivered.
         var movedSequences = await NewContext().SyncLog
             .Where(e => e.GroupId == target.Id && e.LineageId == sourceLineage)
             .Select(e => e.ServerSeq)
@@ -299,8 +287,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         var target = await Groups.CreateAsync(user.Id, new CreateGroupRequest("CAD group", "CAD", null, null, null, null));
         var source = await Groups.CreateAsync(user.Id, new CreateGroupRequest("EUR group", "EUR", null, null, null, null));
 
-        // Merging across currencies would silently reinterpret every stored base
-        // amount, so it is refused rather than guessed at.
         await Should.ThrowAsync<ValidationException>(() => Lifecycle.MergeAsync(
             user.Id, new MergeGroupsRequest(source.Id, target.Id, null, null)));
     }
@@ -321,8 +307,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         result.MovedSettlements.ShouldBe(1);
         (await NewContext().Settlements.SingleAsync()).GroupId.ShouldBe(target.Id);
     }
-
-    // ---- split -----------------------------------------------------------
 
     [Fact]
     public async Task Splitting_moves_the_chosen_expenses_into_a_new_group()
@@ -434,8 +418,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         var result = await Lifecycle.SplitAsync(user.Id, new SplitGroupRequest(
             group.Id, "Trip", [moves.Id], null, null, null));
 
-        // Without this, a device that already knew the expense would treat every
-        // moved revision as unseen and re-conflict with itself.
         (await NewContext().Groups.FirstAsync(g => g.Id == result.NewGroupId))
             .Clock.Dominates(expenseClock).ShouldBeTrue();
     }
@@ -527,8 +509,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         var balance = await Settlements.GetGroupBalanceAsync(user.Id, split.NewGroupId);
         balance.Balances.Sum(b => b.Net).ShouldBe(0m);
     }
-
-    // ---- transfer --------------------------------------------------------
 
     [Fact]
     public async Task Transferring_moves_an_expense_between_groups()
@@ -635,10 +615,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         var (from, fromMe, fromBob) = await MakeGroupAsync(user.Id, "Wrong group", "Bob");
         var (to, toMe, toBob) = await MakeGroupAsync(user.Id, "Right group", "Bob");
 
-        // Bob put in twenty of it and is not one of the people it is split
-        // between: two cards at the till, for something only one of them had. He
-        // was left out of the people the move looked up, and rewriting his row
-        // then failed with nobody to rewrite it to.
         var expense = await Expenses.CreateAsync(user.Id, new CreateExpenseRequest(
             from.Id, fromMe, "Two cards", 60m, "CAD", TestData.Jan1, SplitType.Equal,
             [new SplitInputDto(fromMe, null)], null, null, null, null, null, null,
@@ -653,8 +629,6 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
 
         payers.Count.ShouldBe(2);
         payers.Select(p => p.MemberId).ShouldBe([toMe, toBob], ignoreOrder: true);
-        // And the rows point at the group they are now in, or every balance on
-        // either side of the move would be wrong.
         payers.ShouldAllBe(p => p.GroupId == to.Id);
     }
 
@@ -690,12 +664,9 @@ public class GroupLifecycleServiceTests(PostgresFixture fixture) : ServiceTestBa
         var to = await Groups.CreateAsync(user.Id, new CreateGroupRequest("Right group", "CAD", null, null, null, null));
         var expense = await AddExpenseAsync(user.Id, from.Id, fromZoe, 40m, "Zoe paid", fromMe, fromZoe);
 
-        // Guessing would silently reassign a debt to the wrong person.
         await Should.ThrowAsync<ValidationException>(() => Lifecycle.TransferExpenseAsync(
             user.Id, new TransferExpenseRequest(expense.Id, to.Id, null)));
     }
-
-    // ---- compaction ------------------------------------------------------
 
     [Fact]
     public async Task Compaction_collapses_settled_history_into_a_snapshot()

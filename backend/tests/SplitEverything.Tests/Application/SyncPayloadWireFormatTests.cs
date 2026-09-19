@@ -10,14 +10,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// The sync payload wire format, pinned from the client's side.
-///
-/// These exist because the rest of the sync suite builds payloads the way the
-/// server writes them, which cannot catch a shape only the client sends. The
-/// browser holds a split type as its name, so a name has to be readable here or
-/// every expense a real client pushes is rejected as unparseable.
-/// </summary>
 public class SyncPayloadWireFormatTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity);
@@ -85,8 +77,6 @@ public class SyncPayloadWireFormatTests(PostgresFixture fixture) : ServiceTestBa
     [Fact]
     public async Task A_split_type_sent_as_its_number_is_still_accepted()
     {
-        // Payloads already in the sync log were written numerically, so a client
-        // replaying history must keep working.
         var (userId, group, alice) = await SetupAsync();
 
         var result = await PushExpenseAsync(userId, group.Id, alice, (int)SplitType.Shares);
@@ -112,7 +102,6 @@ public class SyncPayloadWireFormatTests(PostgresFixture fixture) : ServiceTestBa
     [Fact]
     public void Every_split_type_name_the_client_can_hold_round_trips()
     {
-        // The browser's split type is a string union of exactly these names.
         foreach (var value in Enum.GetValues<SplitType>())
         {
             var json = JsonSerializer.Serialize(new { splitType = value.ToString() });

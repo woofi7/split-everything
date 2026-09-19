@@ -12,18 +12,8 @@ vi.mock('vue-router', () => ({
   RouterView: { template: '<div />' },
 }))
 
-// App.vue reads the navigation state from the router module, which would pull in
-// the real vue-router behind the mock above.
 vi.mock('@/router', () => ({ isNavigating: { value: false }, router: {} }))
 
-/**
- * What the app does when nobody is signed in.
- *
- * The window listeners fire whether or not there is a session, and coming back to
- * a sign-in page is one of the moments they fire on. Every request they made there
- * was refused, which put an unauthorized pull and a forbidden group load in the
- * console on a page whose whole job is to ask who you are.
- */
 describe('syncing around the sign-in page', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
@@ -70,7 +60,6 @@ describe('syncing around the sign-in page', () => {
     window.dispatchEvent(new Event('online'))
     await settle()
 
-    // The guard has to be about the session, not about switching sync off.
     expect(sync.pull).toHaveBeenCalled()
   })
 })

@@ -1,18 +1,8 @@
 <script setup lang="ts">
 import { MEMBER_COLORS } from '@/domain/memberColors'
 
-/**
- * The palette, as a row of swatches.
- *
- * The same twelve everywhere, because a colour a group cannot store is not worth
- * offering: the server keeps the list and refuses anything else. Named rather
- * than shown as bare squares, so it works without colour vision and reads out
- * loud sensibly.
- */
 const props = defineProps<{
-  /** The one currently chosen, if any. */
   value?: string | null
-  /** Which colours are already spoken for, to be shown as such. */
   taken?: readonly string[]
   disabled?: boolean
   label?: string
@@ -42,11 +32,9 @@ const isTaken = (colour: string) =>
   !isChosen(colour) &&
   (props.taken ?? []).some((other) => other?.toLowerCase() === colour.toLowerCase())
 
-/** Said out loud, because a swatch on its own says nothing to a screen reader. */
 const describe = (colour: string) =>
   isTaken(colour) ? `${NAMES[colour] ?? colour}, already taken` : (NAMES[colour] ?? colour)
 </script>
-
 <template>
   <div class="flex flex-wrap gap-2" role="group" :aria-label="label ?? 'Colour'">
     <button
@@ -62,8 +50,6 @@ const describe = (colour: string) =>
       :class="isChosen(colour) ? 'ring-2 ring-offset-2' : ''"
       :style="{
         backgroundColor: colour,
-        // Dimmed rather than hidden: knowing who has which colour is the point of
-        // seeing the row, and a group is allowed to swap two people over.
         opacity: isTaken(colour) ? 0.35 : 1,
         '--tw-ring-color': 'var(--text)',
         '--tw-ring-offset-color': 'var(--surface-raised)',

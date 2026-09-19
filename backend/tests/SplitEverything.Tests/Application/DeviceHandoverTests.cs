@@ -10,17 +10,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// A device id belongs to one account, for good.
-///
-/// It keys every vector clock, so two accounts writing under one id would
-/// interleave their histories and manufacture conflicts out of nothing. The refusal
-/// is deliberate. What the client does about it is mint a new id, which makes a
-/// second account on one phone a new install rather than a stolen one.
-///
-/// The wording is asserted because the client keys its recovery off it: a 403 alone
-/// does not say the device is the problem.
-/// </summary>
 public class DeviceHandoverTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private static readonly AuthOptions Options = new()
@@ -68,8 +57,6 @@ public class DeviceHandoverTests(PostgresFixture fixture) : ServiceTestBase(fixt
         var refusal = await Should.ThrowAsync<ForbiddenException>(() =>
             Auth.SignInAsDeveloperAsync(new DevelopmentSignInRequest("bob@example.com", "Bob", "phone-1")));
 
-        // The client matches on this to know it should mint a new device id rather
-        // than telling someone their sign-in failed.
         refusal.Message.ShouldContain("registered to another account");
     }
 
@@ -78,7 +65,6 @@ public class DeviceHandoverTests(PostgresFixture fixture) : ServiceTestBase(fixt
     {
         await Auth.SignInAsDeveloperAsync(new DevelopmentSignInRequest("alice@example.com", "Alice", "phone-1"));
 
-        // What the client does after the refusal above.
         var result = await Auth.SignInAsDeveloperAsync(
             new DevelopmentSignInRequest("bob@example.com", "Bob", "phone-1-rotated"));
 
@@ -91,8 +77,6 @@ public class DeviceHandoverTests(PostgresFixture fixture) : ServiceTestBase(fixt
         await Auth.SignInAsDeveloperAsync(new DevelopmentSignInRequest("alice@example.com", "Alice", "phone-1"));
         await Auth.SignInAsDeveloperAsync(new DevelopmentSignInRequest("bob@example.com", "Bob", "phone-1-rotated"));
 
-        // Rotating on the client abandons an id; it must not take the first
-        // account's history with it.
         var again = await Auth.SignInAsDeveloperAsync(
             new DevelopmentSignInRequest("alice@example.com", "Alice", "phone-1"));
 

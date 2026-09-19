@@ -160,7 +160,6 @@ public class VectorClockTests
     [Fact]
     public void Two_devices_editing_offline_then_syncing_converge_on_a_joined_clock()
     {
-        // Both start from the same known state, then each writes while offline.
         var shared = Clock(("phone", 4), ("laptop", 2));
         var phone = shared.Tick("phone");
         var laptop = shared.Tick("laptop");

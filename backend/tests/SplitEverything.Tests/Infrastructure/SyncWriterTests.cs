@@ -8,11 +8,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Infrastructure;
 
-/// <summary>
-/// Every write in the app goes through this: it ticks the clock, takes a sequence
-/// number and appends the log entry that peers will replay. Anything it forgets to
-/// record is a change an offline device never learns about.
-/// </summary>
 public class SyncWriterTests(PostgresFixture fixture) : DatabaseTestBase(fixture)
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 31, 10, 0, 0, TimeSpan.Zero);
@@ -162,8 +157,6 @@ public class SyncWriterTests(PostgresFixture fixture) : DatabaseTestBase(fixture
             TestData.DeviceA, null, new { }, lineageId: originalLineage);
         await Db.SaveChangesAsync();
 
-        // Keeping the origin lineage is what lets a later split pull the moved
-        // history back out again without guessing.
         (await NewContext().SyncLog.SingleAsync()).LineageId.ShouldBe(originalLineage);
     }
 
@@ -232,8 +225,6 @@ public class SyncWriterTests(PostgresFixture fixture) : DatabaseTestBase(fixture
         Db.ChangeTracker.Clear();
         var tracked = await Db.Groups.FirstAsync(g => g.Id == group.Id);
 
-        // Otherwise the archive would be a one-way door: the unarchive write itself
-        // targets the archived group.
         var seq = await CreateWriter().RecordAsync(
             tracked, SyncEntityType.Group, group.Id, SyncOperation.Update,
             TestData.DeviceA, null, new { }, allowArchived: true);

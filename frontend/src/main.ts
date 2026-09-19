@@ -36,40 +36,21 @@ async function bootstrap(): Promise<void> {
   const auth = useAuthStore()
   auth.restore()
 
-  // Before the first render and before anything can fail: the panels startup puts
-  // up are translated too, and the account's language comes back with its session.
   setLocale(auth.user?.locale)
 
   const api = new ApiClient({
     baseUrl: apiBaseUrl(),
     getAccessToken: () => auth.accessToken,
-    // Read live rather than captured: it is resolved from the replica below, and
-    // signing in as a different account mints a new one.
     getDeviceId: () => deviceIdNow(),
     refreshAccessToken: () => auth.refresh(),
-    // Not a sign-out: nobody asked for this. Clearing the session and keeping
-    // the account means the sign-in page can put the device straight back in,
-    // rather than asking someone who has not gone anywhere to identify themselves.
     onUnauthorized: () => {
       auth.sessionExpired()
       void router.push({ name: 'sign-in' })
     },
   })
 
-  // Views resolve the client through the provider rather than building their own.
   setApiClient(api)
 
-  /*
-   * Where a failure in here goes.
-   *
-   * On a phone there is no console to read, so a broken screen said nothing at all
-   * and finding the cause meant a cable and a reproduction. Now it says what broke,
-   * on which screen, in which build, and it arrives in the server's log next to the
-   * requests that led to it.
-   *
-   * Wired here because it needs the client, and installed before the app is
-   * mounted, since the first render is one of the places this happens.
-   */
   installErrorReporting({
     send: (report) => api.post('/diagnostics/client-error', report),
     route: () => String(router.currentRoute.value.name ?? router.currentRoute.value.path),
@@ -80,11 +61,6 @@ async function bootstrap(): Promise<void> {
   const stopWatchingErrors = watchForUncaughtErrors()
   void stopWatchingErrors
 
-  /*
-   * A render error used to leave a blank screen and a console message nobody could
-   * see. Reported, and then shown: a screen that cannot render is not something to
-   * carry on quietly from, and the same panel startup uses says so.
-   */
   app.config.errorHandler = (error, _instance, info) => {
     console.error('Vue error', error, info)
     reportClientError(describeVueError(error, info))
@@ -93,24 +69,12 @@ async function bootstrap(): Promise<void> {
   auth.attachApi(api)
   const groupsStore = useGroupsStore()
   groupsStore.attachApi(api)
-  // Restored before any screen reads it, so the app opens on the group it was left
-  // on rather than flicking to a different one.
   groupsStore.restoreMainGroup()
 
   const expenses = useExpensesStore()
   expenses.attachSync(new SyncEngine(new HttpSyncApi(api)))
-  // For moving an expense between groups, which is the one write there that the
-  // outbox cannot carry.
   expenses.attachApi(api)
 
-  // A replica another tab is holding at an older schema version is a wait with no
-  // end, so it is raced rather than waited out, and the app stops there: every
-  // screen reads from that replica, so none of them would work.
-  //
-  // Listened for throughout, not only during startup. The browser can report this
-  // after the app is already up, and an app running over a replica that will never
-  // answer is every screen stuck on its own spinner: a stopped clock rather than
-  // an error, which is exactly what it looked like.
   const blocked = new Promise<'blocked'>((resolve) => {
     onDatabaseBlocked(() => {
       resolve('blocked')
@@ -119,7 +83,6 @@ async function bootstrap(): Promise<void> {
   })
 
   const started = prepare(auth, expenses).catch((error: unknown) => {
-    // The app is still worth showing: each screen loads its own data.
     console.error('Startup work failed; showing the app anyway.', error)
     reportClientError({
       kind: 'startup',
@@ -136,8 +99,6 @@ async function bootstrap(): Promise<void> {
   }
 
   if (outcome === 'timed-out') {
-    // Slow, not broken. The app comes up and each screen loads its own data, so
-    // this costs a moment of emptier first render rather than correctness.
     console.warn('Startup work is still running; showing the app anyway.')
   }
 
@@ -149,17 +110,10 @@ async function bootstrap(): Promise<void> {
   app.use(router)
   app.mount('#app')
 
-  // Nothing above proves the replica is answering: startup has a budget, so it
-  // reaches here either way. Asked once the app is up, because a screen that
-  // spins forever needs a reason on it and there is no other way to notice.
   void watchReplica()
 
-  // And the code for every other screen, so going offline does not leave the app
-  // unable to open any of them.
   void warmRoutes()
 
-  // The browser's offer to install this fires once, early, and long before anybody
-  // opens the profile where the offer belongs.
   watchForInstallPrompt()
 }
 
@@ -169,33 +123,20 @@ async function watchReplica(): Promise<void> {
   showStartupProblem(t(WEDGED_MESSAGE))
 }
 
-/**
- * Everything worth having before the first render, and nothing that is required
- * for it. Bounded by the caller, and its failures are the caller's to shrug off:
- * a screen that loads its own data is better than no screen.
- */
 async function prepare(
   auth: ReturnType<typeof useAuthStore>,
   expenses: ReturnType<typeof useExpensesStore>,
 ): Promise<void> {
-  // Keys every vector clock, so it is resolved before anything can write.
   await getDeviceId()
 
-  // Before the router runs, so the guard sees the session rather than bouncing
-  // someone to sign-in while a good session sits in the cookie the app cannot
-  // read.
   await auth.resumeSession()
 
   await expenses.hydrate()
 
-  // Repairs anything a previous session stranded: a change the server refused and
-  // nothing retried, or a row left marked unsent with nothing queued for it. Both
-  // read as "waiting to sync" forever otherwise.
   await expenses.reconcile()
 }
 
 void bootstrap().catch((error: unknown) => {
-  // Whatever this was, the alternative to saying so is a white screen.
   console.error('Startup failed.', error)
   showStartupProblem(
     error instanceof Error && error.message

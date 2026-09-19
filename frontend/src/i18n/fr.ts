@@ -1,16 +1,4 @@
-/**
- * The French strings, keyed by the English ones.
- *
- * Quebec French, because that is where this is used: "courriel" rather than
- * "e-mail", "virement Interac" for an e-transfer, and the app's own vocabulary kept
- * consistent - a group is a "groupe", settling up is "regler".
- *
- * Accented, unlike the rest of the project: French without its accents reads as
- * broken French. The plain-ASCII habit is about keeping typographic ornaments out
- * of the source - em dashes, arrows, curly quotes - not letters out of a language.
- */
 export const fr: Record<string, string> = {
-  // Conflicts
   'Edited on two devices at once': 'Modifiée sur deux appareils à la fois',
   'Both versions were kept. Pick the one to keep - nothing was overwritten.':
     "Les deux versions ont été conservées. Choisissez celle à garder : rien n'a été écrasé.",
@@ -31,20 +19,17 @@ export const fr: Record<string, string> = {
   Cancel: 'Annuler',
   'Needs attention': 'À vérifier',
 
-  // Invitations
   'This invite is no longer valid. Ask for a new link.':
     "Cette invitation n'est plus valide. Demandez un nouveau lien.",
   'Checking that invite': "Vérification de l'invitation",
   'Join a group': 'Rejoindre un groupe',
 
-  // Activity
   View: 'Voir',
   'Loading activity': "Chargement de l'activité",
   'The activity feed needs a connection. Your groups and expenses still work offline.':
     "Le fil d'activité exige une connexion. Vos groupes et vos dépenses fonctionnent encore hors ligne.",
   'Nothing has happened yet.': "Rien ne s'est encore passé.",
 
-  // Signing in
   'Shared expenses, settled properly': 'Des dépenses partagées, réglées comme il faut',
   'Sign in with Google to see your groups. There is no password to remember.':
     'Connectez-vous avec Google pour voir vos groupes. Aucun mot de passe à retenir.',
@@ -58,12 +43,10 @@ export const fr: Record<string, string> = {
   'Split Everything': 'Split Everything',
   Alice: 'Alice',
 
-  // Not found
   'That page does not exist': "Cette page n'existe pas",
   'Back to your groups': 'Retour à vos groupes',
   'Not found': 'Introuvable',
 
-  // Settling up
   'Suggested transfers': 'Virements suggérés',
   Use: 'Utiliser',
   'Who paid': 'Qui a payé',
@@ -107,7 +90,6 @@ export const fr: Record<string, string> = {
   '{amount} less than {month}': '{amount} de moins qu\'en {month}',
   '{amount} above the usual month': '{amount} au-dessus d\'un mois habituel',
   '{amount} below the usual month': '{amount} en dessous d\'un mois habituel',
-  // Recording a payment: money handed over rather than money spent.
   'What to record': 'Quoi inscrire',
   'Expense': 'Dépense',
   'Payment': 'Paiement',
@@ -124,7 +106,6 @@ export const fr: Record<string, string> = {
   'Say who paid whom.': 'Indiquez qui a payé qui.',
   'A payment needs two different people.': 'Un paiement exige deux personnes différentes.',
   'Could not record that payment.': "Impossible d'inscrire ce paiement.",
-  // The profile overview, and the same figures added up on the stats screen.
   'Settings': 'Réglages',
   'Just you': 'Vous seul',
   'Across your groups': 'Tous groupes confondus',
@@ -136,7 +117,6 @@ export const fr: Record<string, string> = {
   '{expenses} expenses across {groups} groups, {amount} in all.':
     '{expenses} dépenses dans {groups} groupes, {amount} en tout.',
 
-  // Administering the server.
   'Server groups': 'Groupes du serveur',
   'Every group on this server': 'Tous les groupes de ce serveur',
   'Read any group, and delete an archived one for good.':
@@ -153,8 +133,6 @@ export const fr: Record<string, string> = {
   'No groups on this server.': 'Aucun groupe sur ce serveur.',
   'Could not read the groups.': 'Impossible de lire les groupes.',
   'Could not delete that group.': 'Impossible de supprimer ce groupe.',
-  // Said in the toast at the top of the screen, rather than in a line of red text
-  // somewhere down the page.
   'Dismiss': 'Fermer',
   'excluding {names}': 'hors {names}',
   '{going} was merged into {staying}.': '{going} a été fusionné dans {staying}.',
@@ -164,7 +142,6 @@ export const fr: Record<string, string> = {
   'Choose the group to import into.': 'Choisissez le groupe de destination.',
   'No transactions could be read from that file. Bank layouts vary a lot; try the CSV export instead.':
     "Aucune transaction n'a pu être lue dans ce fichier. Les formats bancaires varient beaucoup ; essayez plutôt l'export CSV.",
-  // What an expense was for.
   'Categories': 'Catégories',
   'Category': 'Catégorie',
   'Not filed': 'Non classée',
@@ -192,7 +169,6 @@ export const fr: Record<string, string> = {
     "Chaque groupe part de cette liste. Un groupe qui a modifié la sienne la conserve, et rien d'ici ne l'atteint.",
   'Could not read the categories.': 'Impossible de lire les catégories.',
   'Could not save those categories.': "Impossible d'enregistrer ces catégories.",
-  // Filing a backlog of expenses a handful at a time.
   'File expenses': 'Classer les dépenses',
   'File existing expenses': 'Classer les dépenses existantes',
   'Tick the ones that belong together and say where they go. Nothing about the money changes: a category is a label, so balances and what everybody owes stay exactly as they are.':
@@ -224,7 +200,6 @@ export const fr: Record<string, string> = {
   'Settle up': 'Régler',
   Etransfer: 'Virement Interac',
 
-  // Import
   'A bank or credit card statement': 'Un relevé bancaire ou de carte de crédit',
   'The file is read on this device and never uploaded. Only the transactions you confirm are sent, and everything else is discarded when you leave this screen.':
     'Le fichier est lu sur cet appareil et jamais téléversé. Seules les transactions que vous confirmez sont envoyées; tout le reste est jeté en quittant cet écran.',
@@ -251,7 +226,6 @@ export const fr: Record<string, string> = {
   'See the rows': 'Voir les lignes',
   'Group name': 'Nom du groupe',
 
-  // Profile
   'Display name': 'Nom affiché',
   'Your currency, used for totals across groups':
     'Votre devise, utilisée pour les totaux entre les groupes',
@@ -275,7 +249,6 @@ export const fr: Record<string, string> = {
   'Delete it': 'Supprimer',
   Profile: 'Profil',
 
-  // An expense
   Date: 'Date',
   Today: "Aujourd'hui",
   'What was it': "C'était quoi",
@@ -298,18 +271,15 @@ export const fr: Record<string, string> = {
   'That expense is not on this device yet.': "Cette dépense n'est pas encore sur cet appareil.",
   'Add a comment': 'Ajouter un commentaire',
 
-  // A group's colour
   'Group colour': 'Couleur du groupe',
   'Set for everyone in the group. The whole app wears it while you are on this group.':
     "Définie pour tout le monde dans le groupe. L'application entière la porte tant que vous êtes sur ce groupe.",
   'No colour of its own': 'Aucune couleur propre',
 
-  // Settlements a group already holds
   'Already settled': 'Déjà réglé',
   'Take this settlement back': 'Annuler ce règlement',
   'Could not take that settlement back.': "Impossible d'annuler ce règlement.",
 
-  // Cancelling debts that face each other across two groups
   'You also owe each other elsewhere': "Vous vous devez aussi de l'argent ailleurs",
   '{name} and you have balances facing both ways. Cancelling them out moves no money: it writes a settlement in each group so what is really outstanding sits in one place.':
     "{name} et vous avez des soldes qui se font face. Les annuler ne déplace aucun argent : un règlement est inscrit dans chaque groupe pour que ce qui reste dû se retrouve à un seul endroit.",
@@ -322,7 +292,6 @@ export const fr: Record<string, string> = {
   'Cancelled. You are square.': 'Annulé. Vous êtes quittes.',
   'Could not cancel those out.': "Impossible d'annuler ces soldes.",
 
-  // Moving an expense to another group
   'Move to another group': 'Déplacer vers un autre groupe',
   'It goes with its history, its comments and who paid. Anything typed above and not saved stays behind.':
     "Elle part avec son historique, ses commentaires et qui a payé. Ce qui est saisi ci-dessus sans être enregistré reste ici.",
@@ -340,7 +309,6 @@ export const fr: Record<string, string> = {
   'Could not read who is in that group. Moving an expense needs a connection.':
     "Impossible de lire qui fait partie de ce groupe. Déplacer une dépense exige une connexion.",
 
-  // A group
   Icon: 'Icône',
   'How a new expense is split': 'Comment une nouvelle dépense est partagée',
   'Only an owner or an admin can change this.':
@@ -381,7 +349,6 @@ export const fr: Record<string, string> = {
   'Choose the group the app is on': "Choisir le groupe affiché par l'application",
   'Search by name or email': 'Chercher par nom ou courriel',
 
-  // The dashboard
   Balances: 'Soldes',
   'Everyone is settled up.': 'Tout le monde est à jour.',
   Expenses: 'Dépenses',
@@ -396,7 +363,6 @@ export const fr: Record<string, string> = {
   'Saved on this device, waiting to sync':
     'Enregistrée sur cet appareil, en attente de synchronisation',
 
-  // Stats
   'All groups': 'Tous les groupes',
   Daily: 'Par jour',
   Weekly: 'Par semaine',
@@ -411,7 +377,6 @@ export const fr: Record<string, string> = {
     'Les statistiques exigent une connexion. Vos groupes et vos dépenses fonctionnent encore hors ligne.',
   'Nothing spent yet.': 'Rien de dépensé pour le moment.',
 
-  // Furniture
   Close: 'Fermer',
   'Search icons': 'Chercher une icône',
   'No icon matches that. Try a plainer word, like food or travel.':
@@ -426,7 +391,6 @@ export const fr: Record<string, string> = {
   'Ready to work offline.': 'Prêt à fonctionner hors ligne.',
   Main: 'Navigation principale',
   'Add an expense': 'Ajouter une dépense',
-  // Saying what went wrong
   '1 change needs attention': '1 modification à vérifier',
   '{count} changes need attention': '{count} modifications à vérifier',
   'All synced': 'Tout est synchronisé',
@@ -481,7 +445,6 @@ export const fr: Record<string, string> = {
   'That split does not add up.': 'Ce partage ne tombe pas juste.',
   'You are not a member of this group.': "Vous n'êtes pas membre de ce groupe.",
 
-  // How an expense is split
   Equally: 'Également',
   Percent: 'Pourcentage',
   Shares: 'Parts',
@@ -491,7 +454,6 @@ export const fr: Record<string, string> = {
   'Everyone taking part pays the same.': 'Chaque participant paie la même chose.',
   'Two shares against one pays twice as much.': 'Deux parts contre une paie deux fois plus.',
   'Has to add up to 100.': 'Doit totaliser 100.',
-  // Screens and actions
   Activity: 'Activité',
   Dashboard: 'Tableau de bord',
   Stats: 'Statistiques',
@@ -540,7 +502,6 @@ export const fr: Record<string, string> = {
   'Send now': 'Envoyer maintenant',
   Sending: 'Envoi',
   'Could not send those changes.': "Impossible d'envoyer ces modifications.",
-  // Notifications and installing
   'Notifications on this device': 'Notifications sur cet appareil',
   On: 'Activées',
   Off: 'Désactivées',

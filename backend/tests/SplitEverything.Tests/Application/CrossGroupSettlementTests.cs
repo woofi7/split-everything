@@ -9,15 +9,8 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// Two people who share more than one group can owe each other in both directions
-/// at once: a thousand one way in the flat, nine hundred the other way on a trip.
-/// Paying both in full is two transfers where none is needed, so the halves that
-/// face each other are cancelled and only the difference is left standing.
-/// </summary>
 public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
-    /// <summary>A group the two of them are both real members of.</summary>
     private async Task<(GroupDto Group, Guid Mine, Guid Theirs)> ShareGroupAsync(
         Guid userId, Guid otherId, string name, string currency = "CAD")
     {
@@ -30,17 +23,12 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
             loaded.Members.First(m => m.UserId == otherId).Id);
     }
 
-    /// <summary>`payer` covers an expense split evenly between the two of them.</summary>
     private Task SpendAsync(Guid userId, Guid groupId, Guid payer, Guid other, decimal amount, string currency = "CAD")
         => Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, "Shared", amount, currency, TestData.Jan1, SplitType.Equal,
             [new SplitInputDto(payer, null), new SplitInputDto(other, null)],
             null, null, null, null, null, null));
 
-    /// <summary>
-    /// The case this exists for: Emma owes 1025 in the flat, Nicolas owes 925 on
-    /// the trip, and between them only 100 is really outstanding.
-    /// </summary>
     private async Task<(Guid Me, Guid Them, GroupDto Flat, GroupDto Trip)> FacingDebtsAsync()
     {
         var me = await TestData.SeedUserAsync(Db, "Nicolas");
@@ -49,9 +37,7 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
         var (flat, myFlatId, theirFlatId) = await ShareGroupAsync(me.Id, them.Id, "Colocation");
         var (trip, myTripId, theirTripId) = await ShareGroupAsync(me.Id, them.Id, "Ski trip");
 
-        // I paid 2050 in the flat, so they owe me half of it.
         await SpendAsync(me.Id, flat.Id, myFlatId, theirFlatId, 2050m);
-        // They paid 1850 on the trip, so I owe them half of that.
         await SpendAsync(me.Id, trip.Id, theirTripId, myTripId, 1850m);
 
         return (me.Id, them.Id, flat, trip);
@@ -96,7 +82,6 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
 
         var after = await Settlements.GetCrossGroupBalanceAsync(me, them);
 
-        // The trip is square and the flat carries what was really outstanding.
         after.Groups.Count.ShouldBe(1);
         after.Groups.ShouldHaveSingleItem().GroupId.ShouldBe(flat.Id);
         after.Groups[0].Net.ShouldBe(100m);
@@ -115,8 +100,6 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
         await Settlements.OffsetAcrossGroupsAsync(me, new OffsetAcrossGroupsRequest(them, null));
         var after = (await Settlements.GetCrossGroupBalanceAsync(me, them)).Groups.Sum(g => g.Net);
 
-        // The whole point: the total between the two of them is untouched. A pair
-        // that changed it would be a payment nobody made.
         after.ShouldBe(before);
     }
 
@@ -134,7 +117,6 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
         written.Select(s => s.GroupId).ShouldBe([flat.Id, trip.Id], ignoreOrder: true);
         written.ShouldAllBe(s => s.Amount == 925m);
 
-        // Each half names the other, so neither can be read - or removed - alone.
         var one = written[0];
         var other = written[1];
         one.OffsetSettlementId.ShouldBe(other.Id);
@@ -150,7 +132,6 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
 
         var inFlat = await NewContext().Settlements.FirstAsync(s => s.GroupId == flat.Id);
 
-        // A settlement nobody paid has to explain itself in the list it appears in.
         inFlat.Note.ShouldBe("Cancelled against Ski trip");
     }
 
@@ -179,8 +160,6 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
             .Where(e => e.EntityType == SyncEntityType.Settlement)
             .ToListAsync();
 
-        // One per group. Written to the log or the phones never learn of a balance
-        // that changed underneath them.
         entries.Select(e => e.GroupId).ShouldBe([flat.Id, trip.Id], ignoreOrder: true);
     }
 
@@ -198,8 +177,6 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
         var balance = await Settlements.GetCrossGroupBalanceAsync(me.Id, them.Id);
         balance.Offsets.ShouldBeEmpty();
 
-        // Nothing cancels, so there is nothing to do, and saying so is better than
-        // writing a pair of settlements that change nothing.
         await Should.ThrowAsync<ValidationException>(() =>
             Settlements.OffsetAcrossGroupsAsync(me.Id, new OffsetAcrossGroupsRequest(them.Id, null)));
     }
@@ -217,8 +194,6 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
 
         var balance = await Settlements.GetCrossGroupBalanceAsync(me.Id, them.Id);
 
-        // A hundred dollars against a hundred euros is an exchange, not an offset,
-        // and picking the rate would commit both people to it.
         balance.Groups.Count.ShouldBe(2);
         balance.Offsets.ShouldBeEmpty();
         balance.Remaining.Count.ShouldBe(2);
@@ -266,9 +241,9 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
         var (trip, myTrip, theirTrip) = await ShareGroupAsync(me.Id, them.Id, "Ski trip");
         var (lunch, myLunch, theirLunch) = await ShareGroupAsync(me.Id, them.Id, "Bureau lunches");
 
-        await SpendAsync(me.Id, flat.Id, myFlat, theirFlat, 600m);     // they owe me 300
-        await SpendAsync(me.Id, trip.Id, theirTrip, myTrip, 400m);     // I owe them 200
-        await SpendAsync(me.Id, lunch.Id, theirLunch, myLunch, 160m);  // I owe them 80
+        await SpendAsync(me.Id, flat.Id, myFlat, theirFlat, 600m);
+        await SpendAsync(me.Id, trip.Id, theirTrip, myTrip, 400m);
+        await SpendAsync(me.Id, lunch.Id, theirLunch, myLunch, 160m);
 
         await Settlements.OffsetAcrossGroupsAsync(me.Id, new OffsetAcrossGroupsRequest(them.Id, null));
 

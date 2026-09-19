@@ -104,16 +104,8 @@ export interface EnqueueRequest {
   payload: unknown
 }
 
-/** Guards against a server that always claims there is more to pull. */
 const MAX_PULL_PAGES = 50
 
-/**
- * Whether the server refused the request itself, rather than being unreachable.
- *
- * A refusal will be refused again just as firmly, so retrying it forever holds
- * the rows it touched hostage. 401 is a session to renew, 408 and 429 are "not
- * now", and a 5xx is the server's own problem: all of those are worth another go.
- */
 function isRefusal(error: unknown): boolean {
   const status = (error as { status?: unknown } | null)?.status
   if (typeof status !== 'number') return false
@@ -123,19 +115,6 @@ function isRefusal(error: unknown): boolean {
 }
 const PULL_BATCH_SIZE = 500
 
-/**
- * The offline engine.
- *
- * Writes go into the local replica immediately and into an outbox; nothing waits
- * on the network. When connectivity returns, the outbox drains in the order the
- * user made the changes, and deltas are pulled from a per-group cursor.
- *
- * Three rules shape everything here:
- * - A queued change is never lost. A failed push leaves it queued and retries.
- * - A change the server will never accept is parked, not retried forever, or it
- *   would block every later change behind it.
- * - A pull never overwrites a local edit that has not been sent yet.
- */
 export class SyncEngine {
   private flushing: Promise<SyncPushResult> | null = null
   private readonly api: SyncApi
@@ -157,8 +136,6 @@ export class SyncEngine {
       operation: request.operation,
       groupId: request.groupId,
       payloadJson: JSON.stringify(request.payload),
-      // Ticked from the newest clock this device knows for the entity, so a run of
-      // offline edits forms a causal chain instead of a pile of conflicts.
       vectorClock: tickClock(previous, deviceId),
       clientTimestamp: new Date().toISOString(),
       sequence: await this.nextSequence(),
@@ -183,13 +160,11 @@ export class SyncEngine {
     await db.outbox.delete(operationId)
   }
 
-  /** Retries an operation the user fixed, moving it back into the queue. */
   async retry(operationId: string): Promise<void> {
     await db.outbox.update(operationId, { status: 'pending', lastError: null })
   }
 
   async flush(): Promise<SyncPushResult> {
-    // Overlapping flushes would send the same operation twice.
     if (this.flushing) return this.flushing
 
     this.flushing = this.doFlush().finally(() => {
@@ -226,9 +201,6 @@ export class SyncEngine {
       await this.applyPushResult(pending, result)
       return result
     } catch (error) {
-      // Nothing is discarded: the queue is the durable record of the user's work.
-      // But a refusal is not a connection problem, and treating the two alike is
-      // what left rows waiting on a request that would never be accepted.
       const message = error instanceof Error ? error.message : String(error)
       const refused = isRefusal(error)
 
@@ -263,8 +235,6 @@ export class SyncEngine {
 
       const rejection = rejectedById.get(operation.operationId)
       if (rejection) {
-        // Parked rather than retried: the server will never accept it, and retrying
-        // would stall every later change in the queue.
         await db.outbox.update(operation.operationId, {
           status: 'rejected',
           attempts: operation.attempts + 1,
@@ -279,8 +249,6 @@ export class SyncEngine {
         continue
       }
 
-      // Neither accepted, rejected nor conflicted: the server did not speak to it,
-      // so leave it queued for the next attempt.
       await db.outbox.update(operation.operationId, { status: 'pending' })
     }
 
@@ -302,20 +270,6 @@ export class SyncEngine {
     }
   }
 
-  /**
-   * Lets go of a local row whose change the server will not take.
-   *
-   * The marker is the whole problem: a row that claims to be unsent is skipped by
-   * every pull, on purpose, so that a remote revision cannot overwrite work the
-   * person can still see. Leave the marker on a change that has been refused and
-   * that protection becomes a trap. The row is frozen wrong, the server can never
-   * correct it, and a refused deletion in particular hides the expense on this
-   * device for good.
-   *
-   * So the row goes back to being the server's to describe. What the person tried
-   * to do is not lost: the operation stays in the queue as refused, with its
-   * payload and the reason, for the screen that lists those.
-   */
   private async release(operation: OutboxOperation): Promise<void> {
     const stillQueued = await db.outbox
       .where('entityId')
@@ -323,12 +277,8 @@ export class SyncEngine {
       .filter((row) => row.status === 'pending' || row.status === 'inflight')
       .count()
 
-    // A later edit to the same thing is still going: it owns the row now.
     if (stillQueued > 0) return
 
-    // A creation the server refused exists nowhere else, so there is nothing for a
-    // pull to replace it with. Left on screen it would keep counting towards
-    // balances that no one else can see.
     if (operation.operation === 'Create') {
       switch (operation.entityType) {
         case 'Expense':
@@ -344,8 +294,6 @@ export class SyncEngine {
       return
     }
 
-    // Anything else: unmark it, and bring back what a refused deletion hid, so
-    // the next pull can replace it with whatever the server actually holds.
     const restore = operation.operation === 'Delete'
       ? { pending: false, isDeleted: false }
       : { pending: false }
@@ -370,8 +318,6 @@ export class SyncEngine {
       .filter((row) => row.status !== 'rejected')
       .count()
 
-    // Only clear the marker once nothing for this entity is still waiting, or a
-    // row would look synced while a later edit is still queued.
     if (stillQueued > 0) return
 
     switch (operation.entityType) {
@@ -416,11 +362,6 @@ export class SyncEngine {
   }
 
   private async applyEntry(entry: SyncLogEntry): Promise<void> {
-    // Unsent local work is work the person can still see on screen, so a remote
-    // revision must not overwrite it. Both signals count: the outbox is the
-    // authoritative queue, and the row's own pending flag covers a row marked
-    // unconfirmed whose operation is not in the queue (mid-write, or a queue
-    // pruned by a conflict).
     if (await this.hasUnsentLocalChange(entry.entityId)) return
 
     if (entry.operation === 'Delete') {
@@ -432,15 +373,9 @@ export class SyncEngine {
     try {
       payload = JSON.parse(entry.payloadJson) as Record<string, unknown>
     } catch {
-      // A payload we cannot read is skipped, but the cursor still advances so the
-      // client does not re-fetch it forever.
       return
     }
 
-    // An expense that has left this group is recorded in the group it left as a
-    // marker: the entity id, and where it went. There is no expense in that
-    // payload, so reading it as one would replace the row with a blank expense of
-    // zero in the group it is no longer in.
     if (isTransferMarker(entry, payload)) {
       await this.applyTransferMarker(entry, String(payload.movedTo))
       return
@@ -459,28 +394,12 @@ export class SyncEngine {
     }
   }
 
-  /**
-   * An expense leaving a group this device follows.
-   *
-   * The group it went to writes its own entry, carrying the whole expense, and the
-   * two arrive in one pull in whichever order the groups are read. Applied after
-   * that one, the row is already in its new group and there is nothing to do;
-   * applied before it, the row is dropped here and put back a moment later by the
-   * other entry.
-   *
-   * Dropped rather than tombstoned: the expense is not deleted, it is somewhere
-   * else, and for a device whose owner is not in that other group somewhere else
-   * is out of sight. A tombstone would say it had been deleted, which is a
-   * different thing and would be wrong in the group that now holds it.
-   */
   private async applyTransferMarker(entry: SyncLogEntry, movedTo: string): Promise<void> {
     const local = await db.expenses.get(entry.entityId)
     if (!local || local.groupId === movedTo) return
 
     await db.expenses.delete(entry.entityId)
 
-    // The comments went with it. Left behind they would hang off an expense this
-    // device no longer has, in a group that no longer holds either.
     await db.comments.where('expenseId').equals(entry.entityId).delete()
   }
 
@@ -518,7 +437,6 @@ export class SyncEngine {
     return Boolean(comment?.pending)
   }
 
-  /** Newest clock this device knows for an entity, so an edit chain stays causal. */
   private async latestClockFor(entityId: string): Promise<VectorClock> {
     const queued = await db.outbox
       .where('entityId')
@@ -548,10 +466,6 @@ export class SyncEngine {
 
 const SPLIT_TYPES: SplitType[] = ['Equal', 'Percentage', 'Shares', 'ExactAmount', 'Itemized']
 
-/**
- * The server serialises enums as names over HTTP but as their numeric value inside
- * a sync payload snapshot, so both have to be accepted here.
- */
 function readSplitType(value: unknown): SplitType {
   if (typeof value === 'string' && SPLIT_TYPES.includes(value as SplitType)) {
     return value as SplitType
@@ -560,25 +474,8 @@ function readSplitType(value: unknown): SplitType {
   return 'Equal'
 }
 
-/*
- * What a sync payload looks like before anything has checked it.
- *
- * The server's own shape is known, but a row in the log may have been written by a
- * client older or newer than this one, so every field below is read defensively and
- * coerced. Typing it as unknown would only move the casts inside; naming it here
- * says the looseness is the boundary rather than an oversight.
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type WirePayload = Record<string, any>
-
-/**
- * Whether an entry is the note a group keeps of an expense that left it.
- *
- * The group that received the expense records the whole thing; the group it came
- * from records only where it went, under the same operation. The payload is what
- * tells them apart, because that is the difference: one carries an expense and
- * the other carries a forwarding address.
- */
 function isTransferMarker(entry: SyncLogEntry, payload: WirePayload): boolean {
   return (
     entry.operation === 'Transfer' &&
@@ -601,12 +498,7 @@ function toLocalExpense(payload: WirePayload, entry: SyncLogEntry): LocalExpense
     splitType: readSplitType(payload.splitType),
     receiptId: payload.receiptId ?? null,
     notes: payload.notes ?? null,
-    // Absent from a payload written before categories existed, which leaves the
-    // expense unfiled rather than inventing a filing for it.
     categoryKey: payload.categoryKey ?? null,
-    // A payload without payers came from a server that only knows a single one, so
-    // the member it names paid the whole amount. Never left empty: an expense with
-    // no payer contributes nothing to a balance.
     payers:
       (payload.payers ?? []).length > 0
         ? payload.payers.map((payer: WirePayload) => ({

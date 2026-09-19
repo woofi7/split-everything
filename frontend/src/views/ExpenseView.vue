@@ -37,7 +37,6 @@ const expense = computed(() =>
 
 const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
 
-/** What it was filed under, or null for one nobody filed. */
 const category = computed(() =>
   categoryFor(expense.value?.categoryKey, groups.categoriesOf(groupId.value)),
 )
@@ -57,23 +56,10 @@ const colours = computed(() =>
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
-/**
- * Who paid, when more than one person did.
- *
- * Largest first, which is also the order the name on the expense comes from, so
- * the list reads in the same order as the line above it.
- */
 const sharedPayers = computed(() =>
   [...(expense.value?.payers ?? [])].sort((left, right) => right.amount - left.amount),
 )
 
-/**
- * The line above the breakdown.
- *
- * One name for the ordinary case. Two names when two people paid, because "Emma
- * and Nicolas paid" is shorter than the list underneath and says the same thing;
- * more than that and the names would run off a phone, so it counts them instead.
- */
 const paidByLine = computed(() => {
   const names = sharedPayers.value.map((payer) => memberName(payer.memberId))
 
@@ -95,14 +81,12 @@ const splitTypeLabel = computed(() =>
   expense.value ? (SPLIT_LABELS[expense.value.splitType] ?? expense.value.splitType) : '',
 )
 
-/** The weight as the split type meant it: a percentage, a share count, or money. */
 function weightLabel(value: number): string {
   if (expense.value?.splitType === 'Percentage') return `${value}%`
   if (expense.value?.splitType === 'Shares') return value === 1 ? '1 share' : `${value} shares`
   return ''
 }
 
-/** Mixed with the surface, so the text stays readable in either theme. */
 function cardStyle(memberId: string) {
   const colour = colourOf(memberId)
 
@@ -114,7 +98,6 @@ function cardStyle(memberId: string) {
 }
 
 async function removeComment(commentId: string): Promise<void> {
-
   try {
     await expenses.removeComment(commentId)
   } catch (caught) {
@@ -150,7 +133,6 @@ async function remove(): Promise<void> {
   }
 }
 </script>
-
 <template>
   <AppShell
     :title="expense?.description ?? 'Expense'"
@@ -158,8 +140,6 @@ async function remove(): Promise<void> {
     :back-label="group?.name ?? 'Group'"
   >
     <div v-if="expense" class="flex flex-col gap-5">
-      <!-- The same colour the card had in the list, so opening one does not change
-           whose expense it appears to be. -->
       <section
         data-testid="expense-card"
         class="rounded-xl border border-l-4 p-4"
@@ -177,12 +157,6 @@ async function remove(): Promise<void> {
           {{ paidByLine }} on
           {{ new Date(expense.spentAt).toLocaleDateString(intlLocale) }}
         </p>
-
-        <!--
-          What each of them put in, when it was not one person. The line above says
-          who paid; this says how the total was made up, which is the part somebody
-          checks when a balance looks wrong.
-        -->
         <ul
           v-if="sharedPayers.length > 1"
           data-testid="payer-breakdown"
@@ -212,11 +186,6 @@ async function remove(): Promise<void> {
         >{{ t('Converted to the group currency when it syncs.') }}
         </p>
         <p v-if="expense.notes" class="mt-2 text-sm">{{ expense.notes }}</p>
-
-        <!--
-          What it was filed under, named rather than drawn: this is the screen
-          where somebody is checking, and an icon alone answers nothing.
-        -->
         <p
           v-if="category"
           data-testid="expense-category"
@@ -231,15 +200,9 @@ async function remove(): Promise<void> {
           {{ category.name }}
         </p>
       </section>
-
       <section class="surface-card p-4">
         <div class="mb-2 flex items-baseline justify-between gap-2">
           <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Split') }}</h2>
-          <!--
-            How, not just how much. Two expenses with identical shares can have
-            been divided by quite different rules, and the rule is what someone
-            checks when the numbers look wrong.
-          -->
           <span data-testid="split-type" class="text-xs text-[var(--text-muted)]">
             {{ splitTypeLabel }}
           </span>
@@ -257,7 +220,6 @@ async function remove(): Promise<void> {
                 aria-hidden="true"
               />
               <span class="truncate">{{ memberName(split.memberId) }}</span>
-              <!-- The weight behind the share, where the split type had one. -->
               <span v-if="split.inputValue !== null" class="shrink-0 text-xs text-[var(--text-muted)]">
                 {{ weightLabel(split.inputValue) }}
               </span>
@@ -266,7 +228,6 @@ async function remove(): Promise<void> {
           </li>
         </ul>
       </section>
-
       <section v-if="expense.items.length > 0" class="surface-card p-4">
         <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Items') }}</h2>
         <ul class="flex flex-col gap-2 text-sm">
@@ -281,12 +242,10 @@ async function remove(): Promise<void> {
           </li>
         </ul>
       </section>
-
       <section class="surface-card p-4">
         <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">
           Comments ({{ comments.length }})
         </h2>
-
         <ul v-if="comments.length > 0" class="mb-3 flex flex-col gap-3 text-sm">
           <li v-for="comment in comments" :key="comment.id" class="flex items-start gap-2">
             <span class="min-w-0 flex-1">
@@ -300,9 +259,6 @@ async function remove(): Promise<void> {
               </span>
               <span class="block">{{ comment.body }}</span>
             </span>
-
-            <!-- Only the author. A wrong amount can be corrected; a sentence
-                 cannot be unsaid, so being unable to take one back is worse. -->
             <button
               v-if="comment.authorMemberId === myMemberId"
               type="button"
@@ -314,7 +270,6 @@ async function remove(): Promise<void> {
             </button>
           </li>
         </ul>
-
         <form class="flex gap-2" @submit.prevent="postComment">
           <input
             v-model="commentDraft"
@@ -332,8 +287,6 @@ async function remove(): Promise<void> {
           </button>
         </form>
       </section>
-
-
       <RouterLink
         v-if="!confirmingDelete"
         :to="{ name: 'edit-expense', params: { groupId, expenseId } }"
@@ -341,7 +294,6 @@ async function remove(): Promise<void> {
         class="btn btn-press btn-secondary w-full"
       >{{ t('Edit this expense') }}
       </RouterLink>
-
       <button
         v-if="!confirmingDelete"
         type="button"
@@ -350,18 +302,12 @@ async function remove(): Promise<void> {
         @click="confirmingDelete = true"
       >{{ t('Delete this expense') }}
       </button>
-
-      <!--
-        Asked rather than done. An expense is somebody else's balance as well as
-        yours, and the only way back is to add it again from memory.
-      -->
       <div v-else class="surface-card flex flex-col gap-3 p-4">
         <p class="text-sm font-medium">{{ t('Delete this expense?') }}</p>
         <p class="text-xs text-[var(--text-muted)]">
           {{ expense.description }} ({{ formatMoney(expense.amount, expense.currency) }}) goes for
           everyone in {{ group?.name ?? 'this group' }}, and everyone's balance moves with it.
         </p>
-
         <div class="flex gap-2">
           <button
             type="button"
@@ -382,7 +328,6 @@ async function remove(): Promise<void> {
         </div>
       </div>
     </div>
-
     <p v-else class="text-sm text-[var(--text-muted)]">{{ t('That expense is not on this device yet.') }}
     </p>
   </AppShell>

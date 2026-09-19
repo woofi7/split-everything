@@ -88,8 +88,6 @@ describe('vector clock, client side', () => {
   })
 
   it('agrees with the server on what counts as a conflict', () => {
-    // Same fixtures as the backend SyncArbiter tests: the client has to reach the
-    // same verdict locally, or it would queue an operation it knows will conflict.
     expect(compareClocks(clock({ a: 1 }), clock({ a: 1 }))).toBe('equal')
     expect(compareClocks(clock({ a: 2, b: 1 }), clock({ a: 1, b: 2 }))).toBe('concurrent')
     expect(compareClocks(clock({ a: 2, c: 1 }), clock({ a: 2 }))).toBe('after')

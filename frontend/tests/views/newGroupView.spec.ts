@@ -47,8 +47,6 @@ describe('NewGroupView', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    // The group has to exist before anyone can be added to it, so this is a
-    // second call rather than part of the create.
     expect(api.post).toHaveBeenCalledWith(
       `/groups/${testGroup().id}/members/user`,
       { userId: 'user-bob' },
@@ -79,8 +77,6 @@ describe('NewGroupView', () => {
     await wrapper.find('[data-testid="candidate"]').trigger('click')
     await settle()
 
-    // The group is already created at this point. Stranding the person on this
-    // screen would leave them unsure whether it exists.
     api.post.mockImplementation(async (path: string) =>
       path.endsWith('/members/user') ? Promise.reject(new Error('nope')) : testGroup(),
     )
@@ -118,8 +114,6 @@ describe('NewGroupView', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    // A typed name used to become a member with no account behind them, who could
-    // never open the group, see what they owed, or be told about it.
     expect(api.post).toHaveBeenCalledWith('/groups', expect.not.objectContaining({
       placeholderMemberNames: expect.anything(),
     }))

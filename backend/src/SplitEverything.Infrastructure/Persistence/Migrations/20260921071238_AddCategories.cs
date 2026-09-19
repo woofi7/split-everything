@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace SplitEverything.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddCategories : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
@@ -53,12 +51,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                 columns: new[] { "group_id", "key" },
                 unique: true);
 
-            // The list a fresh install starts with, written out here rather than
-            // read from the source: a migration is a record of what happened to a
-            // database, and a later release changing the shipped list must not
-            // change what this one did. From here it belongs to whoever runs the
-            // server, who can rewrite or remove any of it, and to each group, which
-            // takes its own copy the first time it edits.
             migrationBuilder.InsertData(
                 table: "categories",
                 columns: ["id", "key", "name", "icon_name", "color_hex", "sort_order", "keywords_json"],
@@ -79,10 +71,8 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                     { new Guid("4b395484-d4e0-24c0-dfe6-11c34855ae58"), "fees", "Fees", "building-columns", "#64748b", 130, @"[""frais"", ""interet"", ""interest"", ""service charge"", ""nsf"", ""penalite""]" },
                     { new Guid("98b8ca34-c5de-554a-c0a3-846ced9cd476"), "other", "Other", "ellipsis", "#94a3b8", 999, @"[]" },
                 });
-
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

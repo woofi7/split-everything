@@ -14,10 +14,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// The offline story end to end: a device queues changes, comes back, and the
-/// server has to apply, ignore or flag each one without ever losing an edit.
-/// </summary>
 public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity);
@@ -116,7 +112,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
             group.Id, alice, "Original", 40m, "CAD", TestData.Jan1, SplitType.Equal,
             [new SplitInputDto(alice, null), new SplitInputDto(bob, null)], null, null, null, null, null, null));
 
-        // The device saw the stored revision and edited on top of it.
         var newer = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceB] = 1 };
 
         var result = await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
@@ -139,8 +134,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
             group.Id, alice, "Current", 40m, "CAD", TestData.Jan1, SplitType.Equal,
             [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
-        // A clock strictly behind what is stored: some other device already carried
-        // the group past this revision.
         var stale = expense.VectorClock.ToDictionary(kv => kv.Key, kv => kv.Value);
         var device = stale.Keys.First();
         stale[device] = Math.Max(0, stale[device] - 1);
@@ -163,7 +156,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
             group.Id, alice, "Original", 40m, "CAD", TestData.Jan1, SplitType.Equal,
             [new SplitInputDto(alice, null)], null, null, null, null, null, null));
 
-        // Both devices branched from the stored revision, neither saw the other.
         var fromA = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceA] = 9 };
         var fromB = new Dictionary<string, long>(expense.VectorClock) { [TestData.DeviceB] = 9 };
 
@@ -329,8 +321,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
                 Clocks((TestData.DeviceB, 1)))
         ]));
 
-        // One bad operation must not fail the whole batch: the rest of the queue
-        // still needs to drain.
         result.Rejected.ShouldHaveSingleItem().Code.ShouldBe("Forbidden");
         result.Accepted.ShouldBeEmpty();
     }
@@ -465,8 +455,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
     {
         var (userId, group, alice, _) = await SetupAsync();
 
-        // A second group, created after this device last pulled, so the device has
-        // a cursor for the first and none for this one.
         var later = await Groups.CreateAsync(userId,
             new CreateGroupRequest("Ski trip", "CAD", null, null, null, ["Luc"]));
         var payer = later.Members.First(m => m.UserId == userId).Id;
@@ -477,9 +465,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var result = await Sync.PullAsync(userId, new SyncPullRequest(
             TestData.DeviceB, new Dictionary<Guid, long> { [group.Id] = 0 }));
 
-        // Honouring only the cursors the device sent meant a group it had not heard
-        // of was never sent: it appeared through the group endpoint and then sat
-        // there with no expenses in it, for good.
         result.Entries.ShouldContain(e => e.GroupId == later.Id);
         result.GroupCursors.ShouldContainKey(later.Id);
     }
@@ -491,8 +476,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var joiner = await TestData.SeedUserAsync(Db, "Mallory", "mallory@example.com", "google-mallory");
         await Groups.AddUserMemberAsync(ownerId, group.Id, new AddUserMemberRequest(joiner.Id));
 
-        // The joiner's device knows about some other group of its own, so it sends
-        // a cursor, just not for this one.
         var own = await Groups.CreateAsync(joiner.Id,
             new CreateGroupRequest("Alone", "CAD", null, null, null, null));
 
@@ -508,7 +491,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         var (ownerId, group, _, _) = await SetupAsync();
         var other = await TestData.SeedUserAsync(Db, "Mallory", "mallory@example.com", "google-mallory");
 
-        // Membership decides, so a cursor for someone else's group buys nothing.
         var result = await Sync.PullAsync(other.Id, new SyncPullRequest(
             TestData.DeviceB, new Dictionary<Guid, long> { [group.Id] = 0 }));
 
@@ -653,7 +635,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         result.GroupCursors.ShouldNotBeEmpty();
     }
 
-    /// <summary>Drives two divergent offline edits and returns the expense id.</summary>
     private async Task<Guid> CreateConflictAsync(Guid userId, Guid groupId, Guid alice)
     {
         var expense = await Expenses.CreateAsync(userId, new CreateExpenseRequest(
@@ -676,11 +657,6 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
     }
 }
 
-/// <summary>
-/// The rejection branches: every way a client payload can be unacceptable. These
-/// matter because a rejection has to be reported per operation, never as a failure
-/// of the whole batch.
-/// </summary>
 public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity);
@@ -786,7 +762,6 @@ public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixtu
             }
         });
 
-        // Trusting a client's arithmetic here would create a debt nobody owes.
         (await PushAsync(userId, group.Id, SyncEntityType.Expense, json)).Code.ShouldBe("InvalidPayload");
     }
 

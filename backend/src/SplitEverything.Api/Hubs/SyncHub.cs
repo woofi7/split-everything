@@ -8,15 +8,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Api.Hubs;
 
-/// <summary>
-/// Live sync transport.
-///
-/// A client joins one SignalR group per expense group it follows, so a broadcast
-/// reaches exactly the devices entitled to it. The hub carries no authority of its
-/// own: everything it pushes has already been accepted and written, and an offline
-/// client gets the same operations later through the delta pull. That is why a
-/// dropped connection is never a correctness problem.
-/// </summary>
 [Authorize]
 public sealed class SyncHub(AppDbContext db, ICurrentUser currentUser) : Hub
 {
@@ -39,10 +30,6 @@ public sealed class SyncHub(AppDbContext db, ICurrentUser currentUser) : Hub
         await base.OnConnectedAsync();
     }
 
-    /// <summary>
-    /// Joins a group channel after the caller has been added to a new group
-    /// mid-connection, so they do not have to reconnect to start receiving.
-    /// </summary>
     public async Task Follow(Guid groupId)
     {
         var userId = currentUser.RequireUserId();
@@ -61,10 +48,6 @@ public sealed class SyncHub(AppDbContext db, ICurrentUser currentUser) : Hub
         => Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupChannel(groupId));
 }
 
-/// <summary>
-/// Sends accepted operations to the live clients of a group, skipping the device
-/// that produced them: it already applied the change locally.
-/// </summary>
 public sealed class SignalRSyncBroadcaster(IHubContext<SyncHub> hub) : ISyncBroadcaster
 {
     public Task BroadcastAsync(

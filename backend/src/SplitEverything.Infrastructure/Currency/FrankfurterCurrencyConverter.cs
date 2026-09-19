@@ -10,14 +10,6 @@ using SplitEverything.Infrastructure.Persistence;
 
 namespace SplitEverything.Infrastructure.Currency;
 
-/// <summary>
-/// Frankfurter-backed conversion with a daily cache in Postgres.
-///
-/// Rates are cached per (base, quote, date), so a group's expenses hit the network
-/// once a day at most. If Frankfurter is unreachable and we hold any earlier rate,
-/// that is used instead: a slightly stale rate is far better than refusing to
-/// record an expense, and the rate used is frozen onto the expense anyway.
-/// </summary>
 public sealed class FrankfurterCurrencyConverter(
     HttpClient http,
     AppDbContext db,
@@ -103,7 +95,6 @@ public sealed class FrankfurterCurrencyConverter(
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
             {
-                // A nightly warm-up is best effort; the on-demand path still works.
                 logger.LogWarning(ex, "Could not refresh rates based on {From}", from);
             }
         }
@@ -176,7 +167,6 @@ public sealed class FrankfurterCurrencyConverter(
     }
 }
 
-/// <summary>Raised when no rate can be obtained and none is cached.</summary>
 public sealed class CurrencyUnavailableException(string message) : AppException(message)
 {
     public override int StatusCode => 503;

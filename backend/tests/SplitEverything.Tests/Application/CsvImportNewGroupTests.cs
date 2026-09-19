@@ -10,14 +10,6 @@ using Shouldly;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// Importing a Settle Up export into a group that does not exist yet.
-///
-/// That is the ordinary case: an export is one group's history, and the reason to
-/// import it is that the group is not here. Requiring one to be created first made
-/// the wizard start with unrelated work, and a failed import would leave an empty
-/// group behind.
-/// </summary>
 public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private ImportService Imports { get; set; } = null!;
@@ -49,7 +41,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
         var preview = await Imports.PreviewCsvAsync(user.Id, Csv("settleup-basic.csv"),
             new CsvPreviewRequest(null, BasicMapping(), new Dictionary<string, Guid?>(), "CAD"));
 
-        // Nothing exists to map onto yet, so the wizard offers to create them all.
         preview.UnmappedMemberNames.ShouldBe(["Alice", "Bob", "Carol"], ignoreOrder: true);
         preview.Rows.Count.ShouldBe(4);
     }
@@ -67,7 +58,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
         var preview = await Imports.PreviewCsvAsync(user.Id, Csv("settleup-basic.csv"),
             new CsvPreviewRequest(null, BasicMapping(), new Dictionary<string, Guid?>(), "CAD"));
 
-        // A new group shares no history, so the same rows are not duplicates in it.
         preview.DuplicateCount.ShouldBe(0);
     }
 
@@ -127,7 +117,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
             .Select(m => m.DisplayName)
             .ToListAsync();
 
-        // The owner's own row plus one per exported name.
         names.ShouldContain("Alice");
         names.ShouldContain("Bob");
         names.ShouldContain("Carol");
@@ -145,8 +134,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
             .Where(m => m.GroupId == result.GroupId && m.DisplayName == "Alice")
             .ToListAsync();
 
-        // The importer is already in the group under that name; a placeholder beside
-        // them would split their history in two.
         aliceRows.Count.ShouldBe(1);
         aliceRows[0].UserId.ShouldBe(user.Id);
     }
@@ -171,7 +158,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
             new MemoryStream(Encoding.UTF8.GetBytes("not,a,settleup,export\n")),
             CommitInto(null, "Old flat")));
 
-        // An empty group left behind would be worse than the failure itself.
         (await NewContext().Groups.CountAsync()).ShouldBe(before);
     }
 
@@ -189,14 +175,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
         (await NewContext().Groups.CountAsync(g => g.Name == "Roommates")).ShouldBe(1);
     }
 
-    /// <summary>
-    /// Binding an exported name to an account rather than to a member.
-    ///
-    /// An export is another group's history. The people in it usually have
-    /// accounts here already and only their names came across, so the useful
-    /// answer to "who is Alice" is an account, which may not be in this group and
-    /// in the ordinary case is being imported into a group that does not exist yet.
-    /// </summary>
     [Fact]
     public async Task An_exported_name_can_be_bound_to_an_account()
     {
@@ -213,8 +191,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
         var bound = group.Members.FirstOrDefault(m => m.UserId == alice.Id);
 
         bound.ShouldNotBeNull();
-        // Their own name and their own colour, not a placeholder wearing the name
-        // from the file.
         bound.DisplayName.ShouldBe("Alice");
         bound.ColorHex.ShouldNotBeNull();
         bound.IsPlaceholder.ShouldBeFalse();
@@ -236,7 +212,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
         var member = await fresh.GroupMembers
             .FirstAsync(m => m.GroupId == result.GroupId && m.UserId == alice.Id);
 
-        // The whole point: the history lands on the person, not beside them.
         (await fresh.Expenses.CountAsync(e => e.PaidByMemberId == member.Id))
             .ShouldBeGreaterThan(0);
     }
@@ -256,8 +231,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
                 MemberUserMapping = new Dictionary<string, Guid> { ["Alice"] = alice.Id },
             });
 
-        // A second row for one account would collide with the one-membership-per-user
-        // index and orphan whatever history points at the first.
         var fresh = NewContext();
         (await fresh.GroupMembers.CountAsync(m => m.GroupId == group.Id && m.UserId == alice.Id))
             .ShouldBe(1);
@@ -298,8 +271,6 @@ public class CsvImportNewGroupTests(PostgresFixture fixture) : ServiceTestBase(f
             new CsvPreviewRequest(null, BasicMapping(), new Dictionary<string, Guid?>(), "CAD",
                 new Dictionary<string, Guid> { ["Alice"] = alice.Id }));
 
-        // Saying somebody is not a member yet, when the import is about to make
-        // them one, is a warning about nothing.
         preview.UnmappedMemberNames.ShouldNotContain("Alice");
         preview.Rows.ShouldNotContain(r => r.Problems.Any(p => p.Contains("Alice is not a member")));
     }

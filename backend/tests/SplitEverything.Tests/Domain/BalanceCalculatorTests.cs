@@ -12,7 +12,6 @@ public class BalanceCalculatorTests
     private static BalanceExpense Expense(Guid payer, decimal amount, params (Guid Member, decimal Share)[] splits)
         => BalanceExpense.PaidBy(payer, amount, splits.Select(s => (s.Member, s.Share)).ToList());
 
-    /// <summary>An expense several people paid for at once.</summary>
     private static BalanceExpense SharedExpense(
         (Guid Member, decimal Paid)[] payers,
         params (Guid Member, decimal Share)[] splits)
@@ -80,7 +79,6 @@ public class BalanceCalculatorTests
     [Fact]
     public void A_member_who_left_still_carries_their_history()
     {
-        // C is no longer on the roster but paid for something before leaving.
         var balances = BalanceCalculator.NetBalances(
             [A, B],
             [Expense(C, 60m, (A, 30m), (B, 30m))],
@@ -180,9 +178,6 @@ public class BalanceCalculatorTests
     [Fact]
     public void Two_people_paying_for_one_thing_are_each_credited_what_they_put_in()
     {
-        // The frying pans: A put in 40, B put in 25, and the 65 is split evenly. A is
-        // 7.50 up and B is 7.50 down - not the 32.50 that crediting one payer with
-        // the lot would produce.
         var balances = BalanceCalculator.NetBalances(
             [A, B],
             [SharedExpense([(A, 40m), (B, 25m)], (A, 32.50m), (B, 32.50m))],
@@ -208,8 +203,6 @@ public class BalanceCalculatorTests
     [Fact]
     public void A_share_is_owed_to_each_payer_in_the_proportion_they_paid()
     {
-        // C owes 100 of a bill A and B covered 60/40, so C owes 60 to A and 40 to B
-        // rather than the whole 100 to whichever of them is named first.
         var debts = BalanceCalculator.PairwiseDebts(
             [SharedExpense([(A, 60m), (B, 40m)], (C, 100m))],
             []);

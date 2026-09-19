@@ -8,25 +8,12 @@ import { resolveIcon } from '@/domain/icons'
 import { groupColor } from '@/domain/themes'
 import { useGroupsStore } from '@/stores/groups'
 
-/**
- * Which group the app is on.
- *
- * The app shows one group at a time, so this is the only place the others are
- * reachable, and it has to work with one group as well as ten: with one, it is
- * still how you get to creating the next.
- *
- * Archived groups are listed and marked rather than hidden. Archiving freezes a
- * group without deleting it, so its history is still worth reading.
- */
-
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const groups = useGroupsStore()
 const dialog = ref<HTMLElement | null>(null)
 
-// The store's ordering, which puts anything outstanding first: a settled group
-// needs no attention, and this list is where attention gets directed.
 const active = computed(() => groups.groups.filter((group) => !group.isArchived)
   .slice()
   .sort((left, right) => {
@@ -51,18 +38,12 @@ function choose(groupId: string): void {
   groups.setMainGroup(groupId)
   emit('close')
 
-  // At the top, like any other page arrived at. Left alone the screen opens
-  // wherever the last group was being read, which is nowhere in this one, and a
-  // browser holding a scroll position through a wholesale change of content lands
-  // further down still. After the new screen is laid out, or there is nothing to
-  // scroll to yet.
   void nextTick(() => {
     const page = document.querySelector<HTMLElement>('[data-app-page]')
     if (page) page.scrollTop = 0
   })
 }
 </script>
-
 <template>
   <Teleport to="body">
     <div
@@ -84,7 +65,6 @@ function choose(groupId: string): void {
           <button type="button" class="btn btn-press btn-quiet min-h-0 px-2 py-1 text-xs" @click="emit('close')">{{ t('Close') }}
           </button>
         </div>
-
         <ul class="min-h-0 flex-1 overflow-y-auto p-2">
           <li v-for="group in active" :key="group.id">
             <button
@@ -102,14 +82,12 @@ function choose(groupId: string): void {
               >
                 <FontAwesomeIcon :icon="resolveIcon(group.iconName).definition" class="h-4 w-4" />
               </span>
-
               <span class="min-w-0 flex-1">
                 <span class="block truncate">{{ group.name }}</span>
                 <span class="block truncate text-xs text-[var(--text-muted)]">
                   {{ group.memberCount ?? group.members.length }} people
                 </span>
               </span>
-
               <MoneyAmount
                 :amount="group.myNetBalance"
                 :currency="group.baseCurrency"
@@ -118,7 +96,6 @@ function choose(groupId: string): void {
               />
             </button>
           </li>
-
           <li v-if="archived.length > 0" class="px-3 pt-3 pb-1">
             <span class="text-xs text-[var(--text-muted)]">{{ t('Archived') }}</span>
           </li>
@@ -134,7 +111,6 @@ function choose(groupId: string): void {
             </button>
           </li>
         </ul>
-
         <div class="border-t p-3" style="border-color: var(--border)">
           <RouterLink
             :to="{ name: 'new-group' }"

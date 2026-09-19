@@ -4,11 +4,6 @@ import { nextTick } from 'vue'
 import IconPicker from '@/components/ui/IconPicker.vue'
 import { ICONS } from '@/domain/icons'
 
-/**
- * The picker teleports to the body so it escapes any parent that clips or
- * establishes a stacking context. Stubbing the teleport renders it inline, which
- * is what lets the wrapper query it; attaching to the body keeps focus real.
- */
 function mountPicker(props: Record<string, unknown> = {}) {
   return mount(IconPicker, {
     props: { open: true, modelValue: null, ...props },
@@ -50,7 +45,6 @@ describe('IconPicker', () => {
     const wrapper = mountPicker()
 
     return type(wrapper, 'car').then(() => {
-      // Sections would push a strong match below a weaker one in an earlier group.
       expect(wrapper.findAll('h3')).toHaveLength(0)
     })
   })
@@ -112,7 +106,6 @@ describe('IconPicker', () => {
 
     await type(wrapper, 'hse')
 
-    // Showing why a result matched is what stops fuzzy search feeling random.
     const marks = wrapper.findAll('mark').map((mark) => mark.text())
     expect(marks.length).toBeGreaterThan(0)
   })
@@ -237,7 +230,6 @@ describe('IconPicker', () => {
     await wrapper.setProps({ open: false })
     await nextTick()
 
-    // Otherwise a keyboard user is dumped at the top of the page.
     expect(document.activeElement).toBe(trigger)
     trigger.remove()
   })
@@ -382,7 +374,6 @@ describe('IconPicker keyboard navigation', () => {
     await wrapper.find('[role="dialog"]').trigger('keydown', { key: 'Tab' })
     await nextTick()
 
-    // A modal that lets Tab escape lets a keyboard user operate what they cannot see.
     expect(document.activeElement).not.toBe(last)
   })
 

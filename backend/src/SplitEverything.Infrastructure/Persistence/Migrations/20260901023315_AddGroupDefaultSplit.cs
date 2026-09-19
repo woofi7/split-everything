@@ -4,10 +4,8 @@
 
 namespace SplitEverything.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddGroupDefaultSplit : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<int>(
@@ -24,7 +22,6 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                 nullable: true);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

@@ -10,12 +10,6 @@ const props = defineProps<{
   isSyncing: boolean
 }>()
 
-/**
- * Tells the user where their changes stand.
- *
- * Offline-first only works if people trust it, and that trust comes from being
- * told plainly that a change is saved and waiting rather than lost.
- */
 const state = computed(() => {
   if (props.rejectedCount > 0) {
     return {
@@ -41,17 +35,8 @@ const state = computed(() => {
   return { key: 'synced', label: t('All synced'), tone: 'text-[var(--text-muted)]' }
 })
 
-/**
- * Whether there is anything behind the message.
- *
- * A count is a question, and the screen that answers it was two taps away under
- * a heading nobody would think to look under. It is a link exactly when queued or
- * refused work exists, and plain text otherwise: syncing and offline on their own
- * lead to an empty page.
- */
 const hasSomethingToShow = computed(() => props.pendingCount > 0 || props.rejectedCount > 0)
 </script>
-
 <template>
   <component
     :is="hasSomethingToShow ? RouterLink : 'p'"

@@ -54,14 +54,6 @@ async function mountScreen(expenses: Partial<LocalExpense>[], list = categories)
 const rowsOn = (wrapper: { findAll: (selector: string) => unknown[] }) =>
   wrapper.findAll('[data-testid="filing-row"]')
 
-/**
- * Filing a backlog.
- *
- * Categories arrived after the expenses did, so a group that was already running
- * has hundreds of rows filed under nothing. This screen is the only place that
- * job is possible at all: one form per expense is not a thing anybody does nine
- * hundred times.
- */
 describe('filing expenses in bulk', () => {
   it('starts on the ones nobody has filed', async () => {
     const { wrapper } = await mountScreen([
@@ -74,12 +66,6 @@ describe('filing expenses in bulk', () => {
     expect(textOf(wrapper)).not.toContain('Resto')
   })
 
-  /**
-   * A category somebody deleted leaves its expenses pointing at a name nothing
-   * answers to. They read as unfiled everywhere else in the app, so they have to
-   * be collectable here - otherwise a delete hides them from the one screen built
-   * to catch them.
-   */
   it('counts a category the list no longer has as unfiled', async () => {
     const { wrapper } = await mountScreen([{ id: 'a', description: 'Metro', categoryKey: 'gone' }])
 
@@ -174,15 +160,10 @@ describe('filing expenses in bulk', () => {
       await wrapper.find('[data-testid="file-selected"]').trigger('click')
       await waitFor(() => rowsOn(wrapper).length === 0)
 
-      // Filed, so it is no longer part of the backlog the screen is showing.
       expect(rowsOn(wrapper)).toHaveLength(0)
       expect(wrapper.find('[data-testid="filing-bar"]').exists()).toBe(false)
     })
 
-    /**
-     * A bulk press with no destination would be one tap from filing four hundred
-     * expenses under whatever the list happened to start with.
-     */
     it('will not file anywhere until somewhere is chosen', async () => {
       const { wrapper } = await mountScreen([{ id: 'a', description: 'Metro' }])
 
@@ -217,11 +198,6 @@ describe('filing expenses in bulk', () => {
       expect(wrapper.find('[data-testid="filing-bar"]').exists()).toBe(false)
     })
 
-    /**
-     * The rule that makes a bulk edit safe to use: what is about to change is
-     * what is on screen. Tick everything, then narrow the list, and the rows the
-     * filter took away are no longer part of it.
-     */
     it('never files a row the filter has hidden', async () => {
       const { wrapper } = await mountScreen([
         { id: 'a', description: 'Metro', categoryKey: 'dining' },
@@ -302,8 +278,6 @@ describe('filing expenses in bulk', () => {
       expect(wrapper.find('[data-testid="file-by-keywords"]').text()).toContain('2')
 
       await wrapper.find('[data-testid="file-by-keywords"]').trigger('click')
-      // Two categories means two passes over the replica, each several
-      // transactions deep, so this waits for the answer rather than counting turns.
       await waitFor(() => saidOnScreen().length > 0)
 
       expect((await db.expenses.get('a'))?.categoryKey).toBe('groceries')
@@ -312,10 +286,6 @@ describe('filing expenses in bulk', () => {
       expect(saidOnScreen().join(' ')).toContain('2 filed by their names')
     })
 
-    /**
-     * The guarantee that makes it safe to press without reading four hundred
-     * rows: it only ever touches what nobody has filed.
-     */
     it('leaves a category somebody chose by hand alone', async () => {
       const { wrapper } = await mountScreen([
         { id: 'a', description: 'Metro', categoryKey: 'dining' },
@@ -355,10 +325,6 @@ describe('filing expenses in bulk', () => {
     })
   })
 
-  /**
-   * A group with a year behind it lists in the hundreds, and a checkbox on every
-   * row is a lot of screen to build at once.
-   */
   it('lists a page at a time', async () => {
     const many = Array.from({ length: 60 }, (_, index) => ({
       id: `expense-${index}`,

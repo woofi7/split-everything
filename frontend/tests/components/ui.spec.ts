@@ -33,7 +33,6 @@ describe('MoneyAmount', () => {
   it('shows a settled balance in neutral, with no sign', () => {
     const wrapper = mount(MoneyAmount, { props: { amount: 0, currency: 'CAD', signed: true } })
 
-    // Colouring zero red or green would imply a debt that does not exist.
     expect(wrapper.attributes('data-settled')).toBe('true')
     expect(wrapper.text()).not.toContain('+')
     expect(wrapper.text()).not.toContain('-')
@@ -74,7 +73,6 @@ describe('SyncIndicator', () => {
       props: { ...props, pendingCount: 2, isOffline: true },
     })
 
-    // Offline-first only earns trust if the app says the work is safe.
     expect(wrapper.text()).toContain('Offline')
     expect(wrapper.text()).toContain('2 waiting')
   })
@@ -97,8 +95,6 @@ describe('SyncIndicator', () => {
       props: { pendingCount: 5, rejectedCount: 1, isOffline: true, isSyncing: true },
     })
 
-    // A rejected change will never resolve on its own, so it must not hide behind
-    // a spinner or an offline badge.
     expect(wrapper.attributes('data-state')).toBe('rejected')
     expect(wrapper.text()).toContain('attention')
   })
@@ -109,8 +105,6 @@ describe('SyncIndicator', () => {
       global: { stubs: { RouterLink: RouterLinkStub } },
     })
 
-    // The count is a question. The screen that answers it was two taps away under
-    // a heading nobody would think to look under.
     const link = wrapper.findComponent(RouterLinkStub)
     expect(link.exists()).toBe(true)
     expect(link.props().to).toEqual({ name: 'conflicts' })
@@ -133,8 +127,6 @@ describe('SyncIndicator', () => {
         global: { stubs: { RouterLink: RouterLinkStub } },
       })
 
-      // Syncing and offline on their own lead to an empty page, so they are not
-      // offered as somewhere to go.
       expect(wrapper.findComponent(RouterLinkStub).exists()).toBe(false)
       expect(wrapper.find('p').exists()).toBe(true)
     }

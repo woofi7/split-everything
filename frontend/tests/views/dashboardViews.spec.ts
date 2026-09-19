@@ -38,8 +38,6 @@ describe('ActivityView', () => {
     })
     await settle()
 
-    // The mark changes group, the gear opens its settings: the same pair on every
-    // screen scoped to a group.
     expect(wrapper.find('[data-testid="group-mark"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="group-settings-link"]').exists()).toBe(true)
   })
@@ -52,8 +50,6 @@ describe('ActivityView', () => {
     await mountView(ActivityView, { api: client })
     await settle()
 
-    // All screens follow the one group, so a feed spanning every group would be
-    // the odd one out.
     expect(client.get).toHaveBeenCalledWith(
       '/activity',
       expect.objectContaining({ groupId: GROUP_ID }),
@@ -120,7 +116,6 @@ describe('ActivityView', () => {
 
     const { wrapper } = await mountView(ActivityView, {
       api,
-      // What a device that has been online before holds: the feed as it arrived.
       activity: [
         {
           id: 7,
@@ -178,10 +173,8 @@ describe('ActivityView', () => {
     const { wrapper } = await mountView(ActivityView, { api })
     await settle()
 
-    // The only case left where a connection is genuinely needed for this screen.
     expect(textOf(wrapper)).toContain('No activity stored on this device yet')
   })
-
 })
 
 describe('StatsView', () => {
@@ -253,7 +246,6 @@ describe('StatsView', () => {
 
     const bars = wrapper.findAll('[data-testid="bar-fill"]')
     expect(bars).toHaveLength(2)
-    // The tallest bucket fills the chart; the other is proportional.
     expect(bars[0].attributes('style')).toContain('height: 100%')
     expect(bars[1].attributes('style')).toContain('height: 50%')
   })
@@ -261,10 +253,6 @@ describe('StatsView', () => {
   it('gives each bar a parent with a height to be a percentage of', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    // The bars carried a percentage height inside an auto-height list item, so it
-    // resolved against nothing and the whole chart rendered flat. jsdom does no
-    // layout, which is why the style assertion above passed while the chart was
-    // empty on screen. The column is a button now, so the chain runs through it.
     const items = wrapper.findAll('[data-testid="spend-chart"] li')
     expect(items.length).toBeGreaterThan(0)
     for (const item of items) expect(item.classes()).toContain('h-full')
@@ -301,7 +289,6 @@ describe('StatsView', () => {
   it('splits each bar by whoever paid, in their own colour', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    // January had two payers, February one.
     const bars = wrapper.findAll('[data-testid="spend-chart"] li')
     expect(bars[0].findAll('[data-testid="bar-segment"]')).toHaveLength(2)
     expect(bars[1].findAll('[data-testid="bar-segment"]')).toHaveLength(1)
@@ -323,7 +310,6 @@ describe('StatsView', () => {
   it('names the people in a key under the chart', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    // A stack of coloured blocks says nothing without one.
     const text = textOf(wrapper)
     expect(text).toContain('Alice')
     expect(text).toContain('Bob')
@@ -344,24 +330,15 @@ describe('StatsView', () => {
       }),
     })
 
-    // Rather than an empty bar: an older server, or a bucket with nothing in it.
     const segments = wrapper.findAll('[data-testid="bar-segment"]')
     expect(segments).toHaveLength(1)
     expect(segments[0].attributes('style')).toContain('height: 100%')
   })
 
-  /**
-   * Asking a bar how much, when, and who.
-   *
-   * A bar says how one stretch of time compares with the others and nothing else.
-   * The same question the pie answers, and on a phone the only way to ask is a
-   * tap, so the whole column is the target rather than the bar.
-   */
   describe('asking about a bar', () => {
     it('says nothing until a bar is asked about', async () => {
       const { wrapper } = await mountView(StatsView, { api: api() })
 
-      // A line repeating the total from the card above is furniture.
       expect(wrapper.find('[data-testid="bar-readout"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="key-amount"]').exists()).toBe(false)
     })
@@ -393,7 +370,6 @@ describe('StatsView', () => {
     it('dims whoever paid nothing in that bar', async () => {
       const { wrapper } = await mountView(StatsView, { api: api() })
 
-      // February was Alice alone.
       await wrapper.findAll('[data-testid="bar"]')[1].trigger('mouseenter')
 
       const rows = wrapper.find('[data-testid="chart-key"]').findAll('li')
@@ -437,7 +413,6 @@ describe('StatsView', () => {
       await bar.trigger('click')
       await bar.trigger('mouseleave')
 
-      // A tap is a decision, not a passing glance.
       expect(wrapper.find('[data-testid="bar-readout"]').text()).toContain('100.00')
     })
 
@@ -447,13 +422,10 @@ describe('StatsView', () => {
 
       await bars[0].trigger('mouseenter')
       await bars[0].trigger('click')
-      // What a pointer really does: it is over the second one before the click.
       await bars[0].trigger('mouseleave')
       await bars[1].trigger('mouseenter')
       await bars[1].trigger('click')
 
-      // Treating hover and click as one state made this read as clicking the one
-      // already chosen, so it cleared instead of switching.
       expect(wrapper.find('[data-testid="bar-readout"]').text()).toContain('50.00')
     })
 
@@ -485,12 +457,6 @@ describe('StatsView', () => {
     })
   })
 
-  /**
-   * The chart's axis is time, not a list of the days something happened on.
-   *
-   * Two bars side by side could otherwise be a day apart or a month, and a quiet
-   * fortnight would look exactly like a busy one.
-   */
   describe('the shape of the axis', () => {
     const daily = (overrides: Record<string, unknown> = {}) =>
       fakeApi({
@@ -524,7 +490,6 @@ describe('StatsView', () => {
     it('shows the days nothing was spent on', async () => {
       const wrapper = await atGranularity('day')
 
-      // The second and the third of January had nothing, and they are still days.
       expect(wrapper.findAll('[data-testid="bar"]')).toHaveLength(4)
       expect(wrapper.findAll('[data-testid="bar-empty"]')).toHaveLength(2)
       expect(wrapper.findAll('[data-testid="bar-fill"]')).toHaveLength(2)
@@ -533,7 +498,6 @@ describe('StatsView', () => {
     it('draws an empty day as a line on the floor, not a small bar', async () => {
       const wrapper = await atGranularity('day')
 
-      // A floor height in somebody's colour would read as a small expense.
       const empty = wrapper.find('[data-testid="bar-empty"]')
       expect(empty.classes()).toContain('h-0.5')
       expect(empty.findAll('[data-testid="bar-segment"]')).toHaveLength(0)
@@ -553,8 +517,6 @@ describe('StatsView', () => {
       const roomy = await mountView(StatsView, { api: daily() })
       expect(roomy.wrapper.find('[data-testid="spend-chart"]').classes()).toContain('gap-1')
 
-      // A daily chart of a quarter is a hundred bars, and 4px between each of them
-      // is more gap than chart.
       const busy = await atGranularity('day', fakeApi({
         '/stats': () => dashboard({
           spendOverTime: [
@@ -594,7 +556,6 @@ describe('StatsView', () => {
 
       await wrapper.findAll('[data-testid="bar"]')[0].trigger('mouseenter')
 
-      // A bar labelled by its Monday says nothing about where it ends.
       const readout = wrapper.find('[data-testid="bar-readout"]').text()
       expect(readout).toMatch(/11/)
       expect(readout).toMatch(/17/)
@@ -604,7 +565,6 @@ describe('StatsView', () => {
     it('names a month and nothing else', async () => {
       const wrapper = await atGranularity('month')
 
-      // Not "Jan 26": the year is the same for every bar beside it.
       expect(wrapper.find('[data-testid="chart-dates"]').text()).toContain('January')
       expect(wrapper.find('[data-testid="chart-dates"]').text()).not.toContain('26')
     })
@@ -613,8 +573,6 @@ describe('StatsView', () => {
   it('labels a bucket by its own calendar date, not by an instant', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    // Read as midnight UTC and rendered west of it, the first of January became
-    // the last of December: every label on a monthly chart was a month out.
     const dates = wrapper.find('[data-testid="chart-dates"]').text()
     expect(dates).toContain('Jan')
     expect(dates).toContain('Feb')
@@ -624,7 +582,6 @@ describe('StatsView', () => {
   it('puts the dates under the graph, above the names', async () => {
     const { wrapper } = await mountView(StatsView, { api: api() })
 
-    // Against the bars they belong to, rather than adrift under the key.
     const html = wrapper.html()
     const chart = html.indexOf('data-testid="spend-chart"')
     const dates = html.indexOf('data-testid="chart-dates"')
@@ -674,7 +631,6 @@ describe('StatsView', () => {
     await mountView(StatsView, { api: client })
     await settle()
 
-    // Not a total across groups nobody asked for.
     expect(client.get).toHaveBeenCalledWith(
       '/stats',
       expect.objectContaining({ groupId: GROUP_ID, granularity: 'month' }),
@@ -709,13 +665,10 @@ describe('StatsView', () => {
     })
     await settle()
 
-    // Every number here is arithmetic over rows this device already holds, so
-    // saying "stats need a connection" was refusing to add up what it had.
     const text = textOf(wrapper)
     expect(text).toContain('100.00')
     expect(text).toContain('Total')
     expect(wrapper.find('[data-testid="spend-chart"]').exists()).toBe(true)
-    // And it says it is offline, because that is worth knowing.
     expect(text).toContain('Offline')
   })
 
@@ -735,15 +688,6 @@ describe('StatsView', () => {
     expect(wrapper.find('[data-testid="spend-chart"]').exists()).toBe(false)
   })
 
-  /**
-   * Every category traced over the bars.
-   *
-   * The bars are the whole month and a category is part of it, so on one scale a
-   * line runs under the bar tops and the gap reads as everything else. It answers
-   * what neither half of the screen could on its own: the breakdown gives one
-   * number for the window, the bars give the months, and nothing said whether a
-   * category was creeping up while the total held steady.
-   */
   describe('tracing the categories over the bars', () => {
     const categories = [
       {
@@ -764,7 +708,6 @@ describe('StatsView', () => {
       },
     ]
 
-    /** Two months. Groceries held at 50; dining halved. */
     const traced = (overrides: Record<string, unknown> = {}) =>
       fakeApi({
         '/groups/group-1/categories': () => categories,
@@ -817,22 +760,12 @@ describe('StatsView', () => {
       expect(lines.map((line) => line.attributes('stroke'))).toEqual(['#16a34a', '#f97316'])
     })
 
-    /**
-     * The same scale as the bars, which is what makes a line readable as part of
-     * them: half of a full-height January is halfway up, and half of a half-height
-     * February meets the top of that bar.
-     */
     it('draws them on the bars own scale', async () => {
       const { wrapper } = await mountTraced()
 
       expect(lineFor(wrapper, 'groceries').attributes('points')).toBe('25,50 75,75')
     })
 
-    /**
-     * One stroke each, lifted by a shadow. They were drawn over a wider stroke
-     * in the card's own colour to keep them legible against a segment of the
-     * same colour, which read as a black outline around every line.
-     */
     it('draws each line on its own, lifted by a shadow rather than outlined', async () => {
       const { wrapper } = await mountTraced()
 
@@ -850,11 +783,9 @@ describe('StatsView', () => {
 
       const key = wrapper.findAll('[data-testid="category-key"]')
       expect(key.map((row) => row.text())).toEqual(['Groceries', 'Dining out'])
-      // The payers keep their own key; two rows that looked alike would read as one.
       expect(wrapper.find('[data-testid="chart-key"]').exists()).toBe(true)
     })
 
-    /** The question a bar is asked: what was this month, and what went on what. */
     it('says what each category came to in the bar being asked about', async () => {
       const { wrapper } = await mountTraced()
 
@@ -865,7 +796,6 @@ describe('StatsView', () => {
         .findAll('[data-testid="category-key-amount"]')
         .map((row) => row.text().replace(/\s+/g, ' '))
 
-      // February: 25 of its 50 on each, which is half of that month apiece.
       expect(amounts).toEqual(['$25.00 50%', '$25.00 50%'])
     })
 
@@ -925,7 +855,6 @@ describe('StatsView', () => {
         ],
       })
 
-      // Half of January, none of February.
       expect(lineFor(wrapper, '').attributes('points')).toBe('25,50 75,100')
     })
 
@@ -936,11 +865,6 @@ describe('StatsView', () => {
       expect(wrapper.find('[data-testid="chart-categories"]').exists()).toBe(false)
     })
 
-    /**
-     * A server older than this screen answers without the per-bucket breakdown.
-     * Read as zero, every line would lie flat along the floor, which reads as
-     * categories nobody spent anything on rather than an answer that never came.
-     */
     it('draws nothing when the answer has no buckets to trace through', async () => {
       const { wrapper } = await mountTraced({
         spendOverTime: [
@@ -957,14 +881,6 @@ describe('StatsView', () => {
       expect(wrapper.find('[data-testid="overlay-line"]').exists()).toBe(false)
     })
 
-    /**
-     * What the server actually sends for what nobody filed.
-     *
-     * Its serialiser leaves a null out rather than writing it, so an unfiled row
-     * arrives as an amount and no key at all - not as the key: null these tests
-     * would otherwise all use. Checked by hand against the running API once,
-     * which is exactly the kind of thing that stops being true quietly.
-     */
     it('reads a bucket that names no key for what nobody filed', async () => {
       const { wrapper } = await mountTraced({
         byCategory: [{ amount: 50, expenseCount: 1 }],
@@ -990,10 +906,6 @@ describe('StatsView', () => {
       expect(lineFor(wrapper, '').attributes('points')).toBe('25,50 75,75')
     })
 
-    /**
-     * A quiet month, with the lines on. Nothing was spent, so nothing was spent
-     * on this category either - and a share of nothing is not a division.
-     */
     it('answers for a bucket nothing happened in', async () => {
       const { wrapper } = await mountTraced({
         spendOverTime: [
@@ -1014,7 +926,6 @@ describe('StatsView', () => {
         ],
       })
 
-      // February is between the two and has nothing in it, so the chart fills it.
       const bars = wrapper.findAll('[data-testid="bar"]')
       expect(bars).toHaveLength(3)
 
@@ -1025,7 +936,6 @@ describe('StatsView', () => {
       expect(row.text().replace(/\s+/g, ' ')).toContain('$0.00 0%')
     })
 
-    /** A line between one point is nothing at all, which reads as a bug. */
     it('marks a single bucket rather than drawing nothing', async () => {
       const { wrapper } = await mountTraced({
         spendOverTime: [
@@ -1077,7 +987,6 @@ describe('ActivityView opening an expense', () => {
     const styles = rows.map((row) => row.attributes('style'))
 
     expect(styles[0]).toContain('color-mix')
-    // Two people, two colours, matching their expense cards.
     expect(styles[0]).not.toBe(styles[1])
   })
 
@@ -1090,7 +999,6 @@ describe('ActivityView opening an expense', () => {
     })
     await settle()
 
-    // A system event must not borrow somebody else's colour.
     const row = wrapper.find('[data-testid="activity-row"]')
     expect(row.attributes('style')).toBeFalsy()
     expect(row.classes()).toContain('surface-card')
@@ -1119,7 +1027,6 @@ describe('ActivityView opening an expense', () => {
     })
     await settle()
 
-    // Someone being added has no screen of its own, but the roster does.
     expect(wrapper.find('[data-testid="activity-row"]').attributes('data-linked')).toBe('true')
 
     const link = wrapper.findAllComponents(RouterLinkStub)
@@ -1140,9 +1047,6 @@ describe('ActivityView opening an expense', () => {
     const view = row.find('[data-testid="activity-view"]')
     expect(view.exists()).toBe(true)
     expect(view.text()).toBe('View')
-    // Not a button: the card is already the link, and a button inside a link is
-    // neither valid nor predictable. It is hidden from a screen reader, which is
-    // being handed the link itself.
     expect(view.element.tagName).toBe('SPAN')
     expect(view.attributes('aria-hidden')).toBe('true')
   })
@@ -1156,8 +1060,6 @@ describe('ActivityView opening an expense', () => {
     })
     await settle()
 
-    // A card that offers to show you something and then does nothing is worse
-    // than one that offers nothing.
     expect(wrapper.find('[data-testid="activity-row"]').attributes('data-linked')).toBe('false')
     expect(wrapper.find('[data-testid="activity-view"]').exists()).toBe(false)
   })

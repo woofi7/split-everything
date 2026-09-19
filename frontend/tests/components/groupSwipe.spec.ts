@@ -5,20 +5,6 @@ import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { resetDatabase } from '@/offline/db'
 
-/**
- * Swiping across the screen to change group.
- *
- * The app is on one group at a time, so moving between them is the navigation it
- * does most, and it used to cost a tap on the mark and a tap in a sheet. The
- * group being swiped to comes in with the finger: a gesture that only acted on
- * release would leave the screen dead while a finger dragged across it, with no
- * way to change your mind.
- *
- * The gesture listens on the window rather than wrapping the page, because a
- * short screen is mostly empty space and a swipe that only worked over the
- * content would look broken exactly there.
- */
-
 const group = (id: string, name: string) => ({
   id,
   name,
@@ -43,7 +29,6 @@ function withGroups(...list: ReturnType<typeof group>[]) {
   return store
 }
 
-/** The shell's page, which the gesture slides out from under the incoming one. */
 function pageElement(): HTMLElement {
   const page = document.createElement('main')
   page.setAttribute('data-app-page', '')
@@ -51,13 +36,6 @@ function pageElement(): HTMLElement {
   return page
 }
 
-/**
- * Mounted swipes, so every one of them is taken back down again.
- *
- * They listen on the window, so one left behind by an earlier test goes on
- * answering gestures in the next one - and a component left mid-drag cancels
- * every move it sees, which is exactly what these tests measure.
- */
 const mounted: VueWrapper[] = []
 
 function mountSwipe(): VueWrapper {
@@ -71,13 +49,6 @@ interface Point {
   y: number
 }
 
-/**
- * A touch, as the browser reports one.
- *
- * jsdom has no TouchEvent, so the fields the component reads are set on a plain
- * event. Dispatched on the window, because that is where the component listens,
- * which is the part worth keeping honest.
- */
 function touch(type: string, points: Point[], target: EventTarget = window): Event {
   const event = new Event(type, { bubbles: true, cancelable: type === 'touchmove' })
   const list = points.map((point) => ({ clientX: point.x, clientY: point.y }))
@@ -87,22 +58,13 @@ function touch(type: string, points: Point[], target: EventTarget = window): Eve
   return event
 }
 
-/**
- * Whether the swipe took the gesture off the browser.
- *
- * The one thing that matters about when the decision is made: a browser told a
- * move was allowed through starts scrolling and keeps scrolling for the rest of
- * the gesture, and cancelling a later move does not take that back.
- */
 function claimed(from: Point, to: Point): boolean {
   touch('touchstart', [from])
   const claim = touch('touchmove', [to]).defaultPrevented
-  // Put the finger down again, so nothing is left mid-gesture.
   touch('touchend', [to])
   return claim
 }
 
-/** A finger going across, in the stages the browser reports them in. */
 function drag(from: Point, ...path: Point[]): void {
   touch('touchstart', [from])
   for (const point of path) touch('touchmove', [point])
@@ -112,7 +74,6 @@ function release(at: Point): void {
   touch('touchend', [at])
 }
 
-/** Lets every stage of the landing animation run. */
 async function land(): Promise<void> {
   await vi.advanceTimersByTimeAsync(1000)
 }
@@ -161,8 +122,6 @@ describe('GroupSwipe', () => {
     drag({ x: 300, y: 400 }, { x: 200, y: 400 })
     await wrapper.vm.$nextTick()
 
-    // On screen while the finger is still down: this is the answer to a gesture,
-    // not a report of one.
     const peek = wrapper.find('[data-testid="swipe-peek"]')
     expect(peek.exists()).toBe(true)
     expect(peek.text()).toContain('Beta')
@@ -181,7 +140,6 @@ describe('GroupSwipe', () => {
     await wrapper.vm.$nextTick()
     const nearer = offsetOf(wrapper.find('[data-testid="swipe-peek"]').attributes('style'))
 
-    // Further across the screen means further in: the two move together.
     expect(nearer).toBeLessThan(near)
   })
 
@@ -192,8 +150,6 @@ describe('GroupSwipe', () => {
 
     drag({ x: 300, y: 400 }, { x: 200, y: 400 })
 
-    // The two pages move as one, which is what makes it a page turning rather
-    // than something sliding over the top.
     expect(page.style.transform).toBe('translateX(-100px)')
   })
 
@@ -206,7 +162,6 @@ describe('GroupSwipe', () => {
     release({ x: 280, y: 400 })
     await land()
 
-    // Changing your mind part way is the point of showing it during the gesture.
     expect(store.mainGroupId).toBe('g1')
     expect(wrapper.find('[data-testid="swipe-peek"]').exists()).toBe(false)
     expect(page.style.transform).toBe('')
@@ -222,8 +177,6 @@ describe('GroupSwipe', () => {
     release({ x: 100, y: 400 })
     await land()
 
-    // Otherwise it opens wherever the last group was being read, which is nowhere
-    // in this one. The page is what scrolls, not the window.
     expect(store.mainGroupId).toBe('g2')
     expect(page.scrollTop).toBe(0)
   })
@@ -235,14 +188,11 @@ describe('GroupSwipe', () => {
 
     drag({ x: 300, y: 400 }, { x: 200, y: 400 })
 
-    // Anchoring is right when something loads in above what you are reading, and
-    // wrong when the whole screen becomes another group's.
     expect(page.style.overflowAnchor).toBe('none')
 
     release({ x: 200, y: 400 })
     await land()
 
-    // Only for the length of the swipe.
     expect(page.style.overflowAnchor).toBe('')
   })
 
@@ -255,8 +205,6 @@ describe('GroupSwipe', () => {
     release({ x: 100, y: 400 })
     await land()
 
-    // An element that keeps a transform is what everything fixed inside it is
-    // positioned against, so the page has to be handed back as it was found.
     expect(page.style.transform).toBe('')
     expect(page.style.transition).toBe('')
     expect(wrapper.find('[data-testid="swipe-peek"]').exists()).toBe(false)
@@ -273,8 +221,6 @@ describe('GroupSwipe', () => {
     release({ x: 100, y: 400 })
     await land()
 
-    // Too slow to be a flick, but nobody drags a page four fifths of the way
-    // across by accident.
     expect(store.mainGroupId).toBe('g2')
   })
 
@@ -282,7 +228,6 @@ describe('GroupSwipe', () => {
     const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
     mountSwipe()
 
-    // A fast enough gesture reports a start and an end and nothing in between.
     touch('touchstart', [{ x: 300, y: 400 }])
     release({ x: 100, y: 400 })
     await land()
@@ -294,8 +239,6 @@ describe('GroupSwipe', () => {
     const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
     const wrapper = mountSwipe()
 
-    // The gesture it has to stay out of the way of: changing group under someone
-    // reading a list is the worst thing this could do.
     drag({ x: 300, y: 600 }, { x: 290, y: 400 }, { x: 240, y: 100 })
     release({ x: 240, y: 100 })
     await land()
@@ -308,8 +251,6 @@ describe('GroupSwipe', () => {
     const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
     mountSwipe()
 
-    // Left to the browser at the first movement, and read whole at the end it is
-    // still a scroll: 200 across against 320 down is nobody's swipe.
     drag({ x: 300, y: 600 }, { x: 295, y: 300 }, { x: 100, y: 280 })
     release({ x: 100, y: 280 })
     await land()
@@ -321,12 +262,6 @@ describe('GroupSwipe', () => {
     const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
     mountSwipe()
 
-    /*
-     * A thumb pivots at the base of the hand, so a sweep across the screen arcs,
-     * and the first report of one can be steeper than it is wide. There is no
-     * fighting the browser for it by then - but by the end it is plainly a swipe,
-     * and at that point there is nothing left to fight about.
-     */
     touch('touchstart', [{ x: 60, y: 500 }])
     expect(touch('touchmove', [{ x: 70, y: 480 }]).defaultPrevented).toBe(false)
     touch('touchmove', [{ x: 150, y: 462 }])
@@ -341,8 +276,6 @@ describe('GroupSwipe', () => {
     const store = withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
     mountSwipe()
 
-    // Left alone as a scroll, and then no touchend: the next swipe still has to
-    // work rather than being refused for the rest of the session.
     touch('touchstart', [{ x: 200, y: 600 }])
     touch('touchmove', [{ x: 202, y: 500 }])
 
@@ -398,8 +331,6 @@ describe('GroupSwipe', () => {
     document.body.appendChild(sheet)
 
     try {
-      // The picker and the icon chooser are full of things to drag past, and a
-      // gesture over a sheet belongs to the sheet.
       touch('touchstart', [{ x: 300, y: 400 }], row)
       touch('touchmove', [{ x: 200, y: 400 }], row)
       touch('touchend', [{ x: 100, y: 400 }], row)
@@ -447,7 +378,6 @@ describe('GroupSwipe', () => {
     touch('touchmove', [{ x: 380, y: 400 }])
     await wrapper.vm.$nextTick()
 
-    // Dragged back past where it started, it is the group on the other side.
     expect(wrapper.find('[data-testid="swipe-peek"]').text()).toContain('Alpha')
   })
 
@@ -460,18 +390,9 @@ describe('GroupSwipe', () => {
     release({ x: 100, y: 400 })
     await land()
 
-    // A window listener outlives its component unless it is taken back down.
     expect(store.mainGroupId).toBe('g1')
   })
 
-  /**
-   * Which of the two gestures this is, decided on the first movement.
-   *
-   * A thumb pivots at the base of the hand, so a sweep across the screen arcs as
-   * it goes. That arc was being scrolled: the page ran up under the finger, and a
-   * phone answers a page running up by hiding its toolbar, which drops everything
-   * fixed to the bottom of the window - the tab bar included.
-   */
   describe('deciding between a swipe and a scroll', () => {
     beforeEach(() => {
       withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
@@ -484,8 +405,6 @@ describe('GroupSwipe', () => {
     })
 
     it('takes a thumb sweeping right, arc and all', () => {
-      // Left to right with the arc that comes with it: the case that was being
-      // scrolled instead of swiped.
       expect(claimed({ x: 60, y: 500 }, { x: 80, y: 486 })).toBe(true)
     })
 
@@ -494,8 +413,6 @@ describe('GroupSwipe', () => {
     })
 
     it('leaves a movement too small to read alone', () => {
-      // Nothing is claimed and nothing is cancelled until there is something to
-      // go on, and a few pixels is not enough to tell the two apart.
       expect(claimed({ x: 200, y: 400 }, { x: 204, y: 402 })).toBe(false)
     })
 
@@ -510,14 +427,10 @@ describe('GroupSwipe', () => {
       touch('touchstart', [{ x: 200, y: 600 }])
       touch('touchmove', [{ x: 202, y: 560 }])
 
-      // The browser is already scrolling by now, and it will not stop.
       expect(touch('touchmove', [{ x: 100, y: 555 }]).defaultPrevented).toBe(false)
     })
   })
 
-  /**
-   * Someone who has asked their phone for less motion.
-   */
   describe('with less motion asked for', () => {
     let matchMedia: typeof window.matchMedia
 
@@ -554,14 +467,11 @@ describe('GroupSwipe', () => {
       withGroups(group('g1', 'Alpha'), group('g2', 'Beta'))
       mountSwipe()
 
-      // The reason to claim it even with nothing to show: otherwise the page runs
-      // about under the finger, which is the thing being fixed.
       expect(claimed({ x: 300, y: 400 }, { x: 280, y: 402 })).toBe(true)
     })
   })
 })
 
-/** The pixels in a `translateX(...)` transform, whichever way it is written. */
 function offsetOf(style: string | undefined): number {
   const match = /translateX\((-?[\d.]+)px\)/.exec(style ?? '')
   expect(match).not.toBeNull()

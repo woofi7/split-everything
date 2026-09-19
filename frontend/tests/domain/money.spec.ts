@@ -66,7 +66,6 @@ describe('formatting', () => {
   })
 
   it('distinguishes a foreign currency from the local one', () => {
-    // A EUR expense in a CAD group has to be visibly foreign in a list.
     expect(formatMoney(10, 'EUR')).not.toBe(formatMoney(10, 'CAD'))
   })
 
@@ -75,7 +74,6 @@ describe('formatting', () => {
   })
 
   it('falls back to a plain rendering for a malformed code', () => {
-    // Intl throws on anything that is not three letters; a list must still render.
     expect(formatMoney(10, 'Z')).toBe('10.00 Z')
   })
 

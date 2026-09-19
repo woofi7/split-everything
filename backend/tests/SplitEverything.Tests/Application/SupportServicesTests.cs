@@ -124,7 +124,6 @@ public class RecurringExpenseServiceTests(PostgresFixture fixture) : ServiceTest
         var (userId, group, alice, bob) = await SetupAsync();
         await Recurring.CreateAsync(userId, Rule(group.Id, alice, [alice, bob]));
 
-        // Nothing ran between January and April.
         var created = await Recurring.RunDueAsync(TestData.Jan1.AddMonths(3));
 
         created.ShouldBe(4);
@@ -388,7 +387,6 @@ public class ReceiptServiceTests(PostgresFixture fixture) : ServiceTestBase(fixt
     [Fact]
     public async Task A_storage_key_cannot_escape_the_root()
     {
-        // A traversal key would otherwise read arbitrary files off the host.
         await Should.ThrowAsync<ValidationException>(
             () => Storage.OpenAsync("../../etc/passwd"));
     }
@@ -411,7 +409,6 @@ public class NotificationServiceTests(PostgresFixture fixture) : ServiceTestBase
 {
     private static readonly PushOptions Options = new()
     {
-        // Real key shapes: the service will not serve a public key that is not one.
         VapidPublicKey = "BDLIpARp5poJEsnhCHwluND9bDbYwZX2nMc3rKpQbPAjRDnLFQUFKyr3av2mffIbsNoWZc0D7UL6kQjxBwcIwTw",
         VapidPrivateKey = "93k0NC3nAZW-tPWQlgUFPUqTMxIvKKGoFPRPBRFbNBg",
         VapidSubject = "mailto:owner@example.com"
@@ -525,9 +522,6 @@ public class NotificationServiceTests(PostgresFixture fixture) : ServiceTestBase
     [Fact]
     public void A_configured_value_that_is_not_a_key_is_not_served_as_one()
     {
-        // What a deployment actually did: the contact address in the public key's
-        // slot. Served, it gets as far as the browser and fails inside atob, which
-        // names neither the setting nor the server.
         var wrong = new NotificationService(
             Db, new PushOptions { VapidPublicKey = "mailto:someone@example.com" }, Clock);
 
@@ -710,7 +704,6 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
         var first = new StubHttpHandler("""{"amount":1,"base":"EUR","date":"2026-08-31","rates":{"CAD":1.48}}""");
         await Create(first).ConvertAsync(100m, "EUR", "CAD");
 
-        // Two days later the service is down: an old rate beats refusing the expense.
         var offline = new StubHttpHandler(string.Empty, HttpStatusCode.ServiceUnavailable);
         var later = new FrankfurterCurrencyConverter(
             new HttpClient(offline) { BaseAddress = new Uri("https://api.frankfurter.dev/") },
@@ -752,7 +745,6 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
             () => Create(new StubHttpHandler("{}")).ConvertAsync(10m, "EUROS", "CAD"));
 }
 
-/// <summary>Canned HTTP responses, so the currency tests never touch the network.</summary>
 public sealed class StubHttpHandler(string body, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
 {
     public int CallCount { get; private set; }

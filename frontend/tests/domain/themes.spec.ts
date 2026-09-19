@@ -8,22 +8,12 @@ import {
   resolveAccent,
 } from '@/domain/themes'
 
-/**
- * The accent colours the whole application can wear.
- *
- * One name stands for three shades, because that is what the brand tokens are: a
- * light tint, a middle, and a fill. The names have to match the server's list,
- * which is the authority on what may be stored.
- */
-
 describe('the accent themes', () => {
   it('offers eight', () => {
     expect(ACCENT_THEMES).toHaveLength(8)
   })
 
   it('matches the names the server will accept', () => {
-    // AppThemes.Names, in the same order. A name this client offers and the server
-    // refuses is a colour that cannot be saved.
     expect(ACCENT_THEMES.map((theme) => theme.name)).toEqual([
       'indigo',
       'violet',
@@ -57,8 +47,6 @@ describe('the accent themes', () => {
   })
 
   it('defaults to the indigo the stylesheet is written in', () => {
-    // The tokens in main.css: an account with no preference must look exactly as
-    // it did before there were themes at all.
     expect(DEFAULT_ACCENT).toBe('indigo')
     expect(resolveAccent(null).shades).toEqual(['#818cf8', '#6366f1', '#4f46e5'])
   })
@@ -75,16 +63,10 @@ describe('the accent themes', () => {
   })
 
   it('falls back rather than leaving the app with no accent', () => {
-    // An older client meeting a newer server's name, or a value hand-edited into
-    // storage: better the default than every button losing its colour.
     expect(resolveAccent('chartreuse').name).toBe('indigo')
     expect(resolveAccent(undefined).name).toBe('indigo')
   })
 
-  /**
-   * The colour that stands for a group, which is one answer used in three places:
-   * the mark in the corner, the picker, and the settings screen.
-   */
   describe('the colour of a group', () => {
     it('is the accent the group wears, where it has one', () => {
       expect(groupColor({ themeName: 'teal', colorHex: '#4f46e5' })).toBe(
@@ -104,8 +86,6 @@ describe('the accent themes', () => {
     })
 
     it('ignores a name this client does not have', () => {
-      // An older client meeting a newer server's name. The group's stored colour
-      // is still a colour, so the mark keeps it.
       expect(groupColor({ themeName: 'chartreuse', colorHex: '#f97316' })).toBe('#f97316')
     })
   })

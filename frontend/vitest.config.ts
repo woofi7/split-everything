@@ -7,9 +7,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      // The PWA plugin generates this module at build time, so nothing here can
-      // resolve it. The stub also gives a test the only handle on "a new version
-      // is waiting", which is otherwise the plugin's own business.
       'virtual:pwa-register': fileURLToPath(
         new URL('./tests/support/pwaRegister.ts', import.meta.url),
       ),
@@ -17,15 +14,6 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    // Vite inlines import.meta.env.VITE_* at transform time, so a value has to be
-    // present here for the configured branch of src/api/config.ts to be reachable.
-    //
-    // The timezone is pinned for the same kind of reason: the app decides what
-    // "today" is from the device's own clock, and a suite that runs in UTC on a
-    // build machine and in Eastern time on a laptop cannot say whether that is
-    // right. Eastern, because that is where this is used and because it is behind
-    // UTC - an evening there is already tomorrow in UTC, which is the case that
-    // was wrong.
     env: { VITE_API_BASE_URL: '/api', TZ: 'America/Toronto' },
     globals: true,
     setupFiles: ['tests/setup.ts'],
@@ -36,26 +24,14 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       include: ['src/**/*.{ts,vue}'],
       exclude: [
-        // Wiring, not logic: main.ts constructs the app and App.vue only mounts the
-        // router and reacts to connectivity events. Both are covered end to end by
-        // the API integration tests on the server side.
         'src/main.ts',
         'src/App.vue',
-        // Worker scopes jsdom does not provide. The logic they call is tested
-        // directly: the statement parsers, the review session and the categoriser
-        // all have their own suites, and the worker message protocol is covered
-        // through the client.
         'src/service-worker.ts',
         'src/workers/**',
-        // Registration paths that only exist inside a Capacitor shell or a real
-        // service worker; the pure part, VAPID key decoding, is tested.
         'src/native/push.ts',
         'src/**/*.d.ts',
       ],
       thresholds: {
-        // Everything that decides anything - money, splits, clocks, balances, the
-        // offline engine, the importers, the stores and the HTTP client - is held
-        // to a high bar. These are the numbers that matter for correctness.
         lines: 85,
         functions: 85,
         branches: 80,

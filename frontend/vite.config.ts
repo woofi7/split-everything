@@ -10,8 +10,6 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
-      // The service worker is written by hand: it has to handle Web Push and the
-      // offline shell, neither of which the generated worker covers.
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'service-worker.ts',
@@ -22,9 +20,6 @@ export default defineConfig({
         name: 'Split Everything',
         short_name: 'Split',
         description: 'Shared expenses, settled properly.',
-        // The default accent's page colour, so the splash screen is not a different
-        // app from the one that opens. Baked at build time, so it cannot follow the
-        // accent the way the document's own theme-color does.
         theme_color: '#1b006f',
         background_color: '#1b006f',
         display: 'standalone',
@@ -44,17 +39,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // The dev server binds every interface so a phone on the same network can
-    // reach it. That lives on the dev script as --host, not here: Vite 8.2.2
-    // ignores server.host from the config file, and a setting that looks applied
-    // but is not is worse than none.
-    //
-    // Only this port is exposed. The API stays on localhost and is reached
-    // through the proxy below, from this machine.
     proxy: {
-      // xfwd passes the caller's address on, so the API's rate limits count a
-      // phone on the network as itself rather than counting every device that
-      // comes through this proxy as one caller.
       '/api': { target: 'http://localhost:5080', changeOrigin: true, xfwd: true },
       '/hubs': { target: 'http://localhost:5080', ws: true, changeOrigin: true, xfwd: true },
     },

@@ -14,10 +14,6 @@ namespace SplitEverything.Infrastructure;
 
 public static class DependencyInjection
 {
-    /// <summary>
-    /// One registration point for everything below the API, so the test host and
-    /// the real host cannot drift apart on wiring.
-    /// </summary>
     public static IServiceCollection AddSplitEverythingInfrastructure(
         this IServiceCollection services, IConfiguration configuration)
     {
@@ -56,7 +52,6 @@ public static class DependencyInjection
         services.AddScoped<IRecurringExpenseService, RecurringExpenseService>();
         services.AddScoped<IReceiptService, ReceiptService>();
 
-        // Local disk today, behind the interface so S3 or MinIO is a swap here.
         services.AddScoped<IReceiptStorage, LocalDiskReceiptStorage>();
 
         services.AddHttpClient<ICurrencyConverter, FrankfurterCurrencyConverter>(client =>
@@ -75,10 +70,6 @@ public static class DependencyInjection
         services.AddScoped<IPushSender>(sp => sp.GetRequiredService<FcmPushSender>());
         services.AddScoped<IPushSender>(sp => sp.GetRequiredService<ApnsPushSender>());
 
-        // No mail is sent from here: an invite is a link and a QR code, and running
-        // an SMTP server for that is more moving parts than the feature is worth.
-        // The body still goes to the log, so it can be copied out of a self-hosted
-        // install rather than vanishing.
         services.AddScoped<IEmailSender, LoggingEmailSender>();
 
         return services;

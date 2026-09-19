@@ -11,7 +11,6 @@ const expense = (payer: string, amount: number, splits: Array<[string, number]>)
   splits: splits.map(([memberId, share]) => ({ memberId, amount: share })),
 })
 
-/** An expense several people paid for at once. */
 const sharedExpense = (payers: Array<[string, number]>, splits: Array<[string, number]>) => ({
   payers: payers.map(([memberId, amount]) => ({ memberId, amount })),
   splits: splits.map(([memberId, share]) => ({ memberId, amount: share })),
@@ -179,7 +178,6 @@ describe('simplified debts offline', () => {
 
 describe('expenses several people paid for', () => {
   it('credits each payer what they put in', () => {
-    // The frying pans: 40 from one, 25 from the other, split evenly down the middle.
     const balances = netBalances(
       [a, b],
       [sharedExpense([[a, 40], [b, 25]], [[a, 32.5], [b, 32.5]])],

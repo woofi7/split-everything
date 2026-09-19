@@ -36,13 +36,6 @@ describe('GroupSettingsView', () => {
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Roommates')
   })
 
-  /**
-   * One save for the whole screen.
-   *
-   * The name, the icon and the default split are settings: edited and then kept,
-   * so they are saved together, once, in one request. Adding a person, changing a
-   * colour and creating an invite are actions, and stay immediate.
-   */
   describe('saving the settings', () => {
     it('offers nothing while nothing has changed', async () => {
       const { wrapper } = await mountView(GroupSettingsView, { api: api() })
@@ -67,8 +60,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('input[type="text"]').setValue('Flatmates')
       await settle(1)
 
-      // The settings it covers run down a long page, and a button that has
-      // scrolled away cannot answer "I changed something".
       const bar = wrapper.find('[data-testid="save-bar"]')
       expect(bar.classes()).toContain('fixed')
       expect(bar.classes()).toContain('right-4')
@@ -85,8 +76,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle()
 
-      // One PATCH: the group's fields and how it splits are the same endpoint, so
-      // there is no reason for two round trips or for one to succeed alone.
       expect(client.patch).toHaveBeenCalledTimes(1)
       expect(client.patch).toHaveBeenCalledWith(
         `/groups/${GROUP_ID}`,
@@ -94,14 +83,6 @@ describe('GroupSettingsView', () => {
       )
     })
 
-    /**
-     * The group's colour.
-     *
-     * Set on the group, so everyone in it sees the same one, and worn by the whole
-     * app while that group is the one being looked at. Which is why it can be
-     * unset: a group with no colour of its own leaves each person's own account
-     * colour alone.
-     */
     describe('the group colour', () => {
       it('saves the colour with the rest of the settings', async () => {
         const client = api()
@@ -142,8 +123,6 @@ describe('GroupSettingsView', () => {
         await wrapper.find('[data-testid="save-settings"]').trigger('click')
         await settle()
 
-        // Null, which the store sends as the empty string the server reads as a
-        // clear rather than as "leave it alone".
         expect(client.patch).toHaveBeenCalledWith(
           `/groups/${GROUP_ID}`,
           expect.objectContaining({ themeName: '' }),
@@ -168,8 +147,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle()
 
-      // The fake echoes the group back unchanged, so this also pins that the bar
-      // follows the group rather than a flag of its own.
       expect(textOf(wrapper)).toContain('Saved')
     })
 
@@ -252,7 +229,6 @@ describe('GroupSettingsView', () => {
     await wrapper.find('[data-icon="car"]').trigger('click')
     await settle()
 
-    // One save for the whole screen, so nothing on it commits on its own.
     expect(client.patch).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="save-settings"]').exists()).toBe(true)
 
@@ -308,7 +284,6 @@ describe('GroupSettingsView', () => {
   it('does not offer to remove the owner', async () => {
     const { wrapper } = await mountView(GroupSettingsView, { api: api() })
 
-    // Removing the last owner would leave the group unmanageable.
     expect(wrapper.findAll('button').filter((b) => b.text() === 'Remove')).toHaveLength(1)
   })
 
@@ -380,7 +355,6 @@ describe('GroupSettingsView', () => {
     await wrapper.find('[data-testid="candidate"]').trigger('click')
     await settle()
 
-    // A real membership, not a placeholder that has to be claimed later.
     expect(client.post).toHaveBeenCalledWith(
       `/groups/${GROUP_ID}/members/user`,
       { userId: 'user-bob' },
@@ -399,8 +373,6 @@ describe('GroupSettingsView', () => {
   })
 
   it('marks you by membership rather than by name', async () => {
-    // Names repeat: a group can hold two people called Nicolas, and only one of
-    // them is the one reading the list.
     const twoAlices = {
       ...testGroup(),
       members: [
@@ -418,7 +390,6 @@ describe('GroupSettingsView', () => {
       .findAll('li')
       .filter((row) => row.find('[data-testid="you-tag"]').exists())
 
-    // Exactly one: matching on the name would have tagged both.
     expect(tagged).toHaveLength(1)
   })
 
@@ -432,7 +403,6 @@ describe('GroupSettingsView', () => {
     })
 
     const row = wrapper.findAll('li').find((li) => li.text().includes('Bob'))!
-    // Both notes at once read as a puzzle. Removed is the fact that matters.
     expect(row.text()).toContain('(removed)')
     expect(row.text()).not.toContain('not signed in yet')
   })
@@ -443,8 +413,6 @@ describe('GroupSettingsView', () => {
     const rows = wrapper.findAll('li')
     const owner = rows.find((row) => row.find('[data-testid="owner-tag"]').exists())
 
-    // The one person no merge or removal can take out of the group, and the only
-    // one who can do either.
     expect(owner).toBeDefined()
     expect(owner!.text()).toContain('Alice')
   })
@@ -463,8 +431,6 @@ describe('GroupSettingsView', () => {
     await wrapper.find('input[type="search"]').setValue('Dave')
     await settle()
 
-    // An invite link is the only other way in, and the person accepts it
-    // themselves, so the group never holds someone who cannot open it.
     expect(wrapper.find('[data-testid="add-placeholder"]').exists()).toBe(false)
     expect(client.post).not.toHaveBeenCalledWith(
       `/groups/${GROUP_ID}/members`,
@@ -473,8 +439,6 @@ describe('GroupSettingsView', () => {
   })
 
   it('does not offer people already in the group', async () => {
-    // The server filters them out; this pins that the view asks per group rather
-    // than for a global directory.
     const client = api({ '/users/addable': () => [] })
 
     await mountView(GroupSettingsView, { api: client })
@@ -520,8 +484,6 @@ describe('GroupSettingsView', () => {
     await wrapper.findAll('button').find((b) => b.text() === 'Invite')!.trigger('click')
     await settle()
 
-    // The clipboard API needs a secure context, so the link has to be readable
-    // on its own or a plain HTTP session cannot share an invite at all.
     expect(textOf(wrapper)).toContain('https://split.test/join/plain-token')
     vi.unstubAllGlobals()
   })
@@ -641,20 +603,7 @@ describe('GroupSettingsView', () => {
     expect(textOf(wrapper)).toContain('archived')
   })
 
-  /**
-   * Folding two people into one.
-   *
-   * The same person can be in a group twice: a name a CSV import invented, and
-   * the account they later signed up with. Both halves carry expenses, so neither
-   * can just be deleted.
-   *
-   * One action asking for a pair, rather than something done to a row: who goes
-   * and who inherits reads as one sentence, which is what makes it hard to get
-   * backwards. Everything still works afterwards, which is exactly why a mistake
-   * is invisible, so the warning is part of the feature.
-   */
   describe('merging two people', () => {
-    /** A group holding one person twice, which is what a merge is for. */
     function twiceOver() {
       const group = testGroup()
       group.members = [
@@ -686,7 +635,6 @@ describe('GroupSettingsView', () => {
       const { wrapper } = await mountView(GroupSettingsView, { api: api() })
 
       const button = wrapper.find('[data-testid="merge-open"]')
-      // Icon only, so the name has to be carried for anyone who cannot see it.
       expect(button.text()).toBe('')
       expect(button.attributes('aria-label')).toBe('Merge two people')
       expect(button.attributes('title')).toBe('Merge two people')
@@ -736,7 +684,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
       await settle(1)
 
-      // One of the two is not a merge.
       expect(wrapper.find('[data-testid="merge-confirm-button"]').attributes('disabled'))
         .toBeDefined()
     })
@@ -744,8 +691,6 @@ describe('GroupSettingsView', () => {
     it('offers a removed member as the one to merge away', async () => {
       const { wrapper } = await openMerge()
 
-      // Removing a member deactivates it rather than deleting it, because it
-      // still holds expenses. That leftover is the most likely thing to merge.
       const options = wrapper
         .findAll('[data-testid="merge-source"] option')
         .map((option) => option.attributes('value'))
@@ -760,7 +705,6 @@ describe('GroupSettingsView', () => {
         .findAll('[data-testid="merge-source"] option')
         .map((option) => option.text())
 
-      // Both are called Emma. Without this the list is two identical rows.
       expect(labels.some((label) => label.includes('Emma (removed)'))).toBe(true)
     })
 
@@ -771,8 +715,6 @@ describe('GroupSettingsView', () => {
         .findAll('[data-testid="merge-target"] option')
         .map((option) => option.attributes('value'))
 
-      // Everything ends up on the target, so a member nobody can see would put
-      // the history out of sight.
       expect(options).not.toContain(BOB)
     })
 
@@ -836,12 +778,8 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
 
-      // At the foot of the section it read as nothing having happened at all, and
-      // the foot of a section is somewhere nobody was looking.
       expect(saidOnScreen().join(' ')).toContain('cannot be merged away')
 
-      // And still open, with both choices as they were: a refusal is not a reason
-      // to make somebody pick the two people again.
       expect(wrapper.find('[data-testid="merge-confirm"]').exists()).toBe(true)
     })
 
@@ -856,8 +794,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
 
-      // The same refusal twice is one problem. Two identical cards say no more
-      // than one, and the second would push something else off the screen.
       expect(saidOnScreen().filter((said) => said.includes('cannot be merged away')))
         .toHaveLength(1)
     })
@@ -873,8 +809,6 @@ describe('GroupSettingsView', () => {
         groups: [group],
       })
 
-      // It rewrites everyone's balances, so the server allows only an owner or an
-      // admin. Offering the button anyway would end in a refusal.
       expect(wrapper.find('[data-testid="merge-open"]').exists()).toBe(false)
     })
 
@@ -891,13 +825,6 @@ describe('GroupSettingsView', () => {
     })
   })
 
-  /**
-   * How the group splits an expense by default.
-   *
-   * A fact about the household rather than about one expense, so it belongs on the
-   * group's own screen. It was only settable as a side effect of adding an
-   * expense, which meant you could not see what it was.
-   */
   describe('how a new expense is split', () => {
     it('shows the setting the group already has', async () => {
       const shared = testGroup({ defaultSplitType: 'Shares' })
@@ -930,7 +857,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="split-Percentage"]').setValue(true)
       await settle(1)
 
-      // Blank boxes make the person do arithmetic the app already knows.
       const values = wrapper.findAll('input[type="number"]').map((input) => (input.element as HTMLInputElement).value)
       expect(values).toHaveLength(2)
       expect(values.every((value) => value === '50')).toBe(true)
@@ -946,7 +872,6 @@ describe('GroupSettingsView', () => {
       await settle(1)
 
       expect(textOf(wrapper)).toContain('not 100')
-      // The one save refuses while any setting on the screen is wrong.
       expect(wrapper.find('[data-testid="save-settings"]').attributes('disabled')).toBeDefined()
     })
 
@@ -972,7 +897,6 @@ describe('GroupSettingsView', () => {
     })
 
     it('clears the values when going back to equal', async () => {
-      // A group that already splits by shares, so choosing equal is a change.
       const shared = testGroup({ defaultSplitType: 'Shares' })
       shared.defaultSplitValues = { [ALICE]: 2, [BOB]: 1 }
       const client = fakeApi({ '/groups': () => shared })
@@ -1002,7 +926,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="split-Equal"]').setValue(true)
       await settle(1)
 
-      // Back where it started, so there is nothing to save and no button offering.
       expect(wrapper.find('[data-testid="save-settings"]').exists()).toBe(false)
     })
 
@@ -1018,8 +941,6 @@ describe('GroupSettingsView', () => {
       })
       await settle()
 
-      // The server allows only an owner or an admin, so the control would end in a
-      // refusal. The setting is still shown, because knowing it is not a privilege.
       expect(wrapper.find('[data-testid="save-split"]').exists()).toBe(false)
       expect(textOf(wrapper)).toContain('Only an owner or an admin')
       expect(wrapper.find('[data-testid="split-Equal"]').attributes('disabled')).toBeDefined()
@@ -1034,8 +955,6 @@ describe('GroupSettingsView', () => {
       })
       await settle()
 
-      // An exact amount is a fact about one expense, so it is not offered as a
-      // standing rule, but a group already on it is not quietly rewritten.
       expect(textOf(wrapper)).toContain('Currently set to ExactAmount')
     })
 
@@ -1054,13 +973,6 @@ describe('GroupSettingsView', () => {
     })
   })
 
-  /**
-   * The categories, and the expenses that were here before them.
-   *
-   * Adding a keyword files nothing that already exists, so the way to catch the
-   * backlog up sits next to the box the keyword was just typed into - which is
-   * the only place the thought occurs.
-   */
   it('offers a way to file the expenses that came before the categories', async () => {
     const { wrapper } = await mountView(GroupSettingsView, { api: api() })
     await settle()
@@ -1075,19 +987,7 @@ describe('GroupSettingsView', () => {
     expect(link.props('to')).toEqual({ name: 'file-expenses', params: { groupId: GROUP_ID } })
   })
 
-  /**
-   * A member's colour, which belongs to the group.
-   *
-   * It is what the expense cards, the balances and the charts all draw with, so
-   * seeing it and changing it belongs where the group is described.
-   */
   describe('names to leave out of the highlights', () => {
-    /**
-     * Opens the section, the way a person does.
-     *
-     * It starts closed now: a list of patterns, a list of categories and a list of
-     * people on one screen buried everything under them.
-     */
     async function openNames(wrapper: { find: (selector: string) => { trigger: (event: string) => Promise<void> } }) {
       await wrapper.find('[data-testid="ignored-names-toggle"]').trigger('click')
       await settle()
@@ -1128,8 +1028,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="pattern-input"]').setValue('Loyer')
       await settle()
 
-      // A pattern that matches nothing is almost always a typo, and seeing the
-      // count is what turns this box from a guess into a decision.
       expect(wrapper.find('[data-testid="pattern-matches"]').text()).toContain('2 expenses')
     })
 
@@ -1150,7 +1048,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="pattern-input"]').setValue('Loyer*')
       await settle()
 
-      // Only the one that starts with it: "Paiement loyer" does not.
       expect(wrapper.find('[data-testid="pattern-matches"]').text()).toContain('1 expense')
     })
 
@@ -1177,14 +1074,6 @@ describe('GroupSettingsView', () => {
       )
     })
 
-    /**
-     * Who gets to decide.
-     *
-     * Everything else on this screen is an admin's: how costs are divided, who is
-     * in the group, what it is called. This changes what a total reads and not a
-     * penny of what anybody owes, and the person who notices that the rent is
-     * drowning out the month is rarely the one holding the owner's account.
-     */
     it('lets an ordinary member set them, and save', async () => {
       const shared = testGroup()
       shared.members = shared.members.map((member) =>
@@ -1204,8 +1093,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="pattern-input"]').setValue('Loyer')
       await settle()
 
-      // The bar used to be an admin's too, so a member could type a pattern and
-      // then find nothing to press.
       expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(true)
 
       await wrapper.find('[data-testid="save-settings"]').trigger('click')
@@ -1215,7 +1102,6 @@ describe('GroupSettingsView', () => {
         expect.stringContaining('/ignored-names'),
         { patterns: ['Loyer'] },
       )
-      // And nothing else about the group, which is still not theirs to change.
       expect(client.patch).not.toHaveBeenCalled()
     })
 
@@ -1231,15 +1117,12 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="add-pattern"]').trigger('click')
       await settle()
 
-      // An empty row is somebody who has not typed yet, not a pattern that matches
-      // everything - which is what saving it as "" would come to.
       expect(wrapper.find('[data-testid="save-settings"]').exists()).toBe(false)
       expect(patch).not.toHaveBeenCalled()
     })
   })
 
   describe('a member colour', () => {
-    /** A group whose colours the server has stored. */
     function coloured() {
       const group = testGroup()
       group.members = [
@@ -1284,7 +1167,6 @@ describe('GroupSettingsView', () => {
       await wrapper.find('[data-testid="colour-14b8a6"]').trigger('click')
       await settle()
 
-      // Nothing on this screen commits on its own, a colour included.
       expect(client.patch).not.toHaveBeenCalled()
       expect(wrapper.find(`[data-testid="recolour-${ALICE}"]`).attributes('style'))
         .toContain('rgb(20, 184, 166)')
@@ -1308,7 +1190,6 @@ describe('GroupSettingsView', () => {
     it('stops being a change when the stored colour is picked again', async () => {
       const { wrapper } = await open(ALICE)
 
-      // Alice already holds indigo in this group.
       await wrapper.find('[data-testid="colour-6366f1"]').trigger('click')
       await settle(1)
 
@@ -1318,12 +1199,9 @@ describe('GroupSettingsView', () => {
     it('shows the swap before it is saved', async () => {
       const { wrapper } = await open(ALICE)
 
-      // Bob holds orange in this fixture; Alice holds indigo.
       await wrapper.find('[data-testid="colour-f97316"]').trigger('click')
       await settle(1)
 
-      // Two people the same colour, even for a moment, is the one thing this is
-      // meant to prevent.
       expect(wrapper.find(`[data-testid="recolour-${ALICE}"]`).attributes('style'))
         .toContain('rgb(249, 115, 22)')
       expect(wrapper.find(`[data-testid="recolour-${BOB}"]`).attributes('style'))
@@ -1351,7 +1229,6 @@ describe('GroupSettingsView', () => {
     it('says what happens to a colour someone else has', async () => {
       const { wrapper } = await open(ALICE)
 
-      // Swapped rather than refused, and worth saying before the tap.
       expect(textOf(wrapper)).toContain('swaps the two')
     })
 
@@ -1380,7 +1257,6 @@ describe('GroupSettingsView', () => {
       })
       await settle()
 
-      // ALICE is the signed-in member in the harness; BOB is somebody else.
       expect(wrapper.find(`[data-testid="recolour-${ALICE}"]`).attributes('disabled'))
         .toBeUndefined()
       expect(wrapper.find(`[data-testid="recolour-${BOB}"]`).attributes('disabled'))

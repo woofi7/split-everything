@@ -1,37 +1,16 @@
-/**
- * The stats screen, computed from the local replica.
- *
- * The endpoint that normally answers this needs a connection, and the screen used
- * to say so and show nothing: "Stats need a connection" on a device holding every
- * expense it was about. Everything the chart and the tables show is arithmetic over
- * rows this device already has, so it is done here instead, and the server's answer
- * - which can also convert between currencies - replaces it when one arrives.
- *
- * The rules mirror StatsService deliberately, down to the order of the payers in a
- * bucket and where the rounding residue lands, so the same spending does not read
- * differently depending on whether the request got through.
- */
 import { bucketOf, type Granularity } from '@/domain/buckets'
 import { roundMoney } from '@/domain/money'
 
 export interface LocalStatsExpense {
   groupId: string
   paidByMemberId: string
-  /** What it was filed under, or null for one nobody filed. */
   categoryKey?: string | null
   amountInBaseCurrency: number
   spentAt: string
   splits: readonly { memberId: string; amountInBaseCurrency: number }[]
-  /** Who put money in. Absent on a row saved before the app knew about several. */
   payers?: readonly { memberId: string; amountInBaseCurrency: number }[]
 }
 
-/**
- * Who paid an expense, however the row was stored.
- *
- * The same fallback the balances use: an expense from an older build names one
- * payer and no contributions, and that member paid the whole amount.
- */
 function payersOf(
   expense: LocalStatsExpense,
 ): readonly { memberId: string; amountInBaseCurrency: number }[] {
@@ -49,7 +28,6 @@ export interface LocalStatsSettlement {
 export interface LocalStatsInput {
   currency: string
   granularity: Granularity
-  /** The memberships that are this person, across the groups in scope. */
   myMemberIds: readonly string[]
   members: readonly { id: string; displayName: string }[]
   expenses: readonly LocalStatsExpense[]
@@ -62,7 +40,6 @@ export interface LocalSpendPointMember {
   amount: number
 }
 
-/** What one category came to inside one bucket, for the line over the bars. */
 export interface LocalSpendPointCategory {
   key: string | null
   amount: number
@@ -73,7 +50,6 @@ export interface LocalSpendPoint {
   amount: number
   expenseCount: number
   byMember: LocalSpendPointMember[]
-  /** The same bucket cut by what it went on rather than by who paid. */
   byCategory: LocalSpendPointCategory[]
 }
 
@@ -140,14 +116,6 @@ export function computeStats(input: LocalStatsInput): LocalStats {
   }
 }
 
-/**
- * Where the money went, largest first.
- *
- * The same shape and the same order the server answers with, down to keeping the
- * unfiled expenses in the list rather than dropping them: the two answers replace
- * each other on one screen, and a figure that moves when the network arrives is a
- * figure nobody trusts.
- */
 function byCategory(
   expenses: readonly LocalStatsExpense[],
   round: (amount: number) => number,
@@ -172,14 +140,6 @@ function byCategory(
     )
 }
 
-/**
- * What one bucket went on.
- *
- * The same rules as the payer split beside it, and for the same reason: the chart
- * draws one of these as a line against the bar's own height, so a category that
- * was the whole bucket has to reach the top of it rather than stopping a cent
- * short.
- */
 function categoriesIn(
   inBucket: readonly LocalStatsExpense[],
   total: number,
@@ -245,15 +205,8 @@ function spendOverTime(
           amount: round(amount),
         }))
         .filter((payer) => payer.amount !== 0)
-        // Largest first, so a stack does not reshuffle its colours from one bucket
-        // to the next.
         .sort((left, right) => right.amount - left.amount || left.memberName.localeCompare(right.memberName))
 
-      /*
-       * Rounding each share on its own can leave the parts a cent off the whole, and
-       * a stacked bar whose parts do not sum to its total is a lie about both. The
-       * largest share absorbs it, as everywhere else in this app.
-       */
       const residue = round(total - payers.reduce((sum, payer) => sum + payer.amount, 0))
       if (residue !== 0 && payers.length > 0) {
         payers[0] = { ...payers[0], amount: round(payers[0].amount + residue) }
@@ -305,8 +258,6 @@ function byMember(
         net: round(paid - owed + settledOut - settledIn),
       }
     })
-    // Somebody who has neither paid nor owed anything is not in this table: an
-    // empty row per placeholder member is noise, not information.
     .filter((row) => row.paid !== 0 || row.owed !== 0 || row.net !== 0)
     .sort((left, right) => right.paid - left.paid)
 }

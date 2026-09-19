@@ -3,23 +3,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { resetDatabase } from '@/offline/db'
 
-/**
- * Coming back to a device that already knows who you are.
- *
- * The browser holds the refresh token in an httpOnly cookie for thirty days,
- * which the app could not see and so never used: clearing local storage, or a
- * shell that never wrote it, dropped someone at a blank sign-in form while a
- * perfectly good session sat in the cookie jar.
- *
- * Nothing is asked at all on a device that has never signed in here: no session,
- * no cookie, so a request would only be refused. Otherwise there are two ways in,
- * both silent. A session the server will still honour signs in from
- * the cookie. Failing that, the device is signed back in as the account it
- * belongs to, where the server will do that from an address alone. A sign-in page
- * is what is left when neither works, which on a device someone has already used
- * should be only after they deliberately disconnected it.
- */
-
 const user = {
   id: 'user-1',
   email: 'alice@example.com',
@@ -60,7 +43,6 @@ function storeWith(api = fakeApi()) {
   return { store, api }
 }
 
-/** A device that has been used before, whatever is left of its session. */
 function knownDevice(api = fakeApi({ probe: vi.fn(async () => null) })) {
   localStorage.setItem(
     'split-everything.device-account',
@@ -83,7 +65,6 @@ describe('resuming a session on a known device', () => {
 
     const resumed = await store.resumeSession()
 
-    // No token to send: the server reads the cookie the browser kept.
     expect(api.probe).toHaveBeenCalledWith('/auth/refresh')
     expect(resumed).toBe(true)
     expect(store.isSignedIn).toBe(true)
@@ -104,8 +85,6 @@ describe('resuming a session on a known device', () => {
 
     const resumed = await store.resumeSession()
 
-    // The sign-in page was opening with a refused refresh in the console on every
-    // visit. There is no cookie without an account: both are written together.
     expect(resumed).toBe(false)
     expect(api.probe).not.toHaveBeenCalled()
     expect(api.get).not.toHaveBeenCalled()
@@ -133,8 +112,6 @@ describe('resuming a session on a known device', () => {
       }),
     )
 
-    // Half a session is worse than none: the shell would render and then fail on
-    // its first real request.
     expect(await store.resumeSession()).toBe(false)
     expect(store.isSignedIn).toBe(false)
   })
@@ -179,8 +156,6 @@ describe('reconnecting the account a device belongs to', () => {
 
     await store.resumeSession()
 
-    // A live session is the one to keep: signing in again would mint a second
-    // token chain for a device that already had one.
     expect(store.isSignedIn).toBe(true)
     expect(api.post).not.toHaveBeenCalledWith('/auth/dev', expect.anything())
   })
@@ -201,8 +176,6 @@ describe('reconnecting the account a device belongs to', () => {
       }),
     )
 
-    // An address is not a credential. Only Google can produce one, and it cannot
-    // be asked silently, so this device has to be asked instead.
     expect(await store.resumeSession()).toBe(false)
     expect(api.post).not.toHaveBeenCalledWith('/auth/dev', expect.anything())
   })
@@ -237,10 +210,6 @@ describe('reconnecting the account a device belongs to', () => {
   it('shares one attempt between concurrent callers', async () => {
     const { store, api } = knownDevice()
 
-    // The route guard and the sign-in page both ask, and on a mid-visit recovery
-    // they ask at once. Two attempts would each rotate the refresh token, and the
-    // server treats a replayed one as theft: it revokes the whole chain, so the
-    // second caller would sign the account out of everything.
     const [first, second] = await Promise.all([store.resumeSession(), store.resumeSession()])
 
     expect(first).toBe(true)
@@ -260,8 +229,6 @@ describe('reconnecting the account a device belongs to', () => {
 
     expect(await store.resumeSession()).toBe(false)
 
-    // Sharing must not mean remembering: a failure while offline has to be
-    // retryable when the connection comes back.
     expect(await store.resumeSession()).toBe(false)
   })
 
@@ -269,8 +236,6 @@ describe('reconnecting the account a device belongs to', () => {
     const { store, api } = knownDevice()
     await store.resumeSession()
 
-    // What a loop looks like: the reconnect works, the next request is refused,
-    // the session is cleared, and the page asks to resume again.
     store.sessionExpired()
     const resumed = await store.resumeSession()
 
@@ -285,7 +250,6 @@ describe('reconnecting the account a device belongs to', () => {
     await store.signOut()
     const resumed = await store.resumeSession()
 
-    // The whole point of the disconnect button.
     expect(resumed).toBe(false)
     expect(store.isSignedIn).toBe(false)
   })
@@ -316,8 +280,6 @@ describe('the account a device belongs to', () => {
 
     await store.signOut()
 
-    // A remembered device reconnects on its own, so keeping the account here
-    // would undo the sign-out on the next start.
     expect(store.isSignedIn).toBe(false)
     expect(store.rememberedAccount).toBeNull()
     expect(localStorage.getItem('split-everything.device-account')).toBeNull()
@@ -329,8 +291,6 @@ describe('the account a device belongs to', () => {
 
     store.sessionExpired()
 
-    // Nobody asked for this one, so the device still belongs to the same person
-    // and can put itself back in.
     expect(store.isSignedIn).toBe(false)
     expect(store.rememberedAccount?.email).toBe('alice@example.com')
   })

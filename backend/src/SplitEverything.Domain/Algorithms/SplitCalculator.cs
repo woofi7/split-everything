@@ -8,13 +8,6 @@ public sealed record SplitShare(Guid MemberId, decimal Amount, decimal? InputVal
 
 public sealed record ItemizedLine(decimal Amount, int Quantity, IReadOnlyList<Guid> MemberIds);
 
-/// <summary>
-/// Turns a total plus per-member inputs into exact amounts that sum to the total.
-///
-/// Every mode routes through the same largest-remainder distribution, so the sum
-/// of the shares always equals the expense total to the currency's last minor
-/// unit - no drifting cent that later shows up as a phantom debt.
-/// </summary>
 public static class SplitCalculator
 {
     public static IReadOnlyList<SplitShare> Calculate(
@@ -42,11 +35,6 @@ public static class SplitCalculator
         };
     }
 
-    /// <summary>
-    /// Itemized: each line is shared equally by whoever is on it, then anything not
-    /// covered by the lines (tax, tip, service) is spread over everyone who had at
-    /// least one item, proportionally to what they already owe.
-    /// </summary>
     public static IReadOnlyList<SplitShare> CalculateItemized(
         decimal total,
         string currency,
@@ -73,8 +61,6 @@ public static class SplitCalculator
             var lineTotal = line.Amount * Math.Max(1, line.Quantity);
             itemisedTotal += lineTotal;
 
-            // Split the line itself with the same exact-sum guarantee, so per-line
-            // rounding cannot accumulate across a long receipt.
             var lineShares = ByWeight(lineTotal, currency,
                 participants.Select(id => new SplitInput(id, 1m)).ToList(), keepInput: false);
 
@@ -85,8 +71,6 @@ public static class SplitCalculator
         var remainder = total - itemisedTotal;
         if (remainder != 0m)
         {
-            // Weight the uncovered amount by each participant's item subtotal: whoever
-            // ordered more of the bill carries more of the tax and tip.
             var weights = raw
                 .Select(kv => new SplitInput(kv.Key, kv.Value > 0 ? kv.Value : 1m))
                 .ToList();
@@ -94,7 +78,6 @@ public static class SplitCalculator
                 raw[share.MemberId] = raw.GetValueOrDefault(share.MemberId) + share.Amount;
         }
 
-        // Re-normalise once at the end so the returned shares sum exactly to the total.
         return Reconcile(total, currency, raw.Select(kv => new SplitShare(kv.Key, kv.Value, null)).ToList());
     }
 
@@ -127,19 +110,6 @@ public static class SplitCalculator
         return Reconcile(total, currency, shares);
     }
 
-    /// <summary>
-    /// Weighted split with largest-remainder rounding: floor everyone to a whole
-    /// unit, then hand the leftover units out one at a time to the largest fractional
-    /// parts. Ties break on member id so two devices computing the same split offline
-    /// produce byte-identical results.
-    ///
-    /// The unit is the stored one rather than the currency's, which is what keeps an
-    /// even split even: half of 66.13 is 33.065, and a tie at the cent has to break
-    /// somewhere - always towards the same member, since the tie-break has to be
-    /// deterministic. That is half a cent of drift per expense, all of it in one
-    /// direction, and it added up to 71 cents against the app a real group's history
-    /// came from.
-    /// </summary>
     private static IReadOnlyList<SplitShare> ByWeight(
         decimal total, string currency, IReadOnlyList<SplitInput> inputs, bool keepInput)
     {
@@ -183,10 +153,6 @@ public static class SplitCalculator
             .ToList();
     }
 
-    /// <summary>
-    /// Pushes any residue onto the largest share. Used after paths that build
-    /// amounts additively, where a single trailing minor unit can survive.
-    /// </summary>
     private static IReadOnlyList<SplitShare> Reconcile(
         decimal total, string currency, IReadOnlyList<SplitShare> shares)
     {

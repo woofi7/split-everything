@@ -5,18 +5,6 @@ import { useExpensesStore } from '@/stores/expenses'
 import { SyncEngine } from '@/offline/syncEngine'
 import { signInForTests, waitFor } from '../support/viewHarness'
 
-/**
- * Deleting your own comment.
- *
- * A comment is the one thing in the app written in someone's own words, which
- * makes being unable to take it back worse than for an expense: a wrong amount can
- * be corrected, a sentence cannot be unsaid. The server has always allowed the
- * author to remove one; nothing on the client asked.
- *
- * A tombstone rather than a delete, like everything else here, because a device
- * that is still offline has to learn the comment is gone.
- */
-
 const groupId = 'group-1'
 const alice = 'member-alice'
 
@@ -91,10 +79,8 @@ async function seed(): Promise<void> {
 
 describe('removing a comment', () => {
   let api: ReturnType<typeof fakeSyncApi>
-
   beforeEach(async () => {
     setActivePinia(createPinia())
-    // The sync path refuses to talk to the server as nobody.
     signInForTests()
     await resetDatabase()
     await seed()
@@ -121,7 +107,6 @@ describe('removing a comment', () => {
 
     await expenses.removeComment('comment-1')
 
-    // A device still offline has to learn it is gone.
     const stored = await db.comments.get('comment-1')
     expect(stored?.isDeleted).toBe(true)
   })

@@ -44,13 +44,6 @@ function fakeApi(overrides: Record<string, unknown> = {}) {
   }
 }
 
-/**
- * A group's categories, cached on the device.
- *
- * Everything that reads them has to work with no connection: the picker on the
- * expense form, the guess it starts from, the icon on every card and the
- * breakdown on the stats screen.
- */
 describe('a group’s categories', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
@@ -62,10 +55,6 @@ describe('a group’s categories', () => {
     store.attachApi(fakeApi() as never)
 
     await store.refresh(groupId)
-    // Fetched alongside the group rather than inside it, so it lands a moment
-    // later. Waited for rather than counted in turns: one macrotask is enough on
-    // a quiet machine and not enough under load, which is a test that fails for
-    // no reason a few times a year.
     await waitFor(() => store.categoriesOf(groupId).length > 0)
 
     expect(store.categoriesOf(groupId)).toHaveLength(1)
@@ -95,8 +84,6 @@ describe('a group’s categories', () => {
     )
     await store.loadAll()
 
-    // A stale category name is worth more than none: the alternative is a picker
-    // that empties itself on a train.
     expect(store.categoriesOf(groupId)).toHaveLength(1)
   })
 
@@ -106,8 +93,6 @@ describe('a group’s categories', () => {
 
     await store.loadCategories(groupId)
 
-    // Everything downstream iterates this. A screen that throws while rendering
-    // an expense form is a worse answer to a strange response than an empty one.
     expect(store.categoriesOf(groupId)).toEqual([])
   })
 
@@ -134,7 +119,6 @@ describe('a group’s categories', () => {
     await store.setCategories(groupId, [{ name: 'Groceries' }])
     await store.setCategories(groupId, [])
 
-    // The server answers with its own list either way; what changed is whose it is.
     expect(store.hasOwnCategories(groupId)).toBe(false)
   })
 })

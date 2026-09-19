@@ -21,14 +21,6 @@ vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
 }))
 
-/**
- * Recording money handed over.
- *
- * Emma gives fifty dollars back. With only one thing the plus button could record
- * it went in as an expense, where it added fifty to the month, to the group total
- * and to the chart, and moved the balance by twenty-five - half of what actually
- * changed hands, in the wrong direction. This is the other thing.
- */
 describe('recording a payment', () => {
   async function mountForm() {
     const mounted = await mountView(PaymentFormView, {
@@ -56,8 +48,6 @@ describe('recording a payment', () => {
     const [settlement] = expensesStore.settlementsForGroup(GROUP_ID)
     expect(settlement).toMatchObject({ fromMemberId: BOB, toMemberId: ALICE, amount: 50 })
 
-    // The whole point: it is not spending, and nothing about it belongs in a list
-    // of what the group bought.
     expect(expensesStore.forGroup(GROUP_ID)).toEqual([])
   })
 
@@ -69,8 +59,6 @@ describe('recording a payment', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    // Midday, so the day it lands on is the day that was typed rather than the one
-    // before it west of Greenwich.
     expect(expensesStore.settlementsForGroup(GROUP_ID)[0].settledAt).toContain('2026-08-06')
   })
 
@@ -102,8 +90,6 @@ describe('recording a payment', () => {
       .map((element) => element.attributes('data-testid'))
       .filter((id) => ['amount', 'paid-on', 'note', 'group', 'paid-from', 'paid-to'].includes(id!))
 
-    // The two forms are one tap apart. A note that sits where "what was it" sits
-    // means nothing moves under the thumb when somebody switches between them.
     expect(order).toEqual(['amount', 'paid-on', 'note', 'group', 'paid-from', 'paid-to'])
   })
 

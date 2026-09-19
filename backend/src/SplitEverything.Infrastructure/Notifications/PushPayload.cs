@@ -3,10 +3,6 @@ using SplitEverything.Application.Abstractions;
 
 namespace SplitEverything.Infrastructure.Notifications;
 
-/// <summary>
-/// One payload shape for every channel, so the service worker and the native
-/// handlers read the same fields.
-/// </summary>
 public static class PushPayload
 {
     private static readonly JsonSerializerOptions Options = new()

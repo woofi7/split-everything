@@ -19,16 +19,10 @@ describe('splitting, offline', () => {
 
     expect(shares.reduce((sum, s) => sum + s.amount, 0)).toBe(10)
 
-    // Worked out two decimals finer than the currency shows, so the share is the
-    // real fraction rather than a cent handed to somebody. All three read as 3.33.
     expect(shares.map((s) => s.amount).sort()).toEqual([3.3333, 3.3333, 3.3334])
   })
 
   it('gives the leftover unit to the same member the server would', () => {
-    // Pinned against the identical backend fixture: largest-remainder rounding with
-    // a member-id tie-break, so the leftover goes to the lowest id. If the two
-    // sides ever disagree, an expense entered offline would be silently rewritten
-    // into different amounts than the person was shown.
     const shares = calculateSplit(10, 'CAD', 'Equal', members(carol, bob, alice))
     const byMember = Object.fromEntries(shares.map((s) => [s.memberId, s.amount]))
 
@@ -38,10 +32,6 @@ describe('splitting, offline', () => {
   })
 
   it('splits an odd number of cents evenly', () => {
-    // Half of 66.13 is 33.065. Rounded to a cent, one of the two is handed the
-    // extra half-cent - the same one every time, because the tie-break has to be
-    // deterministic - and across four hundred expenses that drifted 71 cents away
-    // from the app this history came from.
     const shares = calculateSplit(66.13, 'CAD', 'Equal', members(alice, bob))
 
     expect(shares.map((s) => s.amount)).toEqual([33.065, 33.065])
@@ -260,7 +250,6 @@ describe('itemized splitting', () => {
 
 describe('residue reconciliation', () => {
   it('puts a rounding residue on the largest share', () => {
-    // Exact amounts that each round cleanly but leave a cent against the total.
     const shares = calculateSplit(100, 'CAD', 'ExactAmount', [
       { memberId: alice, value: 33.334 },
       { memberId: bob, value: 33.333 },

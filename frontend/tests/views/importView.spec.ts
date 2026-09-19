@@ -21,13 +21,6 @@ vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
 }))
 
-/**
- * A stand-in for the parsing worker.
- *
- * The worker itself runs PDF.js and Tesseract in a scope jsdom does not provide.
- * What matters here is what the view does with the rows it gets back, so the
- * client is faked and the parsers are tested directly in their own suite.
- */
 const parseCsv = vi.fn()
 const parsePdf = vi.fn()
 const dispose = vi.fn()
@@ -51,7 +44,6 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
-
 const api = (overrides: Record<string, unknown> = {}) =>
   fakeApi({
     '/import/duplicates': () => ({ matches: [] }),
@@ -70,10 +62,6 @@ async function chooseFile(wrapper: ReturnType<typeof Object>, name = 'visa.csv')
   Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
   await (input as unknown as { trigger: (e: string) => Promise<void> }).trigger('change')
 
-  // The parse is asynchronous, and a fixed number of ticks is a race: this one
-  // failed once in a full run and passed alone. Waits for the parse to be over
-  // instead, whichever way it went: the progress line is cleared in every case,
-  // including the failures two of these tests are about.
   const view = wrapper as unknown as { text: () => string }
   await waitFor(() => !view.text().includes('Reading the file'))
 }
@@ -101,19 +89,10 @@ describe('ImportView', () => {
     expect(text).toContain('A bank or credit card statement')
     expect(text).toContain('A Settle Up export')
 
-    // The statement is read here and never uploaded; the export is parsed by the
-    // server. The difference matters enough to say on screen.
     expect(text).toContain('never uploaded')
     expect(wrapper.findAll('input[type="file"]').length).toBe(2)
   })
 
-  /**
-   * Two ways in, until one is being used.
-   *
-   * Leaving the other on screen offers a second question nobody asked and a
-   * second file input to pick by mistake, which is how an export ends up in the
-   * statement reader.
-   */
   describe('choosing one of the two importers', () => {
     it('hides the export wizard once a statement is being read', async () => {
       parseCsv.mockResolvedValue({ rows: [row()], usedOcr: false })
@@ -130,8 +109,6 @@ describe('ImportView', () => {
       const { wrapper } = await mountView(ImportView, { api: api() })
       await chooseFile(wrapper)
 
-      // Nothing came of it, so stranding someone on the way that just failed
-      // would leave them with no way in at all.
       expect(textOf(wrapper)).toContain('A Settle Up export')
       expect(textOf(wrapper)).toContain('A bank or credit card statement')
     })
@@ -148,7 +125,6 @@ describe('ImportView', () => {
     it('hides the statement reader once an export is being mapped', async () => {
       const { wrapper } = await mountView(ImportView, { api: api() })
 
-      // The wizard keeps its file to itself, so it says when it has one.
       const wizard = wrapper.findComponent({ name: 'SettleUpWizard' })
       wizard.vm.$emit('active', true)
       await settle(1)
@@ -366,7 +342,6 @@ describe('ImportView', () => {
     await wrapper.findAll('button').find((b) => b.text() === 'Cancel')!.trigger('click')
     await settle()
 
-    // Back to the picker, with nothing about the statement left on screen.
     expect(textOf(wrapper)).toContain('Choose a CSV or PDF')
     expect(textOf(wrapper)).not.toContain('UBER EATS TORONTO')
   })

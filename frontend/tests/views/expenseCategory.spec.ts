@@ -43,12 +43,6 @@ const categories: Category[] = [
   },
 ]
 
-/**
- * What an expense was for, on the form and on the card.
- *
- * The guess is the feature: type "Metro" and it should already be filed, because
- * a dropdown nobody fills in is what got categories deleted from this app once.
- */
 describe('filing an expense', () => {
   async function mountForm() {
     routeParams = {}
@@ -72,7 +66,6 @@ describe('filing an expense', () => {
 
     expect(wrapper.find('[data-testid="category"]').attributes('data-category')).toBe('groceries')
     expect(wrapper.find('[data-testid="category"]').text()).toContain('Groceries')
-    // Said out loud, so a guess does not read as something you chose and forgot.
     expect(wrapper.find('[data-testid="category-guess"]').exists()).toBe(true)
   })
 
@@ -87,7 +80,6 @@ describe('filing an expense', () => {
     await wrapper.find('[data-category="dining"][data-testid="category-option"]').trigger('click')
     await settle()
 
-    // Retyping the description must not overrule the person who just chose.
     await wrapper.find('input[placeholder="Groceries"]').setValue('Metro plus express')
     await settle()
 
@@ -136,7 +128,6 @@ describe('filing an expense', () => {
     await settle()
 
     expect(wrapper.find('[data-category="groceries"]').exists()).toBe(true)
-    // Nothing drawn for one nobody filed: a card is not the place for a shrug.
     expect(wrapper.findAll('[data-testid="expense-category"]')).toHaveLength(1)
     expect(textOf(wrapper)).toContain('Metro')
   })

@@ -8,10 +8,6 @@ using SplitEverything.Infrastructure.Currency;
 
 namespace SplitEverything.Tests.Api;
 
-/// <summary>
-/// The mapping from the application's deliberate failures to status codes. Getting
-/// this wrong turns a validation mistake into a 500 and hands internals to callers.
-/// </summary>
 public class ExceptionHandlerTests
 {
     private static readonly ApiExceptionHandler Handler = new(NullLogger<ApiExceptionHandler>.Instance);
@@ -83,8 +79,6 @@ public class ExceptionHandlerTests
     {
         var (context, _) = NewContext();
 
-        // The client hung up; writing a response body would be pointless and can
-        // itself throw.
         (await Handler.TryHandleAsync(context, new OperationCanceledException(), CancellationToken.None))
             .ShouldBeFalse();
     }

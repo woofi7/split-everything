@@ -19,16 +19,6 @@ export interface ItemizedLine {
   memberIds: string[]
 }
 
-/**
- * The same split arithmetic the server runs.
- *
- * Duplicated on purpose: an expense created offline has to show the person the
- * exact amounts that will end up stored, and it has to survive being replayed to
- * the server without being recalculated into something different. That means both
- * sides must agree to the last minor unit, which is why this uses the same
- * largest-remainder distribution with the same member-id tie-break rather than
- * anything more convenient.
- */
 export function calculateSplit(
   total: number,
   currency: string,
@@ -95,11 +85,6 @@ export function calculateSplit(
   }
 }
 
-/**
- * Itemized: each line is shared equally by whoever is on it, then anything the
- * lines do not cover (tax, tip, service) is spread over the participants in
- * proportion to what they already owe.
- */
 export function calculateItemizedSplit(
   total: number,
   currency: string,
@@ -161,11 +146,6 @@ export function calculateItemizedSplit(
   )
 }
 
-/**
- * Weighted split with largest-remainder rounding, computed in whole minor units
- * so no floating point error can survive into a stored amount. Ties break on
- * member id, which is what makes two devices agree offline.
- */
 function byWeight(
   total: number,
   currency: string,
@@ -178,8 +158,6 @@ function byWeight(
     throw new Error('Split weights must add up to more than zero.')
   }
 
-  // Share precision, not the currency's: an even split of an odd number of cents
-  // is then actually even, rather than a cent handed to whoever wins the tie-break.
   const decimals = shareDecimals(currency)
   const factor = 10 ** decimals
   const sign = total < 0 ? -1 : 1
@@ -217,7 +195,6 @@ function byWeight(
   }))
 }
 
-/** Pushes any residue onto the largest share, for paths that build amounts additively. */
 function reconcile(total: number, currency: string, shares: SplitShare[]): SplitShare[] {
   const rounded = shares.map((share) => ({
     ...share,
@@ -246,18 +223,6 @@ function reconcile(total: number, currency: string, shares: SplitShare[]): Split
   return rounded
 }
 
-/**
- * The values that describe an existing division under a different split type.
- *
- * Switching type is usually the start of an adjustment, not a reset. Emptying the
- * form meant the split was invalid until every box had been typed again, and the
- * division someone had already agreed was gone.
- *
- * Percentages are reconciled to exactly 100, because rounding each one to two
- * places can leave three equal parts at 99.99, which the calculator refuses.
- * Shares are seeded with the amounts themselves: they are a ratio, and the amounts
- * are the one ratio guaranteed to reproduce the same division exactly.
- */
 export function splitValuesFor(
   target: SplitType,
   shares: readonly { memberId: string; amount: number }[],
@@ -275,7 +240,6 @@ export function splitValuesFor(
     value: Math.round((share.amount / total) * 10000) / 100,
   }))
 
-  // The largest share absorbs the rounding, as it does everywhere else here.
   const residue = Math.round((100 - percentages.reduce((sum, p) => sum + p.value, 0)) * 100) / 100
 
   if (residue !== 0) {

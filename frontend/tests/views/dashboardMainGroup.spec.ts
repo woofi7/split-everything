@@ -19,14 +19,6 @@ vi.mock('vue-router', () => ({
   RouterLink: RouterLinkStub,
 }))
 
-/**
- * The dashboard is one group, not a list of them.
- *
- * The app is used on one group at a time. Opening on a list of every group meant
- * a tap before anything useful, and it duplicated the group screen underneath.
- * The others are reachable through the picker in the header.
- */
-
 const twoGroups = () =>
   fakeApi({
     '/groups': () => [
@@ -49,7 +41,6 @@ describe('DashboardView on the main group', () => {
     const { wrapper } = await mountView(DashboardView, { api: twoGroups(), groups: [] })
     await settle()
 
-    // The whole point: one group at a time.
     expect(textOf(wrapper)).not.toContain('Ski trip')
   })
 
@@ -86,7 +77,6 @@ describe('DashboardView on the main group', () => {
           amountInBaseCurrency: 100,
           spentAt: thisMonth.toISOString(),
         }),
-        // Last year, so it is spending but not this month's.
         testExpense({
           id: 'old',
           amount: 500,
@@ -97,8 +87,6 @@ describe('DashboardView on the main group', () => {
     })
     await settle()
 
-    // The month, not all time: a group two years old should not read as busy
-    // because of what it spent two years ago.
     expect(wrapper.find('[data-testid="centre-total"]').text()).toContain('$100.00')
   })
 
@@ -122,7 +110,6 @@ describe('DashboardView on the main group', () => {
     })
     await settle()
 
-    // Two slices, not one under whoever's name is on the card.
     expect(wrapper.findAll('[data-testid="legend-row"]')).toHaveLength(2)
     expect(wrapper.find('[data-testid="centre-total"]').text()).toContain('$65.00')
   })
@@ -149,7 +136,6 @@ describe('DashboardView on the main group', () => {
     })
     await settle()
 
-    // Every expense in the group, not only the page of them on screen.
     expect(wrapper.find('[data-testid="group-total"]').text()).toBe('$100.00')
   })
 
@@ -160,8 +146,6 @@ describe('DashboardView on the main group', () => {
     })
     await settle()
 
-    // The card that stated your own balance is gone, so the list has to say which
-    // of these numbers is yours.
     const rows = wrapper.findAll('li')
     const mine = rows.find((row) => row.find('[data-testid="your-balance"]').exists())
     expect(mine).toBeDefined()
@@ -185,8 +169,6 @@ describe('DashboardView on the main group', () => {
     })
     await settle()
 
-    // The mark is the group's own icon, so it was already the thing on screen
-    // that stood for which group. Pressing it is the shortest way to say so.
     const mark = wrapper.find('[data-testid="group-mark"]')
     expect(mark.exists()).toBe(true)
     expect(mark.element.tagName).toBe('BUTTON')
@@ -199,7 +181,6 @@ describe('DashboardView on the main group', () => {
     })
     await settle()
 
-    // With one group this is still how you reach creating the next.
     expect(wrapper.find('[data-testid="group-mark"]').exists()).toBe(true)
   })
 
@@ -251,8 +232,6 @@ describe('DashboardView on the main group', () => {
     expect(textOf(wrapper)).toContain('No groups yet')
   })
 
-
-
   it('links to settling up for that group', async () => {
     const { wrapper } = await mountView(DashboardView, {
       api: fakeApi({ '/groups': () => testGroup() }),
@@ -272,7 +251,6 @@ describe('DashboardView on the main group', () => {
     const { wrapper } = await mountView(DashboardView, { api })
     await settle()
 
-    // The cached group still renders: that is the whole point of the local replica.
     expect(textOf(wrapper)).toContain('Roommates')
     expect(wrapper.text()).toContain('Offline')
   })
@@ -290,8 +268,6 @@ describe('DashboardView on the main group', () => {
     })
     await settle()
 
-    // Pulling down is somebody asking for the latest. A home-screen app is resumed
-    // rather than navigated, so this is close to the only time the browser is asked.
     wrapper.findComponent({ name: 'PullToRefresh' }).vm.$emit('refresh')
     await settle()
 
@@ -299,13 +275,6 @@ describe('DashboardView on the main group', () => {
     Reflect.deleteProperty(navigator, 'serviceWorker')
   })
 
-  /**
-   * The order the screen is read in.
-   *
-   * The shape of the spending first, then what it means for you with the way to
-   * act on it, then everyone else, then the detail. Asserted because the order is
-   * the design: every one of these sections renders fine in isolation.
-   */
   describe('the order of the dashboard', () => {
     it('runs pie, then balances, then expenses', async () => {
       const thisMonth = new Date()
@@ -313,7 +282,6 @@ describe('DashboardView on the main group', () => {
 
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
-        // Dated this month, because the chart covers this month.
         expenses: [testExpense({ paidByMemberId: ALICE, spentAt: thisMonth.toISOString() })],
       })
       await settle()
@@ -334,8 +302,6 @@ describe('DashboardView on the main group', () => {
       })
       await settle()
 
-      // One number and one button is not a card; the list below says the same
-      // thing about everybody, including you.
       expect(wrapper.find('[data-testid="balance-line"]').exists()).toBe(false)
       expect(textOf(wrapper)).not.toContain('Your balance')
     })
@@ -362,20 +328,11 @@ describe('DashboardView on the main group', () => {
       await settle()
 
       const html = wrapper.html()
-      // It switches the transfer list, not the balances above it.
       expect(html.indexOf('toggle-simplify')).toBeGreaterThan(html.indexOf('Settle up in 1 transfer'))
     })
   })
 
-  /**
-   * A long list of expenses.
-   *
-   * The replica already holds them all, so this is not about fetching: it is
-   * about not building a thousand cards for a list nobody has scrolled through.
-   * A group that has been running a year is the normal case.
-   */
   describe('expenses by month', () => {
-    /** A date in a given month, at noon so no timezone can move it. */
     const inMonth = (monthsBack: number, day = 15) => {
       const now = new Date()
       return new Date(now.getFullYear(), now.getMonth() - monthsBack, day, 12).toISOString()
@@ -408,7 +365,6 @@ describe('DashboardView on the main group', () => {
       const text = textOf(wrapper)
       expect(text).toContain('This month')
       expect(text).toContain('Also this month')
-      // Present as a heading, absent as a card: a closed month builds nothing.
       expect(text).not.toContain('Last month')
       expect(wrapper.findAll('[data-testid="expense-card"]')).toHaveLength(2)
     })
@@ -462,8 +418,6 @@ describe('DashboardView on the main group', () => {
     it('opens the most recent month when nothing was spent this one', async () => {
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),
-        // A group that went quiet: closing everything would leave a screen of
-        // headings and no way to see it has ever been used.
         expenses: [testExpense({ description: 'Quiet since', spentAt: inMonth(2) })],
       })
       await settle()
@@ -473,13 +427,11 @@ describe('DashboardView on the main group', () => {
   })
 
   describe('how a finished month went', () => {
-    /** A date in a given month, at noon so no timezone can move it. */
     const inMonth = (monthsBack: number, day = 15) => {
       const now = new Date()
       return new Date(now.getFullYear(), now.getMonth() - monthsBack, day, 12).toISOString()
     }
 
-    /** Two finished months and the one running, so the comparisons have something to say. */
     const history = () => [
       testExpense({ id: 'now', description: 'This month', spentAt: inMonth(0, 2) }),
       testExpense({
@@ -508,7 +460,6 @@ describe('DashboardView on the main group', () => {
       }),
     ]
 
-    /** Opens a month by its position in the list, newest first. */
     async function openMonth(
       wrapper: Awaited<ReturnType<typeof mountView>>['wrapper'],
       index: number,
@@ -526,11 +477,9 @@ describe('DashboardView on the main group', () => {
 
       await openMonth(wrapper, 1)
 
-      // The second: the month running has a recap of its own above this one.
       const recap = wrapper.findAll('[data-testid="month-recap"]')[1]
       const members = recap.findAll('[data-testid="recap-member"]').map((row) => row.text())
 
-      // Largest first: 900 of the 1,000 came from one of them.
       expect(members[0]).toContain('Alice')
       expect(members[0]).toContain('900.00')
       expect(members[1]).toContain('Bob')
@@ -559,8 +508,6 @@ describe('DashboardView on the main group', () => {
 
       await openMonth(wrapper, 1)
 
-      // 1,000 against 400 the month before, and against a 400 average of the others.
-      // The first comparison on screen, because the month running has none.
       const comparison = wrapper.find('[data-testid="recap-comparison"]').text()
       expect(comparison).toContain('600.00 more than')
       expect(comparison).toContain('600.00 above')
@@ -573,24 +520,15 @@ describe('DashboardView on the main group', () => {
       })
       await settle()
 
-      // Open by default, and now saying something: who has paid for this month so
-      // far is a fair question, and it used to be answered with a blank.
       const recap = wrapper.findAll('[data-testid="month-recap"]')[0]
       expect(recap.exists()).toBe(true)
       expect(recap.findAll('[data-testid="recap-member"]').length).toBeGreaterThan(0)
 
-      // But not compared: a few days against a whole month would say only that the
-      // month is young.
       expect(recap.find('[data-testid="recap-comparison"]').exists()).toBe(false)
     })
   })
 
   describe('a long expense list', () => {
-    /**
-     * Distinct ids and times, so the order and the count are both meaningful, and
-     * all inside one month: paging happens within the months that are open, so a
-     * fixture spread over several would be measuring the sections instead.
-     */
     function manyExpenses(count: number) {
       return Array.from({ length: count }, (_, index) =>
         testExpense({
@@ -602,7 +540,6 @@ describe('DashboardView on the main group', () => {
       )
     }
 
-    /** A stand-in for the browser's observer, which jsdom does not have. */
     function withObserver() {
       const callbacks: Array<(entries: Array<{ isIntersecting: boolean }>) => void> = []
       class FakeObserver {
@@ -665,7 +602,6 @@ describe('DashboardView on the main group', () => {
       }
 
       expect(wrapper.findAll('[data-testid="expense-card"]')).toHaveLength(45)
-      // Nothing left to watch for, so the foot goes.
       expect(wrapper.find('[data-testid="expenses-sentinel"]').exists()).toBe(false)
       vi.unstubAllGlobals()
     })
@@ -677,8 +613,6 @@ describe('DashboardView on the main group', () => {
       })
       await settle()
 
-      // jsdom has no IntersectionObserver, which is also an old browser: the list
-      // must not become a dead end.
       await wrapper.find('[data-testid="show-more-expenses"]').trigger('click')
       await settle(1)
 

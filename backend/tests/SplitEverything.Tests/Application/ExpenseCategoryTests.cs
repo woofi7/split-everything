@@ -11,14 +11,6 @@ using SplitEverything.Tests.Support;
 
 namespace SplitEverything.Tests.Application;
 
-/// <summary>
-/// What an expense was for, on the expense.
-///
-/// A key rather than a foreign key, which is the whole of the design: a category is
-/// a group's to rename and to delete, and neither should reach into a year of
-/// expenses. So an expense keeps the key it was given whatever happens to the list
-/// it came from.
-/// </summary>
 public class ExpenseCategoryTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
     private async Task<(Guid UserId, GroupDto Group, Guid PayerId)> SetupAsync()
@@ -75,8 +67,6 @@ public class ExpenseCategoryTests(PostgresFixture fixture) : ServiceTestBase(fix
     {
         var (userId, group, payer) = await SetupAsync();
 
-        // A device that has not pulled the new list yet is not a reason to refuse
-        // somebody's expense. It reads as unfiled until they say otherwise.
         var expense = await Expenses.CreateAsync(
             userId, Expense(group, payer, "Ski pass", 80m, "ski"));
 
@@ -127,8 +117,6 @@ public class ExpenseCategoryTests(PostgresFixture fixture) : ServiceTestBase(fix
             .OrderByDescending(l => l.ServerSeq)
             .FirstAsync();
 
-        // Without this the category exists on the device that typed it and nowhere
-        // else, which is the same as not existing.
         entry.PayloadJson.ShouldContain("groceries");
     }
 
@@ -149,20 +137,9 @@ public class ExpenseCategoryTests(PostgresFixture fixture) : ServiceTestBase(fix
         byCategory[0].ShouldBe(new CategorySpendDto("groceries", 100m, 2));
         byCategory[1].ShouldBe(new CategorySpendDto("dining", 25m, 1));
 
-        // The unfiled are stated rather than dropped: a breakdown that quietly
-        // omits part of the spending is worse than one that admits to it.
         byCategory.ShouldContain(new CategorySpendDto(null, 10m, 1));
     }
 
-    /// <summary>
-    /// Filing a hundred expenses at once, as the app actually does it.
-    ///
-    /// There is no bulk endpoint and there should not be one: the app is offline
-    /// first, so a bulk edit is a hundred ordinary updates in the outbox, which
-    /// drain in one push and conflict-resolve one expense at a time like anything
-    /// else. This is the server end of that, and the reason it has its own test is
-    /// that it is the only path the bulk screen uses.
-    /// </summary>
     [Fact]
     public async Task Filing_many_at_once_arrives_as_ordinary_updates()
     {
@@ -173,8 +150,6 @@ public class ExpenseCategoryTests(PostgresFixture fixture) : ServiceTestBase(fix
 
         var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity);
 
-        // One push carrying both, which is what the outbox produces when somebody
-        // ticks two rows and says where they go.
         var result = await sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
             Operation(group.Id, SyncEntityType.Expense, metro.Id, SyncOperation.Update,
                 RefiledJson(metro, "groceries"),
@@ -195,14 +170,11 @@ public class ExpenseCategoryTests(PostgresFixture fixture) : ServiceTestBase(fix
 
         stored.Select(e => e.CategoryKey).ShouldAllBe(key => key == "groceries");
 
-        // And nothing about the money moved. A bulk edit that rounded a year of
-        // splits differently would be the worst possible way to find that out.
         stored[0].Amount.ShouldBe(40m);
         stored[1].Amount.ShouldBe(60m);
         stored.Sum(e => e.Splits.Count).ShouldBe(4);
     }
 
-    /// <summary>The wire shape the app sends for an expense whose filing changed.</summary>
     private static string RefiledJson(ExpenseDto expense, string categoryKey)
         => JsonSerializer.Serialize(new
         {

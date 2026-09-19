@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MEMBER_COLORS, memberColor, memberColors, textOnColor } from '@/domain/memberColors'
 
-/**
- * Colour per person.
- *
- * Derived from the member id so every device agrees offline and without a column
- * to migrate. That makes two properties worth pinning: the same id always gives
- * the same colour, and two people in one group never share one.
- */
-
 describe('memberColor', () => {
   it('gives the same colour for the same person every time', () => {
     expect(memberColor('member-alice')).toBe(memberColor('member-alice'))
@@ -48,8 +40,6 @@ describe('memberColors', () => {
     const before = memberColors(['member-alice'])
     const after = memberColors(['member-alice', 'member-bob'])
 
-    // Their colour appears beside their name all over the app; it moving because
-    // someone else arrived would be worse than two people sharing a hue.
     expect(after['member-alice']).toBe(before['member-alice'])
   })
 

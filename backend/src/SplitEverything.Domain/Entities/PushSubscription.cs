@@ -10,10 +10,8 @@ public class PushSubscription
 
     public PushChannel Channel { get; set; }
 
-    /// <summary>Web Push endpoint URL, or the APNs/FCM device token.</summary>
     public string Endpoint { get; set; } = string.Empty;
 
-    /// <summary>Web Push only.</summary>
     public string? P256dh { get; set; }
     public string? Auth { get; set; }
 

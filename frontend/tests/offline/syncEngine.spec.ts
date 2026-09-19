@@ -132,7 +132,6 @@ describe('offline sync engine', () => {
       payload: {},
     })
 
-    // A brand new engine over the same database, as after a restart.
     const revived = new SyncEngine(fakeApi(), () => false)
 
     expect(await revived.pendingCount()).toBe(1)
@@ -287,8 +286,6 @@ describe('offline sync engine', () => {
 
     const result = await engine.flush()
 
-    // Retrying forever would block every later change behind an operation the
-    // server will never accept.
     expect(result.rejected).toHaveLength(1)
     const [operation] = await db.outbox.toArray()
     expect(operation.status).toBe('rejected')
@@ -358,7 +355,6 @@ describe('offline sync engine', () => {
 
     expect(result.conflicts).toHaveLength(1)
     expect(await db.conflicts.count()).toBe(1)
-    // The losing edit is not silently dropped: it lives in the conflict record.
     expect((await db.conflicts.get('conflict-1'))?.conflictingFields).toEqual(['description'])
   })
 
@@ -454,23 +450,11 @@ describe('offline sync engine', () => {
 
     await new SyncEngine(api, () => true).pull()
 
-    // Without this the filing exists on the device that typed it and nowhere
-    // else, which is the same as not existing.
     expect((await db.expenses.get('filed'))?.categoryKey).toBe('groceries')
 
-    // And a payload written before categories existed leaves the expense unfiled
-    // rather than inventing a filing for it.
     expect((await db.expenses.get('older'))?.categoryKey).toBeNull()
   })
 
-  /**
-   * An expense that moved to another group.
-   *
-   * Two entries, one in each group's log: the group it went to records the whole
-   * expense, and the group it left records only where it went. The second used to
-   * be read as an expense of nothing at all, which blanked the row every time the
-   * old group's log happened to be read last.
-   */
   it('drops an expense from a group it has left', async () => {
     await seedExpense('expense-1', false)
     const api = fakeApi({
@@ -499,8 +483,6 @@ describe('offline sync engine', () => {
 
     await new SyncEngine(api, () => true).pull()
 
-    // Gone rather than blanked, and gone rather than tombstoned: it is not
-    // deleted, it is in another group, and whoever is in that group still has it.
     expect(await db.expenses.get('expense-1')).toBeUndefined()
   })
 
@@ -532,9 +514,6 @@ describe('offline sync engine', () => {
       })),
     })
 
-    // The two entries arrive in one pull, in whichever order the groups are read,
-    // so the note from the old group can land after the expense has already been
-    // written into the new one.
     await new SyncEngine(api, () => true).pull()
 
     expect((await db.expenses.get('expense-1'))?.groupId).toBe('group-2')
@@ -584,8 +563,6 @@ describe('offline sync engine', () => {
 
     await new SyncEngine(api, () => true).pull()
 
-    // Carrying the member ids of the group it landed in, which is why the whole
-    // expense is rewritten rather than only its group.
     const stored = await db.expenses.get('expense-1')
     expect(stored?.groupId).toBe('group-2')
     expect(stored?.splits[0].memberId).toBe('member-2')
@@ -666,7 +643,6 @@ describe('offline sync engine', () => {
 
     await engine.pull()
 
-    // Overwriting would throw away work the person can still see on screen.
     expect((await db.expenses.get('expense-1'))?.description).toBe('My unsent edit')
   })
 
@@ -809,7 +785,6 @@ describe('offline sync engine', () => {
         entries: [],
         groupCursors: { [groupId]: 1 },
         snapshots: [],
-        // A server that always claims more would otherwise spin the client.
         hasMore: true,
       })),
     })
@@ -876,7 +851,6 @@ describe('offline sync engine', () => {
       payload: {},
     })
 
-    // Two overlapping flushes must not send the same operation twice.
     await Promise.all([engine.flush(), engine.flush()])
 
     expect(maxInflight).toBe(1)
@@ -1066,7 +1040,6 @@ describe('offline sync engine', () => {
 
     await engine.pull()
 
-    // The cursor still advances, or the client would re-fetch the bad entry forever.
     expect(await getCursor(groupId)).toBe(8)
     expect(await db.expenses.get('broken')).toBeUndefined()
   })
@@ -1107,7 +1080,6 @@ describe('pulled payload tolerance', () => {
   }
 
   it('fills in the fields a sparse payload leaves out', async () => {
-    // The server omits nulls, so the client must not choke on a minimal snapshot.
     await pullingEngine({ id: 'entity-1', paidByMemberId: memberId, description: 'Sparse' }).pull()
 
     const stored = await db.expenses.get('entity-1')
