@@ -121,6 +121,8 @@ describe('the app languages', () => {
       'Exact',
       // "Version 0.2.3" reads the same in both, placeholder and all.
       'Version {version}',
+      // A placeholder made of shop names, which are shop names in both.
+      'metro, iga, epicerie',
     ])
 
     const suspicious = Object.entries(fr)

@@ -2,6 +2,7 @@ import { db } from '@/offline/db'
 import { computeFingerprint } from '@/domain/fingerprint'
 import type { StatementRow } from './statementParser'
 import type { SplitType } from '@/domain/splitting'
+import { categoriseByKeywords, type Category } from '@/domain/categories'
 
 export type RowAction = 'personal' | 'split' | 'ignore' | 'alreadyRecorded'
 
@@ -48,12 +49,24 @@ export interface ReviewRow {
   duplicateOf: DuplicateMatch | null
   isForeignCurrency: boolean
   notes: string | null
+  /** What it will be filed under, guessed from the line on the statement. */
+  categoryKey: string | null
+  /** True once a person has said, which stops the guessing for this row. */
+  categoryChosen: boolean
 }
 
 export interface ReviewContext {
   suggestions: SplitSuggestion[]
   duplicates: DuplicateMatch[]
   statementCurrency?: string
+  /**
+   * Each group's categories, for filing a row the moment it is assigned.
+   *
+   * A statement is where categorising pays for itself: two hundred lines that
+   * nobody will ever file by hand, and every one of them a merchant name the
+   * keywords already know.
+   */
+  categoriesByGroup?: Record<string, Category[]>
 }
 
 export interface CommitRow {
@@ -67,6 +80,7 @@ export interface CommitRow {
   splits: SplitAssignment[]
   fingerprint: string
   notes: string | null
+  categoryKey: string | null
 }
 
 export interface CommitPayload {
@@ -127,6 +141,15 @@ export class StatementReviewSession {
       duplicateOf: null,
       isForeignCurrency,
       notes: null,
+      // A row that arrives already assigned to a group - a merchant split there
+      // before - is filed straight away; the rest wait for a group.
+      categoryKey: suggestion
+        ? categoriseByKeywords(
+            row.description,
+            this.context.categoriesByGroup?.[suggestion.groupId] ?? [],
+          )
+        : null,
+      categoryChosen: false,
     }
   }
 
@@ -181,6 +204,23 @@ export class StatementReviewSession {
     row.splits = splits
     row.splitType = splitType
     row.action = 'split'
+
+    // Filed as soon as there is a list to file it against, and re-filed if the
+    // row moves to a group that keeps different categories. Not once somebody
+    // has said themselves: their answer outranks every guess after it.
+    if (!row.categoryChosen) {
+      row.categoryKey = categoriseByKeywords(
+        row.description,
+        this.context.categoriesByGroup?.[groupId] ?? [],
+      )
+    }
+  }
+
+  /** What a person said this row was for, which stops the guessing. */
+  setCategory(rowNumber: number, categoryKey: string | null): void {
+    const row = this.require(rowNumber)
+    row.categoryKey = categoryKey
+    row.categoryChosen = true
   }
 
 
@@ -237,6 +277,7 @@ export class StatementReviewSession {
         splits: row.splits,
         fingerprint,
         notes: row.notes,
+        categoryKey: row.categoryKey,
       })
     }
 

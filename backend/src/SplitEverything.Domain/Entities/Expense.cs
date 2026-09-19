@@ -41,6 +41,15 @@ public class Expense : SyncableEntity
 
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// What it was for, as a category key, or null for an expense nobody filed.
+    ///
+    /// The key rather than a foreign key: a category is a group's to rename and to
+    /// delete, and neither should reach into a year of expenses. An expense whose
+    /// category has gone keeps the key it was given and reads as unfiled.
+    /// </summary>
+    public string? CategoryKey { get; set; }
+
     /// <summary>Set when this expense is an occurrence generated from a recurrence rule.</summary>
     public Guid? RecurringExpenseId { get; set; }
     public RecurringExpense? RecurringExpense { get; set; }

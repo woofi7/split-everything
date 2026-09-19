@@ -208,6 +208,11 @@ export function fakeApi(routes: Record<string, unknown> = {}): FakeApi {
   const patterns = Object.keys(routes).sort((left, right) => right.length - left.length)
 
   const answer = (path: string) => {
+    // A group's categories, unless a test says otherwise. Without this the
+    // '/groups' route answers it with a group, because it is a longer path that
+    // starts the same way.
+    if (path.endsWith('/categories') && !patterns.includes(path)) return []
+
     for (const pattern of patterns) {
       if (path === pattern || path.startsWith(pattern)) {
         const value = routes[pattern]

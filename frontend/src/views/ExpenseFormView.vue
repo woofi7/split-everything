@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { intlLocale, t } from '@/i18n'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import AddKindSwitch from '@/components/expenses/AddKindSwitch.vue'
+import CategoryPicker from '@/components/expenses/CategoryPicker.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
@@ -14,6 +15,7 @@ import { formatMoney, parseAmountInput, roundMoney } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
 import { lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpenseDate'
 import { bucketOf } from '@/domain/buckets'
+import { categoriseByKeywords, categoryFor } from '@/domain/categories'
 
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
@@ -73,6 +75,17 @@ const spentAtLabel = computed(() => {
 function useToday(): void {
   spentAt.value = today()
 }
+
+/**
+ * What it was for.
+ *
+ * Guessed from the description and never insisted on: type "Metro" and it files
+ * itself under groceries, and the moment somebody touches the picker the guessing
+ * stops for this expense. Nobody fills in a dropdown on every expense - the only
+ * version of this worth having is one that is usually right before you look at it.
+ */
+const categoryKey = ref<string | null>(null)
+const isGuess = ref(false)
 
 const splitType = ref<SplitType>('Equal')
 const paidByMemberId = ref('')
@@ -146,9 +159,88 @@ function prefillFromExpense(): void {
       .filter((split) => split.inputValue !== null)
       .map((split) => [split.memberId, split.inputValue as number]),
   )
+
+  // What it is filed under is an answer somebody already gave, however it was
+  // arrived at, so retyping the description here changes nothing.
+  categoryKey.value = existing.categoryKey ?? null
+  isGuess.value = false
 }
 
 const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
+const categories = computed(() => groups.categoriesOf(groupId.value))
+
+/** The guess, while nobody has said otherwise. */
+watch([description, categories], () => {
+  if (!isGuess.value && categoryKey.value !== null) return
+
+  const guessed = categoriseByKeywords(description.value, categories.value)
+  categoryKey.value = guessed
+  isGuess.value = guessed !== null
+})
+
+function chooseCategory(key: string): void {
+  categoryKey.value = key || null
+  // Chosen, so the guessing stops: retyping the description must not overrule
+  // somebody who has already answered the question.
+  isGuess.value = false
+}
+
+const guessedName = computed(() =>
+  isGuess.value ? (categoryFor(categoryKey.value, categories.value)?.name ?? null) : null,
+)
+
+/**
+ * Adding a category from here.
+ *
+ * The moment somebody needs one that is not in the list is the only moment they
+ * will ever add one, and sending them to a settings screen mid-expense means it
+ * never happens. It goes on the end of the group's list and the expense is filed
+ * under it.
+ *
+ * The first one takes a copy of the server's list for this group, which is worth
+ * saying once rather than leaving to be discovered: from then on the group keeps
+ * its own.
+ */
+const isCreatingCategory = ref(false)
+
+async function createCategory(name: string): Promise<void> {
+  const wanted = name.trim()
+  if (!wanted || !groupId.value) return
+
+  const wasFollowingTheServer = !groups.hasOwnCategories(groupId.value)
+  isCreatingCategory.value = true
+
+  try {
+    const saved = await groups.setCategories(groupId.value, [
+      ...categories.value.map((category) => ({
+        key: category.key,
+        name: category.name,
+        iconName: category.iconName,
+        colorHex: category.colorHex,
+        keywords: category.keywords,
+      })),
+      { name: wanted },
+    ])
+
+    const created = saved.find(
+      (category) => category.name.toLowerCase() === wanted.toLowerCase(),
+    )
+    if (created) chooseCategory(created.key)
+
+    notify(
+      wasFollowingTheServer
+        ? t('{name} added. This group now keeps its own list of categories.', { name: wanted })
+        : t('{name} added.', { name: wanted }),
+      'done',
+    )
+  } catch (caught) {
+    // Adding one is the single thing on this form that needs a connection: the
+    // expense itself is queued, and this is a change to the group.
+    report(caught, t('Could not add that category. It needs a connection.'))
+  } finally {
+    isCreatingCategory.value = false
+  }
+}
 const members = computed(() => group.value?.members.filter((m) => m.status === 'Active') ?? [])
 const currency = computed(() => group.value?.baseCurrency ?? auth.user?.defaultCurrency ?? 'CAD')
 /**
@@ -556,6 +648,7 @@ async function save(): Promise<void> {
     splitType: splitType.value,
     participantIds: participantIds.value,
     splitValues: splitValues.value,
+    categoryKey: categoryKey.value,
   }
 
   // Before the expense, because the split it records is the one on screen now, and
@@ -728,6 +821,27 @@ async function save(): Promise<void> {
               {{ option.name }}
             </option>
           </select>
+        </label>
+
+        <label v-if="categories.length > 0" class="flex min-w-0 flex-col gap-1">
+          <!--
+            Named by what it holds when the app filled it in, so a guess announces
+            itself rather than looking like something you chose and forgot.
+          -->
+          <span class="flex items-baseline justify-between gap-2 text-xs text-[var(--text-muted)]">
+            <span>{{ t('Category') }}</span>
+            <span v-if="guessedName" data-testid="category-guess" class="truncate text-accent">
+              {{ t('guessed') }}
+            </span>
+          </span>
+          <CategoryPicker
+            :model-value="categoryKey"
+            :categories="categories"
+            :is-guess="isGuess"
+            :is-creating="isCreatingCategory"
+            @update:model-value="chooseCategory($event ?? '')"
+            @create="createCategory"
+          />
         </label>
 
         <label v-if="!isShared" class="flex min-w-0 flex-col gap-1">

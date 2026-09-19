@@ -91,9 +91,19 @@ async function onFile(event: Event): Promise<void> {
     const duplicates = await checkDuplicates(fingerprints.filter((f): f is string => f !== null))
     const suggestions = await fetchSuggestions(parsed.rows.map((row) => row.description))
 
+    // Every group's categories, before the rows are looked at: a statement is
+    // where filing pays for itself - two hundred lines nobody will ever file by
+    // hand - and the guess has to be ready when the rows appear.
+    await Promise.all(groups.visibleGroups.map((group) => groups.loadCategories(group.id)))
+
     const created = new StatementReviewSession(
       parsed.rows,
-      { suggestions, duplicates, statementCurrency: 'CAD' },
+      {
+        suggestions,
+        duplicates,
+        statementCurrency: 'CAD',
+        categoriesByGroup: { ...groups.categoriesByGroup },
+      },
       file.name,
     )
 
@@ -163,6 +173,14 @@ function assign(rowNumber: number, groupId: string): void {
 function setAction(rowNumber: number, action: RowAction): void {
   session.value?.setAction(rowNumber, action)
 }
+
+function setCategory(rowNumber: number, categoryKey: string): void {
+  session.value?.setCategory(rowNumber, categoryKey || null)
+}
+
+/** The list to choose from for a row: the one kept by the group it is going to. */
+const categoriesFor = (groupId: string | null) =>
+  groupId ? groups.categoriesOf(groupId) : []
 
 async function commit(): Promise<void> {
   if (!session.value) return
@@ -304,6 +322,31 @@ async function cancel(): Promise<void> {
               <option value="">{{ t('Personal, not split') }}</option>
               <option v-for="group in groups.visibleGroups" :key="group.id" :value="group.id">
                 Split in {{ group.name }}
+              </option>
+            </select>
+
+            <!--
+              Filed by the group's own keywords the moment the group is chosen,
+              and changed here when the guess is wrong. A plain select rather than
+              the search box the expense form uses: this is a list of two hundred
+              rows, and a dropdown panel per row is a screen nobody can read.
+            -->
+            <select
+              v-if="row.groupId && categoriesFor(row.groupId).length > 0"
+              data-testid="row-category"
+              :data-category="row.categoryKey ?? ''"
+              class="rounded-lg border bg-[var(--surface)] px-2 py-1 text-xs"
+              style="border-color: var(--border)"
+              :value="row.categoryKey ?? ''"
+              @change="setCategory(row.rowNumber, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">{{ t('Not filed') }}</option>
+              <option
+                v-for="category in categoriesFor(row.groupId)"
+                :key="category.key"
+                :value="category.key"
+              >
+                {{ category.name }}
               </option>
             </select>
 

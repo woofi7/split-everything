@@ -81,6 +81,59 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                     b.ToTable("activity_log", (string)null);
                 });
 
+            modelBuilder.Entity("SplitEverything.Domain.Entities.Category", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ColorHex")
+                        .IsRequired()
+                        .HasMaxLength(9)
+                        .HasColumnType("character varying(9)")
+                        .HasColumnName("color_hex");
+
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
+                    b.Property<string>("IconName")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("icon_name");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("KeywordsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("keywords_json");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id")
+                        .HasName("pk_categories");
+
+                    b.HasIndex("GroupId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_categories_group_id_key");
+
+                    b.ToTable("categories", (string)null);
+                });
+
             modelBuilder.Entity("SplitEverything.Domain.Entities.Device", b =>
                 {
                     b.Property<string>("Id")
@@ -182,6 +235,11 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                         .HasPrecision(19, 4)
                         .HasColumnType("numeric(19,4)")
                         .HasColumnName("amount_in_base_currency");
+
+                    b.Property<string>("CategoryKey")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("category_key");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -301,6 +359,9 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RecurringExpenseId")
                         .HasDatabaseName("ix_expenses_recurring_expense_id");
+
+                    b.HasIndex("GroupId", "CategoryKey")
+                        .HasDatabaseName("ix_expenses_group_id_category_key");
 
                     b.HasIndex("GroupId", "ServerSeq")
                         .HasDatabaseName("ix_expenses_group_id_server_seq");
@@ -1799,6 +1860,17 @@ namespace SplitEverything.Infrastructure.Persistence.Migrations
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("fk_activity_log_groups_group_id");
+
+                    b.Navigation("Group");
+                });
+
+            modelBuilder.Entity("SplitEverything.Domain.Entities.Category", b =>
+                {
+                    b.HasOne("SplitEverything.Domain.Entities.Group", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_categories_groups_group_id");
 
                     b.Navigation("Group");
                 });

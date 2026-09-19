@@ -409,6 +409,7 @@ public sealed class SyncService(
         stored.SplitType = payload.SplitType ?? SplitType.Equal;
         stored.ReceiptId = payload.ReceiptId;
         stored.Notes = payload.Notes?.Trim();
+        stored.CategoryKey = ExpenseService.CleanCategoryKey(payload.CategoryKey);
         stored.IsDeleted = false;
         stored.DeletedAt = null;
         stored.Revision = isNew ? 1 : stored.Revision + 1;

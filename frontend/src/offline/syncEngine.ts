@@ -601,6 +601,9 @@ function toLocalExpense(payload: WirePayload, entry: SyncLogEntry): LocalExpense
     splitType: readSplitType(payload.splitType),
     receiptId: payload.receiptId ?? null,
     notes: payload.notes ?? null,
+    // Absent from a payload written before categories existed, which leaves the
+    // expense unfiled rather than inventing a filing for it.
+    categoryKey: payload.categoryKey ?? null,
     // A payload without payers came from a server that only knows a single one, so
     // the member it names paid the whole amount. Never left empty: an expense with
     // no payer contributes nothing to a balance.

@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie'
+import type { Category } from '@/domain/categories'
 import type { SplitType } from '@/domain/splitting'
 import type { VectorClock } from '@/domain/vectorClock'
 import { newId } from '@/domain/ids'
@@ -112,6 +113,8 @@ export interface LocalExpense {
   splitType: SplitType
   receiptId?: string | null
   notes?: string | null
+  /** What it was for, as a category key, or absent for an expense nobody filed. */
+  categoryKey?: string | null
   /**
    * Who put money in. Always at least one, and they sum to the amount.
    *
@@ -213,8 +216,22 @@ export interface LocalActivity {
   occurredAt: string
 }
 
+/**
+ * What a group files expenses under, cached whole.
+ *
+ * Its own row rather than a field on the group: the group is read and written by
+ * the group endpoint and this by its own, and two writers doing read-modify-write
+ * on one row is how a background refresh quietly puts back a stale copy of
+ * everything else about a group.
+ */
+export interface LocalCategories {
+  groupId: string
+  categories: Category[]
+}
+
 export class SplitEverythingDb extends Dexie {
   groups!: Table<LocalGroup, string>
+  categories!: Table<LocalCategories, string>
   expenses!: Table<LocalExpense, string>
   settlements!: Table<LocalSettlement, string>
   comments!: Table<LocalComment, string>
@@ -278,6 +295,13 @@ export class SplitEverythingDb extends Dexie {
             ]
           }),
       )
+
+    // Categories are back, keyed by the group whose list they are. Not the table
+    // version 1 had and version 2 dropped: that one held a global list of rows by
+    // id, and this holds one list per group, which is what a group screen reads.
+    this.version(5).stores({
+      categories: 'groupId',
+    })
   }
 }
 

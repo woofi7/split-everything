@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { faCodeMerge } from '@fortawesome/free-solid-svg-icons'
+import { faCodeMerge, faXmark } from '@fortawesome/free-solid-svg-icons'
 import AppShell from '@/components/layout/AppShell.vue'
 import IconPicker from '@/components/ui/IconPicker.vue'
 import PersonPicker from '@/components/groups/PersonPicker.vue'
@@ -15,6 +15,9 @@ import { useGroupsStore } from '@/stores/groups'
 import { notify, report } from '@/ui/toasts'
 import { useExpensesStore } from '@/stores/expenses'
 import { compileNamePattern } from '@/domain/namePatterns'
+import CategoryEditor from '@/components/groups/CategoryEditor.vue'
+import CollapsibleSection from '@/components/ui/CollapsibleSection.vue'
+import type { CategoryDraft } from '@/stores/groups'
 import { useAuthStore } from '@/stores/auth'
 import { useApi } from '@/api/provider'
 import type { AddableUser } from '@/api/types'
@@ -96,6 +99,33 @@ const splitTotal = computed(() =>
  * start with it. One per row, so a comma is a comma rather than a separator.
  */
 const ignoredPatterns = ref<string[]>([])
+
+/**
+ * What this group files expenses under.
+ *
+ * Its own list once it has edited one, and the server's until then - which is why
+ * the first save says what it is doing: it takes a copy, and the group keeps it
+ * from that moment whatever the server's list does next.
+ */
+const categories = computed(() => groups.categoriesOf(groupId.value))
+const isSavingCategories = ref(false)
+
+const hasOwnCategories = computed(() =>
+  categories.value.length > 0 && groups.hasOwnCategories(groupId.value),
+)
+
+async function saveCategories(list: CategoryDraft[]): Promise<void> {
+  isSavingCategories.value = true
+
+  try {
+    await groups.setCategories(groupId.value, list)
+    notify(t('Saved.'), 'done')
+  } catch (caught) {
+    report(caught, t('Could not save those categories.'))
+  } finally {
+    isSavingCategories.value = false
+  }
+}
 
 /**
  * How many expenses each row currently matches.
@@ -728,6 +758,36 @@ async function unarchive(): Promise<void> {
     </section>
 
     <!--
+      What this group files its expenses under, and the words that do the filing.
+      Any member, for the same reason the names below are: it decides how spending
+      is described, not what anybody owes.
+    -->
+    <CollapsibleSection :title="t('Categories')" :count="categories.length" testid="categories">
+      <CategoryEditor
+        :categories="categories"
+        :is-saving="isSavingCategories"
+        :description="hasOwnCategories
+          ? t('This group keeps its own list. Words are matched against what an expense is called, longest first, so uber eats beats uber.')
+          : t('This group uses the list the server ships. Saving any change here takes a copy of it, and the group keeps that copy from then on.')"
+        @save="saveCategories"
+      />
+
+      <!--
+        Where the list meets the expenses that were here before it. Adding a
+        keyword files nothing that already exists, and saying so here - next to
+        the box the keyword was just typed into - is the only place the thought
+        occurs.
+      -->
+      <RouterLink
+        :to="{ name: 'file-expenses', params: { groupId } }"
+        data-testid="file-expenses-link"
+        class="btn btn-press btn-secondary mt-3 w-full"
+        style="border-color: var(--border)"
+      >{{ t('File existing expenses') }}
+      </RouterLink>
+    </CollapsibleSection>
+
+    <!--
       Names to keep out of the totals the group screen states. Not out of the money:
       the month still cost what it cost, everyone still owes their share of it, and
       every screen that leaves one of these out says how much it left out - a total
@@ -738,9 +798,12 @@ async function unarchive(): Promise<void> {
       rent drowns out the month on a screen everybody reads, and the person who
       notices that is rarely the one holding the owner's account.
     -->
-    <section class="surface-card mb-4 p-4">
-      <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('Leave out of the totals') }}</h2>
-      <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('The rent is bigger than everything else every month, so it drowns out what the group actually spent. Names matching these are kept out of the month and group totals, and skipped when picking the biggest expense. Each total says how much it left out, so nothing goes missing.') }}
+    <CollapsibleSection
+      :title="t('Leave out of the totals')"
+      :count="ignoredPatterns.length"
+      testid="ignored-names"
+    >
+      <p class="text-xs text-[var(--text-muted)]">{{ t('The rent is bigger than everything else every month, so it drowns out what the group actually spent. Names matching these are kept out of the month and group totals, and skipped when picking the biggest expense. Each total says how much it left out, so nothing goes missing.') }}
       </p>
       <p class="mt-1 text-xs text-[var(--text-muted)]">{{ t('Balances and who owes whom never change: the rent is still money somebody paid and somebody owes.') }}
       </p>
@@ -766,11 +829,13 @@ async function unarchive(): Promise<void> {
             <button
               type="button"
               data-testid="remove-pattern"
-              class="tap-target shrink-0 px-2 text-sm text-[var(--text-muted)]"
+              class="btn-press flex h-11 w-9 shrink-0 items-center justify-center rounded-lg border text-owing"
+              style="border-color: var(--border)"
               :aria-label="t('Remove')"
+              :title="t('Remove')"
               @click="removePattern(index)"
             >
-              <span aria-hidden="true">x</span>
+              <FontAwesomeIcon :icon="faXmark" class="h-4 w-4" />
             </button>
           </div>
 
@@ -802,7 +867,7 @@ async function unarchive(): Promise<void> {
 
       <p class="mt-3 text-xs text-[var(--text-muted)]">{{ t('Anyone in the group can change this. It only decides what the totals say, and never what anybody owes.') }}
       </p>
-    </section>
+    </CollapsibleSection>
 
     <section class="surface-card mb-4 p-4">
       <div class="mb-2 flex items-center justify-between gap-2">

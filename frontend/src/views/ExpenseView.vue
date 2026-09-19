@@ -10,6 +10,9 @@ import { notify, report } from '@/ui/toasts'
 import { useAuthStore } from '@/stores/auth'
 import { memberColor } from '@/domain/memberColors'
 import { formatMoney } from '@/domain/money'
+import { categoryFor } from '@/domain/categories'
+import { resolveIcon } from '@/domain/icons'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,6 +36,11 @@ const expense = computed(() =>
 )
 
 const group = computed(() => groups.groups.find((candidate) => candidate.id === groupId.value))
+
+/** What it was filed under, or null for one nobody filed. */
+const category = computed(() =>
+  categoryFor(expense.value?.categoryKey, groups.categoriesOf(groupId.value)),
+)
 
 const comments = computed(() => expenses.commentsFor(expenseId.value))
 
@@ -204,6 +212,24 @@ async function remove(): Promise<void> {
         >{{ t('Converted to the group currency when it syncs.') }}
         </p>
         <p v-if="expense.notes" class="mt-2 text-sm">{{ expense.notes }}</p>
+
+        <!--
+          What it was filed under, named rather than drawn: this is the screen
+          where somebody is checking, and an icon alone answers nothing.
+        -->
+        <p
+          v-if="category"
+          data-testid="expense-category"
+          class="mt-2 flex items-center gap-2 text-sm text-[var(--text-muted)]"
+        >
+          <FontAwesomeIcon
+            :icon="resolveIcon(category.iconName).definition"
+            class="h-3.5 w-3.5"
+            :style="{ color: category.colorHex }"
+            aria-hidden="true"
+          />
+          {{ category.name }}
+        </p>
       </section>
 
       <section class="surface-card p-4">

@@ -17,6 +17,8 @@ import { roundMoney } from '@/domain/money'
 export interface LocalStatsExpense {
   groupId: string
   paidByMemberId: string
+  /** What it was filed under, or null for one nobody filed. */
+  categoryKey?: string | null
   amountInBaseCurrency: number
   spentAt: string
   splits: readonly { memberId: string; amountInBaseCurrency: number }[]
@@ -60,11 +62,19 @@ export interface LocalSpendPointMember {
   amount: number
 }
 
+/** What one category came to inside one bucket, for the line over the bars. */
+export interface LocalSpendPointCategory {
+  key: string | null
+  amount: number
+}
+
 export interface LocalSpendPoint {
   bucket: string
   amount: number
   expenseCount: number
   byMember: LocalSpendPointMember[]
+  /** The same bucket cut by what it went on rather than by who paid. */
+  byCategory: LocalSpendPointCategory[]
 }
 
 export interface LocalMemberSpend {
@@ -75,6 +85,12 @@ export interface LocalMemberSpend {
   net: number
 }
 
+export interface LocalCategorySpend {
+  key: string | null
+  amount: number
+  expenseCount: number
+}
+
 export interface LocalStats {
   currency: string
   totalSpend: number
@@ -83,6 +99,7 @@ export interface LocalStats {
   expenseCount: number
   spendOverTime: LocalSpendPoint[]
   byMember: LocalMemberSpend[]
+  byCategory: LocalCategorySpend[]
 }
 
 export function computeStats(input: LocalStatsInput): LocalStats {
@@ -119,7 +136,74 @@ export function computeStats(input: LocalStatsInput): LocalStats {
     expenseCount: expenses.length,
     spendOverTime: spendOverTime(expenses, input.granularity, names, round),
     byMember: byMember(input, names, round),
+    byCategory: byCategory(expenses, round),
   }
+}
+
+/**
+ * Where the money went, largest first.
+ *
+ * The same shape and the same order the server answers with, down to keeping the
+ * unfiled expenses in the list rather than dropping them: the two answers replace
+ * each other on one screen, and a figure that moves when the network arrives is a
+ * figure nobody trusts.
+ */
+function byCategory(
+  expenses: readonly LocalStatsExpense[],
+  round: (amount: number) => number,
+): LocalCategorySpend[] {
+  const totals = new Map<string | null, { amount: number; expenseCount: number }>()
+
+  for (const expense of expenses) {
+    const key = expense.categoryKey ?? null
+    const found = totals.get(key) ?? { amount: 0, expenseCount: 0 }
+
+    found.amount += expense.amountInBaseCurrency
+    found.expenseCount += 1
+    totals.set(key, found)
+  }
+
+  return [...totals]
+    .map(([key, row]) => ({ key, amount: round(row.amount), expenseCount: row.expenseCount }))
+    .filter((row) => row.amount !== 0)
+    .sort(
+      (left, right) =>
+        right.amount - left.amount || (left.key ?? '').localeCompare(right.key ?? ''),
+    )
+}
+
+/**
+ * What one bucket went on.
+ *
+ * The same rules as the payer split beside it, and for the same reason: the chart
+ * draws one of these as a line against the bar's own height, so a category that
+ * was the whole bucket has to reach the top of it rather than stopping a cent
+ * short.
+ */
+function categoriesIn(
+  inBucket: readonly LocalStatsExpense[],
+  total: number,
+  round: (amount: number) => number,
+): LocalSpendPointCategory[] {
+  const totals = new Map<string | null, number>()
+
+  for (const expense of inBucket) {
+    const key = expense.categoryKey ?? null
+    totals.set(key, (totals.get(key) ?? 0) + expense.amountInBaseCurrency)
+  }
+
+  const rows = [...totals.entries()]
+    .map(([key, amount]) => ({ key, amount: round(amount) }))
+    .filter((row) => row.amount !== 0)
+    .sort(
+      (left, right) =>
+        right.amount - left.amount || (left.key ?? '').localeCompare(right.key ?? ''),
+    )
+
+  const residue = round(total - rows.reduce((sum, row) => sum + row.amount, 0))
+  if (residue !== 0 && rows.length > 0) rows[0] = { ...rows[0], amount: round(rows[0].amount + residue) }
+
+  return rows
 }
 
 function spendOverTime(
@@ -175,7 +259,13 @@ function spendOverTime(
         payers[0] = { ...payers[0], amount: round(payers[0].amount + residue) }
       }
 
-      return { bucket, amount: total, expenseCount: inBucket.length, byMember: payers }
+      return {
+        bucket,
+        amount: total,
+        expenseCount: inBucket.length,
+        byMember: payers,
+        byCategory: categoriesIn(inBucket, total, round),
+      }
     })
 }
 

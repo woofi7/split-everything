@@ -62,6 +62,13 @@ public static class SyncPayloads
         public SplitType? SplitType { get; set; }
         public Guid? ReceiptId { get; set; }
         public string? Notes { get; set; }
+
+        /// <summary>
+        /// What it was for. Absent from a client that predates categories, which
+        /// leaves the expense unfiled rather than clearing one somebody set.
+        /// </summary>
+        public string? CategoryKey { get; set; }
+
         public List<SplitPayload> Splits { get; set; } = [];
         public List<ItemPayload> Items { get; set; } = [];
 

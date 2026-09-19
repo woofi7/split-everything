@@ -208,6 +208,44 @@ public class ApiCoverageTests(PostgresFixture fixture) : ApiTestBase(fixture)
             .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
+    /// <summary>
+    /// The guards on the upload itself, before a single row is read.
+    ///
+    /// An import that says nothing when the file is missing looks like an import
+    /// that ran and found nothing, which is a very different thing.
+    /// </summary>
+    [Fact]
+    public async Task An_upload_with_no_file_says_so()
+    {
+        await SignInAsync();
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent("{}"), "request");
+
+        (await Client.PostAsync("/api/import/csv/preview", content))
+            .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task An_upload_too_large_to_be_an_export_is_refused()
+    {
+        await SignInAsync();
+
+        // Ten megabytes of commas. The limit exists so a mis-picked file cannot be
+        // read into memory on the server.
+        using var content = new MultipartFormDataContent();
+        var csv = new StringContent(new string(',', 11 * 1024 * 1024));
+        csv.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+        content.Add(csv, "file", "huge.csv");
+        content.Add(new StringContent("{}"), "request");
+
+        var response = await Client.PostAsync("/api/import/csv/preview", content);
+
+        // Either the controller's own limit or the host's: both are the file being
+        // refused rather than read.
+        ((int)response.StatusCode).ShouldBeGreaterThanOrEqualTo(400);
+    }
+
     [Fact]
     public async Task Duplicate_checks_and_split_suggestions_are_reachable_over_http()
     {

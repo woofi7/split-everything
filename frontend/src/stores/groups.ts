@@ -5,6 +5,20 @@ import { db, type LocalGroup, type LocalMember } from '@/offline/db'
 import { looksOffline, type ApiClient } from '@/api/client'
 import type { AddableUser } from '@/api/types'
 import type { SplitType } from '@/domain/splitting'
+import type { Category } from '@/domain/categories'
+
+/**
+ * One line of an edited list. The key travels with a category that already exists,
+ * so renaming it keeps every expense filed under it; a new one is sent without and
+ * the server makes a key from the name.
+ */
+export interface CategoryDraft {
+  key?: string
+  name: string
+  iconName?: string
+  colorHex?: string
+  keywords?: string[]
+}
 
 const MAIN_GROUP_KEY = 'split-everything.main-group'
 
@@ -42,6 +56,21 @@ export const useGroupsStore = defineStore('groups', () => {
   const groups = ref<LocalGroup[]>([])
   const includeArchived = ref(false)
   const isLoading = ref(false)
+
+  /**
+   * Each group's categories, by group id.
+   *
+   * Held here as well as in the replica so a screen can read them synchronously
+   * while it renders, the same way it reads the groups themselves.
+   */
+  const categoriesByGroup = ref<Record<string, Category[]>>({})
+
+  /**
+   * The groups whose list is their own rather than the server's, as far as this
+   * session knows. Only a save can tell them apart - the endpoint answers with the
+   * resolved list either way - so this is what the last save said.
+   */
+  const ownCategories = ref<Set<string>>(new Set())
   const isOffline = ref(false)
   let api: ApiClient | null = null
 
@@ -164,7 +193,17 @@ export const useGroupsStore = defineStore('groups', () => {
       // Cache first, so the screen has content before the network answers. Inside
       // the try with everything else: it was outside, so a replica that failed to
       // answer left "Loading your groups" on screen for good.
-      const cached = await db.groups.toArray()
+      // Both at once: they are independent reads of the same replica, and asking
+      // for them one after the other puts a turn of the wheel between the screen
+      // and its content for no reason.
+      const [cachedCategories, cached] = await Promise.all([
+        db.categories.toArray(),
+        db.groups.toArray(),
+      ])
+
+      categoriesByGroup.value = Object.fromEntries(
+        cachedCategories.map((row) => [row.groupId, row.categories]),
+      )
       groups.value = cached
       settleMainGroup()
 
@@ -241,11 +280,87 @@ export const useGroupsStore = defineStore('groups', () => {
       await db.groups.put(local)
       upsert(local)
       isOffline.value = false
+
+      // Alongside rather than inside the group: the categories are their own
+      // endpoint because they are their own editor, and a group that has never
+      // touched them is reading the server's list. Not awaited by the caller's
+      // path - the group is what they asked for, and the picker can fill in a
+      // moment later.
+      void loadCategories(groupId)
+
       return local
     } catch (caught) {
       isOffline.value = looksOffline(caught)
       return db.groups.get(groupId)
     }
+  }
+
+  /**
+   * The group's categories, cached on the group.
+   *
+   * Cached because everything that uses them has to work with no connection: the
+   * picker on the expense form, the guess it starts from, the names on the cards
+   * and the breakdown on the stats screen.
+   */
+  async function loadCategories(groupId: string): Promise<Category[] | undefined> {
+    try {
+      const categories = await requireApi().get<Category[]>(`/groups/${groupId}/categories`)
+      await rememberCategories(groupId, categories)
+      return categories
+    } catch {
+      // The cached list stands: everything that reads it has to work with no
+      // connection, and a stale category name is worth more than none.
+      return categoriesOf(groupId)
+    }
+  }
+
+  /** Replaces this group's list. Any member may: it files spending, it moves no money. */
+  async function setCategories(groupId: string, categories: CategoryDraft[]): Promise<Category[]> {
+    const saved = await requireApi().put<Category[]>(`/groups/${groupId}/categories`, {
+      categories,
+    })
+
+    // An empty list is how a group stops keeping one: the server answers with its
+    // own again, and this group is following it from here.
+    await rememberCategories(groupId, saved, categories.length > 0)
+    return saved
+  }
+
+  async function rememberCategories(
+    groupId: string,
+    categories: Category[],
+    isOwn?: boolean,
+  ): Promise<void> {
+    // A list or nothing: everything downstream iterates this, and a screen that
+    // throws while rendering an expense form is a worse answer to a strange
+    // response than an empty picker.
+    if (!Array.isArray(categories)) return
+
+    await db.categories.put({ groupId, categories })
+    categoriesByGroup.value = { ...categoriesByGroup.value, [groupId]: categories }
+
+    if (isOwn === undefined) return
+
+    const own = new Set(ownCategories.value)
+    if (isOwn) own.add(groupId)
+    else own.delete(groupId)
+    ownCategories.value = own
+  }
+
+  /** The list a screen should show for this group, from the cache. */
+  function categoriesOf(groupId: string): Category[] {
+    return categoriesByGroup.value[groupId] ?? []
+  }
+
+  /**
+   * Whether that list is the group's own rather than the server's.
+   *
+   * Worth saying on the screen that edits it: the first save takes a copy, and
+   * somebody changing one word should know they have just stopped following the
+   * list everybody else follows.
+   */
+  function hasOwnCategories(groupId: string): boolean {
+    return ownCategories.value.has(groupId)
   }
 
   async function create(request: {
@@ -492,6 +607,11 @@ export const useGroupsStore = defineStore('groups', () => {
     unarchive,
     setDefaultSplit,
     setIgnoredNames,
+    loadCategories,
+    setCategories,
+    categoriesOf,
+    categoriesByGroup,
+    hasOwnCategories,
     setMemberColor,
     addUserMember,
     mergeMembers,

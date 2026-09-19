@@ -523,6 +523,7 @@ public sealed class ImportService(
                 SpentAt = row.SpentAt,
                 SplitType = row.SplitType,
                 Notes = row.Notes,
+                CategoryKey = ExpenseService.CleanCategoryKey(row.CategoryKey),
                 OriginLineageId = group.LineageId,
                 ImportFingerprint = row.Fingerprint,
                 ImportBatchId = batch.Id,

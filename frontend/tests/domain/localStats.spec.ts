@@ -203,3 +203,151 @@ describe('the stats worked out on this device', () => {
     expect(yen.totalSpend).toBe(100)
   })
 })
+
+/**
+ * The rounding residue in a bucket's payer split.
+ *
+ * The mirror of the rule the category split follows, and it had no test of its
+ * own: rounding each share independently can leave the parts a cent off the
+ * whole, and a stacked bar whose parts do not sum to its total is a lie about
+ * both. The largest share absorbs it.
+ */
+describe('a bucket whose shares do not divide evenly', () => {
+  it('puts the odd cent on the largest payer, so the stack fills its bar', () => {
+    const stats = computeStats(
+      input({
+        expenses: [
+          {
+            groupId: 'g1',
+            paidByMemberId: ALICE,
+            amountInBaseCurrency: 10.005,
+            spentAt: '2026-01-10T12:00:00Z',
+            splits: [{ memberId: ALICE, amountInBaseCurrency: 10.005 }],
+          },
+          {
+            groupId: 'g1',
+            paidByMemberId: BOB,
+            amountInBaseCurrency: 10.005,
+            spentAt: '2026-01-11T12:00:00Z',
+            splits: [{ memberId: BOB, amountInBaseCurrency: 10.005 }],
+          },
+        ],
+      }),
+    )
+
+    const bucket = stats.spendOverTime[0]
+    expect(bucket.amount).toBe(20.01)
+    // Rounded on their own these come to 20.00, a cent short of the bar above them.
+    expect(bucket.byMember.map((member) => member.amount)).toEqual([10.01, 10])
+    expect(bucket.byMember.reduce((sum, member) => sum + member.amount, 0))
+      .toBeCloseTo(bucket.amount, 2)
+  })
+})
+
+/**
+ * Where the money went, computed on the device.
+ *
+ * The same shape and the same order the server answers with: the two replace each
+ * other on one screen, and a figure that moves when the network arrives is a
+ * figure nobody trusts.
+ */
+describe('spending by category', () => {
+  const filed = (categoryKey: string | null, amount: number) => ({
+    groupId: 'group-1',
+    paidByMemberId: 'member-alice',
+    amountInBaseCurrency: amount,
+    spentAt: '2026-03-02T12:00:00Z',
+    categoryKey,
+    splits: [{ memberId: 'member-alice', amountInBaseCurrency: amount }],
+  })
+
+  const statsOf = (expenses: ReturnType<typeof filed>[]) =>
+    computeStats({
+      currency: 'CAD',
+      granularity: 'month',
+      myMemberIds: ['member-alice'],
+      members: [{ id: 'member-alice', displayName: 'Alice' }],
+      expenses,
+      settlements: [],
+    })
+
+  it('totals each category, largest first', () => {
+    const stats = statsOf([
+      filed('groceries', 60),
+      filed('dining', 25),
+      filed('groceries', 40),
+    ])
+
+    expect(stats.byCategory).toEqual([
+      { key: 'groceries', amount: 100, expenseCount: 2 },
+      { key: 'dining', amount: 25, expenseCount: 1 },
+    ])
+  })
+
+  it('keeps what nobody filed rather than dropping it', () => {
+    const stats = statsOf([filed('groceries', 60), filed(null, 10)])
+
+    // A breakdown that quietly omits part of the spending is worse than one that
+    // admits to it.
+    expect(stats.byCategory).toContainEqual({ key: null, amount: 10, expenseCount: 1 })
+  })
+
+  it('says nothing about categories when nothing was filed at all', () => {
+    expect(statsOf([]).byCategory).toEqual([])
+  })
+
+  /**
+   * The same cut, bucket by bucket, which is what the line over the bars is drawn
+   * from. Without it a category is one number for the whole window, and nobody can
+   * tell a category that is creeping up from one that always cost that much.
+   */
+  describe('inside each bucket', () => {
+    const on = (categoryKey: string | null, amount: number, spentAt: string) => ({
+      ...filed(categoryKey, amount),
+      spentAt,
+    })
+
+    it('splits the bucket by what it went on, largest first', () => {
+      const stats = statsOf([
+        on('groceries', 60, '2026-03-02T12:00:00Z'),
+        on('dining', 25, '2026-03-04T12:00:00Z'),
+        on('groceries', 40, '2026-04-01T12:00:00Z'),
+      ])
+
+      expect(stats.spendOverTime[0].byCategory).toEqual([
+        { key: 'groceries', amount: 60 },
+        { key: 'dining', amount: 25 },
+      ])
+      expect(stats.spendOverTime[1].byCategory).toEqual([{ key: 'groceries', amount: 40 }])
+    })
+
+    it('keeps the unfiled in the bucket too', () => {
+      const stats = statsOf([
+        on('groceries', 60, '2026-03-02T12:00:00Z'),
+        on(null, 10, '2026-03-03T12:00:00Z'),
+      ])
+
+      expect(stats.spendOverTime[0].byCategory).toContainEqual({ key: null, amount: 10 })
+    })
+
+    /**
+     * The line is drawn against the bar's own height, so a category that was the
+     * whole bucket has to reach the top of it rather than stopping a cent short.
+     */
+    it('adds up to the bucket, to the cent', () => {
+      const stats = statsOf([
+        on('groceries', 10.005, '2026-03-02T12:00:00Z'),
+        on('dining', 10.005, '2026-03-03T12:00:00Z'),
+      ])
+
+      const bucket = stats.spendOverTime[0]
+      const parts = bucket.byCategory.reduce((sum, row) => sum + row.amount, 0)
+
+      // Rounded each on its own, these two would come to a cent more than the
+      // bucket they are inside. Closeness rather than equality only because
+      // adding the parts back up in the test is itself floating point.
+      expect(parts).toBeCloseTo(bucket.amount, 2)
+      expect(bucket.byCategory.map((row) => row.amount)).toEqual([10.01, 10])
+    })
+  })
+})

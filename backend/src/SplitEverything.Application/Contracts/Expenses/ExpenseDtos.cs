@@ -38,7 +38,10 @@ Guid? ClientId,
     Guid? ImportBatchId,
     // Left out for the ordinary expense one person paid for, where PaidByMemberId
     // says it all. When given, the amounts must add up to Amount.
-    IReadOnlyList<PayerInputDto>? Payers = null);
+    IReadOnlyList<PayerInputDto>? Payers = null,
+    // What it was for, as a category key. Null for an expense nobody filed, which
+    // is every expense until somebody says otherwise.
+    string? CategoryKey = null);
 
 public sealed record UpdateExpenseRequest(
     Guid? PaidByMemberId,
@@ -55,7 +58,10 @@ public sealed record UpdateExpenseRequest(
 IReadOnlyDictionary<string, long>? BaseVectorClock,
     // Several people paying for one thing. Left out, whoever is on the expense
     // already stays there.
-    IReadOnlyList<PayerInputDto>? Payers = null);
+    IReadOnlyList<PayerInputDto>? Payers = null,
+    // What it was for. Null leaves it alone and an empty string unfiles it, the
+    // same convention the text fields use.
+    string? CategoryKey = null);
 
 public sealed record ExpenseSplitDto(Guid MemberId, string MemberName, decimal Amount, decimal AmountInBaseCurrency, decimal? InputValue);
 
@@ -84,7 +90,8 @@ public sealed record ExpenseDto(
     IReadOnlyDictionary<string, long> VectorClock,
     long ServerSeq,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? CategoryKey = null);
 
 public sealed record ExpenseRevisionDto(
     Guid Id, int Revision, Guid? EditedByUserId, string? EditedByName,

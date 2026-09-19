@@ -65,6 +65,7 @@ public sealed class ExpenseService(
             SplitType = request.SplitType,
             ReceiptId = request.ReceiptId,
             Notes = request.Notes?.Trim(),
+            CategoryKey = CleanCategoryKey(request.CategoryKey),
             OriginLineageId = group.LineageId,
             ImportFingerprint = request.ImportFingerprint,
             ImportBatchId = request.ImportBatchId,
@@ -222,6 +223,15 @@ public sealed class ExpenseService(
 
         if (request.ReceiptId is not null) expense.ReceiptId = request.ReceiptId;
         if (request.Notes is not null) expense.Notes = request.Notes.Trim();
+
+        // Null leaves the filing alone; an empty string is the explicit "not filed
+        // under anything", which is what the picker's blank option sends.
+        if (request.CategoryKey is not null)
+        {
+            var wanted = CleanCategoryKey(request.CategoryKey);
+            if (wanted != expense.CategoryKey) changes.Add("category");
+            expense.CategoryKey = wanted;
+        }
 
         var splitType = request.SplitType ?? expense.SplitType;
         var members = await LoadMemberIdsAsync(expense.GroupId, ct);
@@ -907,7 +917,8 @@ public sealed class ExpenseService(
             commentCount,
             expense.Clock.Counters,
             expense.ServerSeq,
-            expense.CreatedAt, expense.UpdatedAt);
+            expense.CreatedAt, expense.UpdatedAt,
+            expense.CategoryKey);
     }
 
     private async Task<CommentDto> MapCommentAsync(ExpenseComment comment, CancellationToken ct)
@@ -922,12 +933,28 @@ public sealed class ExpenseService(
             comment.Body, comment.CreatedAt, comment.EditedAt, []);
     }
 
+    /// <summary>
+    /// The key as it is stored: trimmed, lower case, or null for unfiled.
+    ///
+    /// Not checked against the group's list. A category can be removed while an
+    /// expense filed under it is still there, and an expense arriving from a device
+    /// that has not pulled the new list yet is not a reason to refuse the expense -
+    /// it reads as unfiled until somebody says otherwise.
+    /// </summary>
+    internal static string? CleanCategoryKey(string? key)
+    {
+        var trimmed = key?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(trimmed)) return null;
+        if (trimmed.Length > 48) throw new ValidationException("That category key is too long.");
+        return trimmed;
+    }
+
     internal static object ExpensePayload(Expense expense) => new
     {
         expense.Id, expense.GroupId, expense.PaidByMemberId, expense.Description,
         expense.Amount, expense.Currency, expense.AmountInBaseCurrency, expense.ExchangeRate,
         expense.SpentAt, SplitType = (int)expense.SplitType,
-        expense.ReceiptId, expense.Notes, expense.Revision, expense.IsDeleted,
+        expense.ReceiptId, expense.Notes, expense.CategoryKey, expense.Revision, expense.IsDeleted,
         expense.OriginGroupId, expense.OriginLineageId,
         // Who paid rides inside the expense payload rather than syncing as an entity
         // of its own: it is part of what an expense is, and a device that had one

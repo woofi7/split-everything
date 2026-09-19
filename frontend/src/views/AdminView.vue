@@ -4,6 +4,9 @@ import { computed, onMounted, ref } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { resolveIcon } from '@/domain/icons'
+import CategoryEditor from '@/components/groups/CategoryEditor.vue'
+import type { Category } from '@/domain/categories'
+import type { CategoryDraft } from '@/stores/groups'
 import { formatMoney } from '@/domain/money'
 import { useApi } from '@/api/provider'
 import { useAuthStore } from '@/stores/auth'
@@ -58,9 +61,41 @@ const isDeleting = ref(false)
 // and a screen that greets them with a red error rather than a plain sentence
 // reads like something broke.
 onMounted(() => {
-  if (auth.user?.isAdmin) void load()
-  else isLoading.value = false
+  if (auth.user?.isAdmin) {
+    void load()
+    void loadCategories()
+  } else {
+    isLoading.value = false
+  }
 })
+
+/**
+ * The server's own category list: what every group starts from, and what a group
+ * keeps seeing until it edits its own.
+ */
+const categories = ref<Category[]>([])
+const isSavingCategories = ref(false)
+
+async function loadCategories(): Promise<void> {
+  try {
+    categories.value = await api.get<Category[]>('/admin/categories')
+  } catch (caught) {
+    report(caught, t('Could not read the categories.'))
+  }
+}
+
+async function saveCategories(list: CategoryDraft[]): Promise<void> {
+  isSavingCategories.value = true
+
+  try {
+    categories.value = await api.put<Category[]>('/admin/categories', { categories: list })
+    notify(t('Saved.'), 'done')
+  } catch (caught) {
+    report(caught, t('Could not save those categories.'))
+  } finally {
+    isSavingCategories.value = false
+  }
+}
 
 async function load(): Promise<void> {
   isLoading.value = true
@@ -240,6 +275,22 @@ const on = (iso: string | null) =>
       <p v-if="!isLoading && all.length === 0" class="surface-card p-6 text-center text-sm text-[var(--text-muted)]">
         {{ t('No groups on this server.') }}
       </p>
+
+      <!--
+        The list every group starts from. Editing it reaches every group that has
+        never edited its own, and none of the ones that have - which is the whole
+        arrangement, and worth saying here rather than leaving to be discovered.
+      -->
+      <section class="surface-card mb-5 p-4">
+        <h2 class="mb-1 text-sm font-medium text-[var(--text-muted)]">{{ t('Categories') }}</h2>
+
+        <CategoryEditor
+          :categories="categories"
+          :is-saving="isSavingCategories"
+          :description="t('Every group starts from this list. A group that has edited its own keeps that one, and nothing here reaches it.')"
+          @save="saveCategories"
+        />
+      </section>
     </template>
   </AppShell>
 </template>

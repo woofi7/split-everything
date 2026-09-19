@@ -1055,12 +1055,44 @@ describe('GroupSettingsView', () => {
   })
 
   /**
+   * The categories, and the expenses that were here before them.
+   *
+   * Adding a keyword files nothing that already exists, so the way to catch the
+   * backlog up sits next to the box the keyword was just typed into - which is
+   * the only place the thought occurs.
+   */
+  it('offers a way to file the expenses that came before the categories', async () => {
+    const { wrapper } = await mountView(GroupSettingsView, { api: api() })
+    await settle()
+
+    await wrapper.find('[data-testid="categories-toggle"]').trigger('click')
+    await settle()
+
+    const link = wrapper.findComponent<InstanceType<typeof RouterLinkStub>>(
+      '[data-testid="file-expenses-link"]',
+    )
+    expect(link.exists()).toBe(true)
+    expect(link.props('to')).toEqual({ name: 'file-expenses', params: { groupId: GROUP_ID } })
+  })
+
+  /**
    * A member's colour, which belongs to the group.
    *
    * It is what the expense cards, the balances and the charts all draw with, so
    * seeing it and changing it belongs where the group is described.
    */
   describe('names to leave out of the highlights', () => {
+    /**
+     * Opens the section, the way a person does.
+     *
+     * It starts closed now: a list of patterns, a list of categories and a list of
+     * people on one screen buried everything under them.
+     */
+    async function openNames(wrapper: { find: (selector: string) => { trigger: (event: string) => Promise<void> } }) {
+      await wrapper.find('[data-testid="ignored-names-toggle"]').trigger('click')
+      await settle()
+    }
+
     it('shows the patterns the group already has', async () => {
       const shared = testGroup()
       shared.ignoredNamePatterns = ['Loyer', '^Hydro']
@@ -1070,6 +1102,7 @@ describe('GroupSettingsView', () => {
         groups: [shared],
       })
       await settle()
+      await openNames(wrapper)
 
       const values = wrapper
         .findAll('[data-testid="pattern-input"]')
@@ -1088,6 +1121,7 @@ describe('GroupSettingsView', () => {
         ],
       })
       await settle()
+      await openNames(wrapper)
 
       await wrapper.find('[data-testid="add-pattern"]').trigger('click')
       await settle()
@@ -1109,6 +1143,7 @@ describe('GroupSettingsView', () => {
         ],
       })
       await settle()
+      await openNames(wrapper)
 
       await wrapper.find('[data-testid="add-pattern"]').trigger('click')
       await settle()
@@ -1126,6 +1161,7 @@ describe('GroupSettingsView', () => {
 
       const { wrapper } = await mountView(GroupSettingsView, { api: client })
       await settle()
+      await openNames(wrapper)
 
       await wrapper.find('[data-testid="add-pattern"]').trigger('click')
       await settle()
@@ -1161,6 +1197,7 @@ describe('GroupSettingsView', () => {
 
       const { wrapper } = await mountView(GroupSettingsView, { api: client, groups: [shared] })
       await settle()
+      await openNames(wrapper)
 
       await wrapper.find('[data-testid="add-pattern"]').trigger('click')
       await settle()
@@ -1189,6 +1226,7 @@ describe('GroupSettingsView', () => {
 
       const { wrapper } = await mountView(GroupSettingsView, { api: client })
       await settle()
+      await openNames(wrapper)
 
       await wrapper.find('[data-testid="add-pattern"]').trigger('click')
       await settle()

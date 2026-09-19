@@ -54,6 +54,7 @@ public sealed class StatsService(
                 e.SpentAt,
                 e.AmountInBaseCurrency,
                 e.PaidByMemberId,
+                e.CategoryKey,
                 // Every payer, not only the name on the expense: an expense two
                 // people paid for credits each of them what they put in.
                 Payers = e.Payers.Where(y => !y.IsDeleted)
@@ -127,7 +128,30 @@ public sealed class StatsService(
                     byMember[0] = byMember[0] with { Amount = byMember[0].Amount + residue };
                 }
 
-                return new SpendPointDto(g.Key, total, g.Count(), byMember);
+                // The same bucket cut the other way: what it went on rather than
+                // who paid. Held to the same rules, because the chart draws one of
+                // these as a line against the bar's own height, and a category that
+                // was the whole bucket has to reach the top of it.
+                var byCategory = g
+                    .GroupBy(e => e.CategoryKey)
+                    .Select(c => new SpendPointCategoryDto(
+                        c.Key,
+                        CurrencyPrecision.Round(
+                            c.Sum(e => Normalise(e.GroupId, e.AmountInBaseCurrency)), scope.Currency)))
+                    .Where(category => category.Amount != 0m)
+                    .OrderByDescending(category => category.Amount)
+                    .ThenBy(category => category.Key)
+                    .ToList();
+
+                var categoryResidue = CurrencyPrecision.Round(
+                    total - byCategory.Sum(category => category.Amount), scope.Currency);
+
+                if (categoryResidue != 0m && byCategory.Count > 0)
+                {
+                    byCategory[0] = byCategory[0] with { Amount = byCategory[0].Amount + categoryResidue };
+                }
+
+                return new SpendPointDto(g.Key, total, g.Count(), byMember, byCategory);
             })
             .ToList();
 
@@ -171,7 +195,17 @@ public sealed class StatsService(
             CurrencyPrecision.Round(myPaid, scope.Currency),
             expenses.Count,
             query.From, query.To,
-            spendOverTime, byMember, debtTrends);
+            spendOverTime, byMember, debtTrends,
+            expenses
+                .GroupBy(e => e.CategoryKey)
+                .Select(g => new CategorySpendDto(
+                    g.Key,
+                    CurrencyPrecision.Round(g.Sum(e => e.AmountInBaseCurrency), scope.Currency),
+                    g.Count()))
+                .Where(row => row.Amount != 0m)
+                .OrderByDescending(row => row.Amount)
+                .ThenBy(row => row.Key)
+                .ToList());
     }
 
     private sealed record Scope(List<Guid> GroupIds, Dictionary<Guid, string> GroupCurrencies, string Currency);

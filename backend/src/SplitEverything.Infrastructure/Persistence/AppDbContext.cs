@@ -11,6 +11,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<Domain.Entities.PushSubscription> PushSubscriptions => Set<Domain.Entities.PushSubscription>();
 
+    public DbSet<Category> Categories => Set<Category>();
+
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<GroupInvite> GroupInvites => Set<GroupInvite>();

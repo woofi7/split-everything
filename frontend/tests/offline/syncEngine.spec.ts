@@ -411,6 +411,58 @@ describe('offline sync engine', () => {
     expect(await getCursor(groupId)).toBe(5)
   })
 
+  it('carries what an expense was filed under, and unfiles one that says nothing', async () => {
+    const entry = (id: string, payload: Record<string, unknown>) => ({
+      serverSeq: id === 'filed' ? 6 : 7,
+      groupId,
+      entityType: 'Expense',
+      entityId: id,
+      operation: 'Create',
+      deviceId: 'device-b',
+      payloadJson: JSON.stringify({
+        id,
+        groupId,
+        paidByMemberId: memberId,
+        description: 'From another device',
+        amount: 25,
+        currency: 'CAD',
+        amountInBaseCurrency: 25,
+        exchangeRate: 1,
+        spentAt: '2026-02-01T12:00:00Z',
+        splitType: 1,
+        splits: [{ memberId, amount: 25, amountInBaseCurrency: 25 }],
+        items: [],
+        revision: 1,
+        isDeleted: false,
+        ...payload,
+      }),
+      vectorClock: { 'device-b': 1 },
+      lineageId: 'lineage-1',
+      sourceGroupId: null,
+      counterpartGroupId: null,
+      createdAt: '2026-02-01T12:00:00Z',
+    })
+
+    const api = fakeApi({
+      pull: vi.fn(async () => ({
+        entries: [entry('filed', { categoryKey: 'groceries' }), entry('older', {})],
+        groupCursors: { [groupId]: 7 },
+        snapshots: [],
+        hasMore: false,
+      })),
+    })
+
+    await new SyncEngine(api, () => true).pull()
+
+    // Without this the filing exists on the device that typed it and nowhere
+    // else, which is the same as not existing.
+    expect((await db.expenses.get('filed'))?.categoryKey).toBe('groceries')
+
+    // And a payload written before categories existed leaves the expense unfiled
+    // rather than inventing a filing for it.
+    expect((await db.expenses.get('older'))?.categoryKey).toBeNull()
+  })
+
   /**
    * An expense that moved to another group.
    *

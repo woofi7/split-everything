@@ -447,6 +447,34 @@ public class ImportServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtu
     }
 
     [Fact]
+    public async Task A_statement_row_keeps_what_the_client_filed_it_under()
+    {
+        var (userId, group) = await SetupAsync("Bob");
+        var members = NameMap(group);
+
+        // Filed in the browser, from the group's own keywords, while the rows were
+        // being reviewed: two hundred statement lines are exactly what nobody will
+        // ever file by hand.
+        await Imports.CommitStatementAsync(userId, new StatementCommitRequest([
+            new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "METRO", 20m, "CAD",
+                TestData.Jan1, SplitType.Equal,
+                [new SplitInputDto(members["Alice"]!.Value, null)], "fingerprint-1", null,
+                "groceries"),
+            new ConfirmedStatementRow(group.Id, members["Alice"]!.Value, "CADEAU", 30m, "CAD",
+                TestData.Jan1, SplitType.Equal,
+                [new SplitInputDto(members["Alice"]!.Value, null)], "fingerprint-2", null)
+        ], true, "visa-january.pdf"));
+
+        var expenses = await NewContext().Expenses
+            .Where(e => e.GroupId == group.Id)
+            .ToListAsync();
+
+        expenses.Single(e => e.Description == "METRO").CategoryKey.ShouldBe("groceries");
+        // And a row nothing matched stays unfiled rather than being put somewhere.
+        expenses.Single(e => e.Description == "CADEAU").CategoryKey.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task A_statement_commit_can_span_several_groups()
     {
         var (userId, first) = await SetupAsync("Bob");

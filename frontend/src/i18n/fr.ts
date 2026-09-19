@@ -164,6 +164,56 @@ export const fr: Record<string, string> = {
   'Choose the group to import into.': 'Choisissez le groupe de destination.',
   'No transactions could be read from that file. Bank layouts vary a lot; try the CSV export instead.':
     "Aucune transaction n'a pu être lue dans ce fichier. Les formats bancaires varient beaucoup ; essayez plutôt l'export CSV.",
+  // What an expense was for.
+  'Categories': 'Catégories',
+  'Category': 'Catégorie',
+  'Not filed': 'Non classée',
+  'guessed': 'deviné',
+  'Where it went': "Où est passé l'argent",
+  'Add a category': 'Ajouter une catégorie',
+  'Search or add': 'Chercher ou ajouter',
+  'Add "{name}"': 'Ajouter « {name} »',
+  'Adding': 'Ajout',
+  '{name} added.': '{name} ajoutée.',
+  '{name} added. This group now keeps its own list of categories.':
+    '{name} ajoutée. Ce groupe garde maintenant sa propre liste de catégories.',
+  'Could not add that category. It needs a connection.':
+    "Impossible d'ajouter cette catégorie : une connexion est nécessaire.",
+  'Words that file an expense here': 'Mots qui classent une dépense ici',
+  'metro, iga, epicerie': 'metro, iga, epicerie',
+  'Colour': 'Couleur',
+  'Move up': 'Monter',
+  'Move down': 'Descendre',
+  'This group keeps its own list. Words are matched against what an expense is called, longest first, so uber eats beats uber.':
+    "Ce groupe garde sa propre liste. Les mots sont comparés au nom de la dépense, le plus long d'abord : uber eats l'emporte sur uber.",
+  'This group uses the list the server ships. Saving any change here takes a copy of it, and the group keeps that copy from then on.':
+    "Ce groupe utilise la liste du serveur. Enregistrer une modification ici en prend une copie, que le groupe conserve ensuite.",
+  'Every group starts from this list. A group that has edited its own keeps that one, and nothing here reaches it.':
+    "Chaque groupe part de cette liste. Un groupe qui a modifié la sienne la conserve, et rien d'ici ne l'atteint.",
+  'Could not read the categories.': 'Impossible de lire les catégories.',
+  'Could not save those categories.': "Impossible d'enregistrer ces catégories.",
+  // Filing a backlog of expenses a handful at a time.
+  'File expenses': 'Classer les dépenses',
+  'File existing expenses': 'Classer les dépenses existantes',
+  'Tick the ones that belong together and say where they go. Nothing about the money changes: a category is a label, so balances and what everybody owes stay exactly as they are.':
+    "Cochez celles qui vont ensemble et dites où elles vont. Rien ne change côté argent : une catégorie est une étiquette, les soldes et ce que chacun doit restent identiques.",
+  'File the {count} the words already know': 'Classer les {count} que les mots reconnaissent',
+  'Everything': 'Tout',
+  'Search these expenses': 'Chercher dans ces dépenses',
+  'Select all {count}': 'Tout sélectionner ({count})',
+  'Select none': 'Ne rien sélectionner',
+  '{count} selected': '{count} sélectionnées',
+  'Show {count} more': 'Afficher {count} de plus',
+  'File {count}': 'Classer {count}',
+  'Where do they go?': 'Où vont-elles ?',
+  'Filing': 'Classement',
+  '{count} filed under {name}.': '{count} classées sous {name}.',
+  '{count} filed by their names.': '{count} classées selon leur nom.',
+  'Nothing to change: they were filed there already.':
+    "Rien à changer : elles y étaient déjà classées.",
+  'Could not file those expenses.': 'Impossible de classer ces dépenses.',
+  'Everything here is filed.': 'Tout est classé ici.',
+  'Nothing matches that.': 'Rien ne correspond.',
   'Version {version}': 'Version {version}',
   'Version {app} (server {server})': 'Version {app} (serveur {server})',
   'Reading the export': "Lecture de l'export",

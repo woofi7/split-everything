@@ -166,7 +166,10 @@ public sealed record ConfirmedStatementRow(
     SplitType SplitType,
     IReadOnlyList<Expenses.SplitInputDto> Splits,
     string Fingerprint,
-    string? Notes);
+    string? Notes,
+    // What the line was filed under, which the client works out from the group's
+    // own keywords while the rows are being reviewed.
+    string? CategoryKey = null);
 
 public sealed record StatementCommitRequest(
     IReadOnlyList<ConfirmedStatementRow> Rows,

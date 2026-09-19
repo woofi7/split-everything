@@ -38,6 +38,8 @@ export interface ExpenseDraft {
   items?: LocalItem[]
   receiptId?: string | null
   notes?: string | null
+  /** What it was for. The form guesses it from the description; this is the answer. */
+  categoryKey?: string | null
 }
 
 /** One group two people share, seen from the caller's side. */
@@ -208,6 +210,7 @@ export const useExpensesStore = defineStore('expenses', () => {
       splitType: draft.splitType,
       receiptId: draft.receiptId ?? null,
       notes: draft.notes ?? null,
+      categoryKey: draft.categoryKey ?? null,
       splits: shares.map((share) => ({
         memberId: share.memberId,
         amount: share.amount,
@@ -244,7 +247,7 @@ export const useExpensesStore = defineStore('expenses', () => {
 
   async function edit(
     expenseId: string,
-    changes: Partial<Pick<ExpenseDraft, 'description' | 'amount' | 'currency' | 'spentAt' | 'splitType' | 'participantIds' | 'splitValues' | 'items' | 'notes' | 'receiptId' | 'paidByMemberId' | 'payers'>>,
+    changes: Partial<Pick<ExpenseDraft, 'description' | 'amount' | 'currency' | 'spentAt' | 'splitType' | 'participantIds' | 'splitValues' | 'items' | 'notes' | 'receiptId' | 'paidByMemberId' | 'payers' | 'categoryKey'>>,
   ): Promise<LocalExpense> {
     const existing = await db.expenses.get(expenseId)
     if (!existing) throw new Error('That expense is not on this device.')
@@ -317,6 +320,9 @@ export const useExpensesStore = defineStore('expenses', () => {
       splitType: changes.splitType ?? existing.splitType,
       receiptId: changes.receiptId ?? existing.receiptId,
       notes: changes.notes ?? existing.notes,
+      // Undefined leaves the filing alone; null is the picker's blank option,
+      // which unfiles it.
+      categoryKey: changes.categoryKey === undefined ? existing.categoryKey : changes.categoryKey,
       items: changes.items ?? existing.items,
       splits: shares.map((share) => ({
         memberId: share.memberId,
@@ -344,6 +350,89 @@ export const useExpensesStore = defineStore('expenses', () => {
     syncSoon()
 
     return (await db.expenses.get(updated.id))!
+  }
+
+  /**
+   * Files many expenses at once, under one category.
+   *
+   * The reason this exists: categories arrived after the expenses did. A group
+   * that has been running a year has nine hundred rows filed under nothing, and
+   * the only honest way to catch them up is to fix a hundred at a time - every
+   * Metro run at once, then every bus fare - rather than opening nine hundred
+   * forms. The same job comes back every time a keyword is added, because the
+   * keywords only ever apply to what comes next.
+   *
+   * It touches one field and recomputes nothing. An edit through `edit` rebuilds
+   * the split, the payers and the rounding from a draft, which is exactly right
+   * when somebody is editing an expense and exactly wrong for a thousand rows
+   * where nobody said anything about the money: a rounding rule that changed in
+   * the meantime would quietly rewrite a year of splits.
+   *
+   * Rows already filed there are skipped rather than re-sent, so selecting the
+   * whole month to fix the three that are wrong queues three operations.
+   *
+   * Returns how many actually changed, which is what the screen reports.
+   */
+  async function refile(expenseIds: string[], categoryKey: string | null): Promise<number> {
+    const next = categoryKey ?? null
+    const touched: LocalExpense[] = []
+    const known = new Set<string>()
+
+    for (const expenseId of expenseIds) {
+      const existing = await db.expenses.get(expenseId)
+      if (!existing || existing.isDeleted) continue
+      if ((existing.categoryKey ?? null) === next) continue
+
+      // The same guard as an ordinary edit, asked once per group rather than
+      // once per expense: a thousand rows is a thousand reads otherwise.
+      if (!known.has(existing.groupId)) {
+        await requireGroup(existing.groupId)
+        known.add(existing.groupId)
+      }
+
+      const updated: LocalExpense = {
+        ...existing,
+        categoryKey: next,
+        revision: existing.revision + 1,
+        pending: true,
+      }
+
+      await db.expenses.put(updated)
+
+      const operation = await requireSync().enqueue({
+        entityType: 'Expense',
+        entityId: updated.id,
+        operation: 'Update',
+        groupId: updated.groupId,
+        payload: toWirePayload(updated),
+      })
+
+      touched.push({ ...updated, vectorClock: operation.vectorClock })
+    }
+
+    if (touched.length === 0) return 0
+
+    // Written and announced in one go. Going through `patch` per row would put
+    // the whole list through a fresh copy for every expense, which on a bulk of
+    // several hundred is the difference between instant and a locked screen.
+    await db.expenses.bulkPut(touched)
+
+    const byId = new Map(touched.map((expense) => [expense.id, expense]))
+    const seen = new Set<string>()
+    const merged = expenses.value.map((expense) => {
+      const replacement = byId.get(expense.id)
+      if (!replacement) return expense
+      seen.add(expense.id)
+      return replacement
+    })
+
+    for (const expense of touched) if (!seen.has(expense.id)) merged.push(expense)
+    expenses.value = merged
+
+    await refreshPendingCount()
+    syncSoon()
+
+    return touched.length
   }
 
   /**
@@ -911,6 +1000,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     commentsFor,
     add,
     edit,
+    refile,
     remove,
     transfer,
     crossGroupBalance,
@@ -1087,6 +1177,7 @@ function toWirePayload(expense: LocalExpense) {
     splitType: expense.splitType,
     receiptId: expense.receiptId,
     notes: expense.notes,
+    categoryKey: expense.categoryKey ?? null,
     payers: (expense.payers ?? []).map((payer) => ({
       memberId: payer.memberId,
       amount: payer.amount,

@@ -13,6 +13,8 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
 import { bucketOf, formatMonthHeading } from '@/domain/buckets'
 import { matchesAnyNamePattern } from '@/domain/namePatterns'
+import { categoryFor } from '@/domain/categories'
+import { resolveIcon } from '@/domain/icons'
 import { summariseMonths } from '@/domain/monthSummary'
 import MonthRecap from '@/components/groups/MonthRecap.vue'
 import { memberColor } from '@/domain/memberColors'
@@ -576,6 +578,15 @@ function cardStyle(memberId: string) {
   }
 }
 
+/**
+ * What an expense was filed under, for the line under its name.
+ *
+ * Null for one nobody filed and for one whose category the group has since
+ * removed: a card is not the place to explain a key nobody recognises.
+ */
+const categoryOf = (expense: LocalExpense) =>
+  categoryFor(expense.categoryKey, group.value ? groups.categoriesOf(group.value.id) : [])
+
 const spentOn = (iso: string) =>
   new Date(iso).toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
 
@@ -930,6 +941,20 @@ async function refresh(): Promise<void> {
                         </span>
                       </span>
                       <span class="truncate text-xs text-[var(--text-muted)]">
+                        <!--
+                          The icon and nothing else: the name is on the card above
+                          it, and a second word for what kind of thing it was is a
+                          word nobody reads twice.
+                        -->
+                        <FontAwesomeIcon
+                          v-if="categoryOf(expense)"
+                          :icon="resolveIcon(categoryOf(expense)!.iconName).definition"
+                          data-testid="expense-category"
+                          :data-category="expense.categoryKey"
+                          class="mr-1 h-3 w-3"
+                          :style="{ color: categoryOf(expense)!.colorHex }"
+                          :title="categoryOf(expense)!.name"
+                        />
                         {{ paidByLine(expense) }}
                         <span aria-hidden="true">-</span>
                         {{ spentOn(expense.spentAt) }}

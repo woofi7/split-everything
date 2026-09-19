@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ReceivedExtensions;
 using Shouldly;
 using SplitEverything.Api.BackgroundJobs;
 using SplitEverything.Application.Abstractions;
@@ -52,9 +53,36 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
     }
 
     /// <summary>
-    /// Starts a worker, lets it tick a few times, then shuts it down. With the
-    /// immediate schedule the loop body really runs, which is the part worth testing.
+    /// Runs a worker until it has done the thing, or gives up.
+    ///
+    /// It used to start the worker, sleep three hundred milliseconds and stop it.
+    /// That is a guess about how long a tick takes on a machine doing something
+    /// else at the time, and it is the kind of guess that passes for months and
+    /// then fails in CI - or, worse, passes while quietly executing less of the
+    /// worker than it did yesterday, which is how the coverage floor started
+    /// moving on its own.
+    ///
+    /// Waiting for the outcome instead is both faster in the ordinary case and
+    /// honest about what it is waiting for.
     /// </summary>
+    private static async Task RunUntilAsync(
+        BackgroundService worker, Func<bool> done, TimeSpan? limit = null)
+    {
+        await worker.StartAsync(CancellationToken.None);
+
+        var deadline = DateTime.UtcNow + (limit ?? TimeSpan.FromSeconds(5));
+        try
+        {
+            while (!done() && DateTime.UtcNow < deadline)
+                await Task.Delay(TimeSpan.FromMilliseconds(10));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>For the two tests about stopping, where there is nothing to wait for.</summary>
     private static async Task RunTicksAsync(BackgroundService worker, TimeSpan? window = null)
     {
         await worker.StartAsync(CancellationToken.None);
@@ -79,11 +107,13 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
             provider.GetRequiredService<IServiceScopeFactory>(), Clock,
             NullLogger<RecurringExpenseWorker>.Instance, WorkerSchedule.Immediate);
 
-        await RunTicksAsync(worker);
+        // Two runs, not one: surviving a failure means coming back for the next
+        // tick, and a worker that died on the first would silently stop generating
+        // rent. Waiting for the second is what makes this test say that.
+        await RunUntilAsync(worker, () => recurring.ReceivedCalls().Count() >= 2);
 
-        // Several ticks all threw, and the worker is still running rather than
-        // having died and silently stopped generating rent.
-        await recurring.Received().RunDueAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await recurring.Received(Quantity.Within(2, int.MaxValue))
+            .RunDueAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -108,7 +138,8 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
             provider.GetRequiredService<IServiceScopeFactory>(), Clock,
             NullLogger<RecurringExpenseWorker>.Instance, WorkerSchedule.Immediate);
 
-        await RunTicksAsync(worker);
+        await RunUntilAsync(worker, () =>
+            NewContext().Expenses.Count(e => e.Description == "Rent") > 0);
 
         (await NewContext().Expenses.CountAsync(e => e.Description == "Rent")).ShouldBe(1);
     }
@@ -140,7 +171,8 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<ExchangeRateWorker>.Instance, WorkerSchedule.Immediate);
 
-        await RunTicksAsync(worker);
+        await RunUntilAsync(worker, () => Currency.ReceivedCalls().Any(
+            call => call.GetMethodInfo().Name == nameof(ICurrencyConverter.RefreshCacheAsync)));
 
         // Only the currencies this install actually uses, not the whole table.
         await Currency.Received().RefreshCacheAsync(
@@ -191,7 +223,8 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
             provider.GetRequiredService<IServiceScopeFactory>(), Clock,
             NullLogger<SyncLogCompactionWorker>.Instance, WorkerSchedule.Immediate);
 
-        await RunTicksAsync(worker);
+        await RunUntilAsync(worker, () =>
+            NewContext().SyncSnapshots.Any(s => s.GroupId == group.Id));
 
         (await NewContext().SyncSnapshots.CountAsync(s => s.GroupId == group.Id))
             .ShouldBeGreaterThan(0);
@@ -226,9 +259,9 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
             provider.GetRequiredService<IServiceScopeFactory>(), Clock,
             NullLogger<SyncLogCompactionWorker>.Instance, WorkerSchedule.Immediate);
 
-        await RunTicksAsync(worker);
+        await RunUntilAsync(worker, () => lifecycle.ReceivedCalls().Count() >= 2);
 
-        await lifecycle.Received().CompactAsync(
+        await lifecycle.Received(Quantity.Within(2, int.MaxValue)).CompactAsync(
             Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
@@ -254,9 +287,9 @@ public class BackgroundWorkerTests(PostgresFixture fixture) : ServiceTestBase(fi
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<ExchangeRateWorker>.Instance, WorkerSchedule.Immediate);
 
-        await RunTicksAsync(worker);
+        await RunUntilAsync(worker, () => currency.ReceivedCalls().Count() >= 2);
 
-        await currency.Received().RefreshCacheAsync(
+        await currency.Received(Quantity.Within(2, int.MaxValue)).RefreshCacheAsync(
             Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>());
     }
 }

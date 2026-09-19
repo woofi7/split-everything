@@ -129,4 +129,34 @@ public class DevelopmentAppBaseUrlTests
     {
         DevelopmentAppBaseUrl.Rewrite("", "192.168.2.48").ShouldBe("");
     }
+
+    /// <summary>
+    /// The part that asks the machine.
+    ///
+    /// The policy above is pure and tested exactly; this walks the real interfaces,
+    /// which differ on every machine and in CI, so it asserts the only thing that
+    /// is true everywhere: whatever comes back is an address a phone could dial, or
+    /// nothing at all. That is enough to prove the enumeration runs, reads the
+    /// gateways and honours the policy - the code path that is otherwise only ever
+    /// executed in production.
+    /// </summary>
+    [Fact]
+    public void Detecting_asks_the_machine_and_never_answers_with_loopback()
+    {
+        var detected = LocalNetworkAddress.Detect();
+
+        if (detected is null) return;
+
+        System.Net.IPAddress.TryParse(detected, out var address).ShouldBeTrue();
+        System.Net.IPAddress.IsLoopback(address!).ShouldBeFalse();
+        address!.AddressFamily.ShouldBe(System.Net.Sockets.AddressFamily.InterNetwork);
+    }
+
+    [Fact]
+    public void Detecting_twice_gives_the_same_answer()
+    {
+        // Nothing about the choice is random or ordered by chance, so an invite
+        // link built now and one built in a minute point at the same place.
+        LocalNetworkAddress.Detect().ShouldBe(LocalNetworkAddress.Detect());
+    }
 }

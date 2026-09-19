@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using SplitEverything.Api.Infrastructure;
 using SplitEverything.Application.Abstractions;
+using SplitEverything.Application.Contracts.Categories;
 using SplitEverything.Application.Contracts.Groups;
 using SplitEverything.Application.Contracts.Settlements;
 using SplitEverything.Application.Services;
@@ -12,6 +13,7 @@ namespace SplitEverything.Api.Controllers;
 public sealed class GroupsController(
     ICurrentUser currentUser,
     IGroupService groups,
+    ICategoryService categories,
     IInviteService invites,
     ISettlementService settlements,
     IGroupLifecycleService lifecycle) : ApiControllerBase(currentUser)
@@ -44,6 +46,24 @@ public sealed class GroupsController(
     [HttpPost("{groupId:guid}/unarchive")]
     public async Task<ActionResult<GroupDto>> Unarchive(Guid groupId, CancellationToken ct)
         => Ok(await groups.UnarchiveAsync(UserId, groupId, ct));
+
+    /// <summary>
+    /// What this group files its expenses under: its own list, or the server's for
+    /// a group that has never edited it.
+    /// </summary>
+    [HttpGet("{groupId:guid}/categories")]
+    public async Task<ActionResult<IReadOnlyList<CategoryDto>>> Categories(
+        Guid groupId, CancellationToken ct)
+        => Ok(await categories.GetForGroupAsync(UserId, groupId, ct));
+
+    /// <summary>
+    /// Replaces it, taking a copy of the server's list the first time. Any member,
+    /// for the same reason the names left out of the totals are.
+    /// </summary>
+    [HttpPut("{groupId:guid}/categories")]
+    public async Task<ActionResult<IReadOnlyList<CategoryDto>>> SetCategories(
+        Guid groupId, SetCategoriesRequest request, CancellationToken ct)
+        => Ok(await categories.SetForGroupAsync(UserId, groupId, request, ct));
 
     /// <summary>
     /// The names this group keeps out of its totals. Any member: it changes what a

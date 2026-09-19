@@ -13,6 +13,9 @@ import { looksOffline } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
 import { computeStats } from '@/domain/localStats'
+import { categoryFor } from '@/domain/categories'
+import { resolveIcon } from '@/domain/icons'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useExpensesStore } from '@/stores/expenses'
 import { checkForAppUpdate } from '@/native/appUpdate'
 import { memberColor } from '@/domain/memberColors'
@@ -30,12 +33,25 @@ interface SpendPointMember {
   amount: number
 }
 
+interface SpendPointCategory {
+  key: string | null
+  amount: number
+}
+
 interface SpendPoint {
   bucket: string
   amount: number
   expenseCount: number
   /** Who paid within this bucket, largest first, summing to amount. */
   byMember: SpendPointMember[]
+  /** The same bucket by what it went on, which is what the line is drawn from. */
+  byCategory?: SpendPointCategory[]
+}
+
+interface CategorySpend {
+  key: string | null
+  amount: number
+  expenseCount: number
 }
 
 interface MemberSpend {
@@ -54,6 +70,7 @@ interface Dashboard {
   expenseCount: number
   spendOverTime: SpendPoint[]
   byMember: MemberSpend[]
+  byCategory?: CategorySpend[]
 }
 
 const auth = useAuthStore()
@@ -66,6 +83,20 @@ const groupId = ref<string>('')
 const granularity = ref<Granularity>('month')
 const isLoading = ref(true)
 const isOffline = ref(false)
+
+/**
+ * The names, icons and colours the breakdown is drawn with.
+ *
+ * Every other screen that shows a category reaches for the group first, which
+ * brings its list along; this one only ever loads the list of groups. Opened cold
+ * - a bookmark, a restored tab - the breakdown read out raw keys, and now the
+ * control that traces one over the chart would be a list of them. Watched on the
+ * group rather than asked for in load(), which also runs when the granularity
+ * changes and would spend a request on a question that has not changed.
+ */
+watch(groupId, (id) => {
+  if (id) void groups.loadCategories(id)
+})
 
 
 onMounted(async () => {
@@ -172,6 +203,7 @@ const points = computed(() =>
     amount: 0,
     expenseCount: 0,
     byMember: [],
+    byCategory: [],
   })),
 )
 
@@ -201,6 +233,36 @@ const colours = computed(() =>
 
 const colourOf = (memberId: string) => colours.value[memberId] ?? memberColor(memberId)
 
+/**
+ * Where the money went, by category.
+ *
+ * A bar each rather than a pie: this is a ranking, and a ranking is read down a
+ * column. What nobody filed is shown with the rest instead of being dropped - a
+ * breakdown that quietly omits a third of the spending is worse than one that
+ * admits to it.
+ */
+const spendByCategory = computed(() => {
+  const rows = dashboard.value?.byCategory ?? []
+  const largest = rows.reduce((most, row) => Math.max(most, row.amount), 0)
+  const known = groupId.value ? groups.categoriesOf(groupId.value) : []
+
+  return rows.map((row) => {
+    const category = categoryFor(row.key, known)
+
+    return {
+      key: row.key ?? '',
+      // A category the group has since removed keeps its expenses and loses its
+      // name, which is the honest way round.
+      name: category?.name ?? (row.key ? row.key : t('Not filed')),
+      icon: resolveIcon(category?.iconName ?? null),
+      colour: category?.colorHex ?? 'var(--text-muted)',
+      amount: row.amount,
+      expenseCount: row.expenseCount,
+      share: largest > 0 ? row.amount / largest : 0,
+    }
+  })
+})
+
 /** What the figures above the rule are about: one group, or the lot. */
 const scopeName = computed(() => {
   if (!groupId.value) return t('All groups')
@@ -228,6 +290,13 @@ function bucketTitle(point: SpendPoint): string {
 
   const total = formatMoney(point.amount, dashboard.value?.currency ?? 'CAD')
   const when = bucketRange(point.bucket)
+
+  // Lines drawn over the bars say nothing to anyone reading this by ear.
+  for (const line of [...tracedLines.value].reverse()) {
+    parts.unshift(
+      `${line.name} ${formatMoney(amountIn(point, line.key), dashboard.value?.currency ?? 'CAD')}`,
+    )
+  }
 
   return parts.length > 0 ? `${when}: ${total} (${parts.join(', ')})` : `${when}: ${total}`
 }
@@ -302,6 +371,80 @@ function shareIn(point: SpendPoint, memberId: string): string {
 
 /** Scaled against the largest bucket, so the bars are readable at any spend level. */
 const peak = computed(() => Math.max(1, ...points.value.map((point) => point.amount)))
+
+/**
+ * Every category, traced across the same bars.
+ *
+ * Why lines on top rather than a chart of their own: a category is part of the
+ * money the bar already draws, so on the same scale a line sits under the bar
+ * tops and the gap between them reads as everything else. That answers the
+ * question neither half of this screen could - "Where it went" gives one number
+ * for the whole window and the bars give the months, and nothing said whether
+ * groceries were creeping up while the total held steady.
+ *
+ * All of them, with nothing to switch on. A control would be one more thing to
+ * find before the chart says anything, and the lines are told apart the way the
+ * payers already are: by the key underneath, which names each one and says what
+ * it came to in whichever bar is being asked about.
+ */
+
+/**
+ * Whether the answer on screen can be traced at all.
+ *
+ * An older server answers without the per-bucket breakdown, and reading a missing
+ * one as zero draws every line flat along the floor - which looks like a category
+ * nobody spent anything on rather than an answer that never arrived. So the
+ * control is not offered unless the data behind it is there.
+ */
+const canTrace = computed(() =>
+  (dashboard.value?.spendOverTime ?? []).some((point) => point.byCategory !== undefined),
+)
+
+/** What one category came to in one bucket. Nothing in it is nothing, not a gap. */
+function amountIn(point: SpendPoint, key: string): number {
+  return (point.byCategory ?? []).find((row) => (row.key ?? '') === key)?.amount ?? 0
+}
+
+/**
+ * One line, in the same box as the bars.
+ *
+ * Percentages against a stretched viewBox, so it lines up with flex columns
+ * whatever the screen is; the stroke is kept off the stretch, or a narrow phone
+ * would draw it as a smear. The x of a column is its middle, which the gaps
+ * between bars put out by under a pixel and nothing can see.
+ */
+function lineFor(key: string): string {
+  const amounts = points.value.map((point) => amountIn(point, key))
+  const y = (amount: number) => 100 - Math.min(100, (amount / peak.value) * 100)
+
+  // A single bucket has no line to draw between two points, so it gets a mark at
+  // the right height instead of nothing at all.
+  if (amounts.length === 1) return `25,${y(amounts[0])} 75,${y(amounts[0])}`
+
+  return amounts
+    .map((amount, index) => `${((index + 0.5) / amounts.length) * 100},${y(amount)}`)
+    .join(' ')
+}
+
+/** Drawn in the order the breakdown ranks them, so the key reads top down. */
+const tracedLines = computed(() =>
+  canTrace.value
+    ? spendByCategory.value
+        .map((row) => ({
+          key: row.key,
+          name: row.name,
+          colour: row.colour,
+          points: lineFor(row.key),
+        }))
+        .filter((line) => line.points !== '')
+    : [],
+)
+
+/** What one category was of one bucket, for the key under the chart. */
+function shareOfCategory(point: SpendPoint, key: string): string {
+  if (point.amount <= 0) return '0%'
+  return `${Math.round((amountIn(point, key) / point.amount) * 100)}%`
+}
 
 /**
  * How much air between the bars.
@@ -432,76 +575,115 @@ async function refresh(): Promise<void> {
             <span class="font-semibold tabular-nums">
               {{ formatMoney(selected.amount, dashboard.currency) }}
             </span>
+
           </p>
         </div>
 
-        <ul
-          class="flex h-32 items-end"
-          :class="chartGap"
-          data-testid="spend-chart"
-          role="group"
-          :aria-label="chartDescription"
-        >
-          <li
-            v-for="point in points"
-            :key="point.bucket"
-            class="flex h-full flex-1 items-end"
+        <div class="relative">
+          <ul
+            class="flex h-32 items-end"
+            :class="chartGap"
+            data-testid="spend-chart"
+            role="group"
+            :aria-label="chartDescription"
           >
-            <!--
+            <li
+              v-for="point in points"
+              :key="point.bucket"
+              class="flex h-full flex-1 items-end"
+            >
+              <!--
               The whole column is the target, not just the bar: a daily chart of a
               busy month gives each bar a few pixels of width and none of its height
               until it is tall. Keyboard focus asks the same question a hover does.
             -->
-            <button
-              type="button"
-              data-testid="bar"
-              class="flex h-full w-full cursor-pointer items-end transition-opacity"
-              :class="selectedBucket && selectedBucket !== point.bucket ? 'opacity-40' : ''"
-              :aria-pressed="selectedBucket === point.bucket"
-              :aria-label="bucketTitle(point)"
-              @mouseenter="look(point.bucket)"
-              @mouseleave="lookAway"
-              @focus="look(point.bucket)"
-              @blur="lookAway"
-              @click="pin(point.bucket)"
-            >
-              <!--
+              <button
+                type="button"
+                data-testid="bar"
+                class="flex h-full w-full cursor-pointer items-end transition-opacity"
+                :class="selectedBucket && selectedBucket !== point.bucket ? 'opacity-40' : ''"
+                :aria-pressed="selectedBucket === point.bucket"
+                :aria-label="bucketTitle(point)"
+                @mouseenter="look(point.bucket)"
+                @mouseleave="lookAway"
+                @focus="look(point.bucket)"
+                @blur="lookAway"
+                @click="pin(point.bucket)"
+              >
+                <!--
                 A day with nothing in it is a line on the floor, not a small bar:
                 a floor height in some colour would read as a small expense, and
                 the whole point of drawing these is that they are empty.
               -->
-              <span
-                v-if="point.amount <= 0"
-                data-testid="bar-empty"
-                class="block h-0.5 w-full rounded-full"
-                style="background: var(--border)"
-              />
+                <span
+                  v-if="point.amount <= 0"
+                  data-testid="bar-empty"
+                  class="block h-0.5 w-full rounded-full"
+                  style="background: var(--border)"
+                />
 
-              <!--
+                <!--
                 Stacked by whoever paid, in that person's colour. The total alone
                 says how much a month cost; the split also says who carried it,
                 which is the thing a shared account argues about.
               -->
-              <span
-                v-else
-                data-testid="bar-fill"
-                class="flex w-full flex-col-reverse overflow-hidden rounded-t"
-                :style="{ height: `${Math.max(4, (point.amount / peak) * 100)}%` }"
-              >
                 <span
-                  v-for="member in segmentsOf(point)"
-                  :key="member.memberId"
-                  data-testid="bar-segment"
-                  class="block w-full"
-                  :style="{
-                    height: `${member.share * 100}%`,
-                    backgroundColor: colourOf(member.memberId),
-                  }"
-                />
-              </span>
-            </button>
-          </li>
-        </ul>
+                  v-else
+                  data-testid="bar-fill"
+                  class="flex w-full flex-col-reverse overflow-hidden rounded-t"
+                  :style="{ height: `${Math.max(4, (point.amount / peak) * 100)}%` }"
+                >
+                  <span
+                    v-for="member in segmentsOf(point)"
+                    :key="member.memberId"
+                    data-testid="bar-segment"
+                    class="block w-full"
+                    :style="{
+                      height: `${member.share * 100}%`,
+                      backgroundColor: colourOf(member.memberId),
+                    }"
+                  />
+                </span>
+              </button>
+            </li>
+          </ul>
+
+          <!--
+            The categories, over the bars and on their scale.
+
+            Lifted off the bars by a shadow rather than outlined by a second
+            stroke underneath, which is what an outline in the card's own colour
+            looked like on a dark screen: a black border around every line. The
+            shadow is a CSS filter and not an SVG one on purpose - a filter
+            inside this viewBox would be stretched along with the coordinates and
+            smear sideways on a narrow phone, where a CSS filter is applied after
+            the stretch, in real pixels.
+
+            It never takes the pointer: the bars underneath are the controls.
+          -->
+          <svg
+            v-if="tracedLines.length > 0"
+            data-testid="overlay-line"
+            class="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+            style="filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55))"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <polyline
+              v-for="line in tracedLines"
+              :key="line.key"
+              :points="line.points"
+              :data-category="line.key"
+              fill="none"
+              :stroke="line.colour"
+              stroke-width="2"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+              vector-effect="non-scaling-stroke"
+            />
+          </svg>
+        </div>
 
         <!-- Under the graph, against the bars they belong to, not under the names. -->
         <div
@@ -536,6 +718,79 @@ async function refresh(): Promise<void> {
               <span class="text-[var(--text-muted)]">
                 {{ shareIn(selected, person.memberId) }}
               </span>
+            </span>
+          </li>
+        </ul>
+
+        <!--
+          The lines, named. A dash rather than a dot, because these are lines over
+          the bars and the dots above are the blocks inside them - two keys a row
+          apart that looked alike would be read as one.
+        -->
+        <ul
+          v-if="tracedLines.length > 0"
+          data-testid="chart-categories"
+          class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs"
+        >
+          <li
+            v-for="line in tracedLines"
+            :key="line.key"
+            data-testid="category-key"
+            :data-category="line.key"
+            class="flex items-center gap-1.5"
+            :class="selected && amountIn(selected, line.key) === 0 ? 'opacity-40' : ''"
+          >
+            <span
+              class="h-0.5 w-3 shrink-0 rounded-full"
+              :style="{ backgroundColor: line.colour }"
+              aria-hidden="true"
+            />
+            <span class="text-[var(--text-muted)]">{{ line.name }}</span>
+
+            <!-- What it went on in the bar being asked about. -->
+            <span v-if="selected" data-testid="category-key-amount" class="tabular-nums">
+              {{ formatMoney(amountIn(selected, line.key), dashboard.currency) }}
+              <span class="text-[var(--text-muted)]">
+                {{ shareOfCategory(selected, line.key) }}
+              </span>
+            </span>
+          </li>
+        </ul>
+      </section>
+
+      <section v-if="spendByCategory.length > 0" class="surface-card mb-4 p-4">
+        <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">{{ t('Where it went') }}</h2>
+
+        <ul class="flex flex-col gap-2.5">
+          <li
+            v-for="row in spendByCategory"
+            :key="row.key"
+            data-testid="category-row"
+            :data-category="row.key"
+            class="flex flex-col gap-1"
+          >
+            <span class="flex items-baseline justify-between gap-3 text-sm">
+              <span class="flex min-w-0 items-center gap-2">
+                <FontAwesomeIcon
+                  :icon="row.icon.definition"
+                  class="h-3.5 w-3.5 shrink-0"
+                  :style="{ color: row.colour }"
+                  aria-hidden="true"
+                />
+                <span class="truncate">{{ row.name }}</span>
+                <span class="shrink-0 text-xs text-[var(--text-muted)]">{{ row.expenseCount }}</span>
+              </span>
+              <span class="shrink-0 tabular-nums">
+                {{ formatMoney(row.amount, dashboard.currency) }}
+              </span>
+            </span>
+
+            <span class="h-1.5 w-full overflow-hidden rounded-full" style="background: var(--surface-sunken)">
+              <span
+                class="block h-full rounded-full"
+                :style="{ width: `${Math.max(row.share * 100, 2)}%`, backgroundColor: row.colour }"
+                aria-hidden="true"
+              />
             </span>
           </li>
         </ul>

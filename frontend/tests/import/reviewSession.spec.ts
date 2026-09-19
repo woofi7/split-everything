@@ -203,3 +203,100 @@ describe('statement review session', () => {
     expect((await session.buildCommitPayload()).rows[0].fingerprint).toBe('fp-known')
   })
 })
+
+/**
+ * Filing a statement as it is reviewed.
+ *
+ * This is where categories pay for themselves: two hundred lines nobody will ever
+ * file by hand, and every one of them a merchant name the group's keywords
+ * already know.
+ */
+describe('filing the rows of a statement', () => {
+  const categories = [
+    {
+      key: 'dining',
+      name: 'Dining out',
+      iconName: 'utensils',
+      colorHex: '#f97316',
+      sortOrder: 10,
+      keywords: ['uber eats', 'resto'],
+    },
+    {
+      key: 'transport',
+      name: 'Transport',
+      iconName: 'car',
+      colorHex: '#0ea5e9',
+      sortOrder: 20,
+      keywords: ['uber'],
+    },
+  ]
+
+  const context = {
+    suggestions: [],
+    duplicates: [],
+    categoriesByGroup: { [groupId]: categories },
+  }
+
+  const assign = (session: StatementReviewSession, rowNumber = 1) =>
+    session.assignGroup(rowNumber, groupId, memberId, [{ memberId, value: null }])
+
+  beforeEach(async () => {
+    await resetDatabase()
+  })
+
+  it('files a row the moment it is given a group', () => {
+    const session = new StatementReviewSession([row()], context)
+    expect(session.rows[0].categoryKey).toBeNull()
+
+    assign(session)
+
+    // "UBER EATS" beats "UBER": a takeaway is not a taxi.
+    expect(session.rows[0].categoryKey).toBe('dining')
+  })
+
+  it('leaves a row alone when the group files nothing like it', () => {
+    const session = new StatementReviewSession([row({ description: 'CADEAU EMMA' })], context)
+
+    assign(session)
+
+    expect(session.rows[0].categoryKey).toBeNull()
+  })
+
+  it('stops guessing once somebody has said', () => {
+    const session = new StatementReviewSession([row()], context)
+    assign(session)
+
+    session.setCategory(1, 'transport')
+    // Moving the row to another group must not overrule them.
+    assign(session)
+
+    expect(session.rows[0].categoryKey).toBe('transport')
+  })
+
+  it('can be told the row is filed under nothing', () => {
+    const session = new StatementReviewSession([row()], context)
+    assign(session)
+
+    session.setCategory(1, null)
+    assign(session)
+
+    expect(session.rows[0].categoryKey).toBeNull()
+  })
+
+  it('sends what it filed to the server', async () => {
+    const session = new StatementReviewSession([row()], context)
+    assign(session)
+
+    const payload = await session.buildCommitPayload()
+
+    expect(payload.rows[0].categoryKey).toBe('dining')
+  })
+
+  it('files nothing when the group keeps no categories', () => {
+    const session = new StatementReviewSession([row()], { suggestions: [], duplicates: [] })
+
+    assign(session)
+
+    expect(session.rows[0].categoryKey).toBeNull()
+  })
+})

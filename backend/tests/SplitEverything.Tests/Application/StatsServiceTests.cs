@@ -36,7 +36,7 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         => Expenses.CreateAsync(userId, new CreateExpenseRequest(
             groupId, payer, "Expense", amount, "CAD", spentAt, SplitType.Equal,
             participants.Select(p => new SplitInputDto(p, null)).ToList(),
-            null, null, null, null, null, null));
+            null, null, null, null, null, null, null, categoryKey));
 
     [Fact]
     public async Task An_empty_group_reports_zeros()
@@ -62,6 +62,42 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
         dashboard.MyShare.ShouldBe(50m);
         dashboard.MyPaid.ShouldBe(100m);
         dashboard.ExpenseCount.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// Each bucket cut by what it went on, not only by who paid.
+    ///
+    /// This is what the chart draws a category's line from. It is held to the same
+    /// rules as the payer split beside it - largest first, nothing for a category
+    /// that spent nothing, and the parts adding up to the bucket - because the line
+    /// is drawn against the bar's own height and a category that was the whole
+    /// bucket has to reach the top of it.
+    /// </summary>
+    [Fact]
+    public async Task Each_bucket_says_what_it_went_on()
+    {
+        var (userId, group, alice, bob) = await SetupAsync();
+        await AddAsync(userId, group.Id, alice, 60m, TestData.Jan1, "groceries", alice, bob);
+        await AddAsync(userId, group.Id, alice, 25m, TestData.Jan1.AddDays(2), "dining", alice, bob);
+        await AddAsync(userId, group.Id, alice, 10m, TestData.Jan1.AddDays(3), null, alice, bob);
+        await AddAsync(userId, group.Id, alice, 40m, TestData.Jan1.AddMonths(1), "groceries", alice, bob);
+
+        var dashboard = await Stats.GetDashboardAsync(userId, new StatsQuery(GroupId: group.Id));
+
+        var january = dashboard.SpendOverTime[0].ByCategory!;
+        january.ShouldBe([
+            new SpendPointCategoryDto("groceries", 60m),
+            new SpendPointCategoryDto("dining", 25m),
+            // What nobody filed is in the bucket too, for the same reason it is in
+            // the breakdown: a line that quietly omits part of the money is worse
+            // than one that admits to it.
+            new SpendPointCategoryDto(null, 10m),
+        ]);
+
+        january.Sum(c => c.Amount).ShouldBe(dashboard.SpendOverTime[0].Amount);
+
+        dashboard.SpendOverTime[1].ByCategory!.ShouldHaveSingleItem()
+            .ShouldBe(new SpendPointCategoryDto("groceries", 40m));
     }
 
     [Fact]
@@ -212,6 +248,44 @@ public class StatsServiceTests(PostgresFixture fixture) : ServiceTestBase(fixtur
 
         dashboard.Currency.ShouldBe("CAD");
         dashboard.TotalSpend.ShouldBe(148m);
+    }
+
+    /// <summary>
+    /// The odd cent in a bucket's category split.
+    ///
+    /// It only shows up once amounts have been converted, which is the one place
+    /// a stored amount stops being a round number of cents. The line for a
+    /// category is drawn against the bar's own height, so the parts have to come
+    /// to the whole: a cent adrift is a line that misses the top of a bar that it
+    /// was the entirety of. The largest absorbs it, as everywhere else here.
+    /// </summary>
+    [Fact]
+    public async Task A_bucket_that_does_not_divide_evenly_still_adds_up()
+    {
+        var user = await TestData.SeedUserAsync(Db);
+        var group = await Groups.CreateAsync(user.Id,
+            new CreateGroupRequest("Euro trip", "EUR", null, null, null, null));
+        var me = group.Members.Single().Id;
+
+        // 6.67 at 1.5 is 10.005 - half a cent, twice, in one month.
+        foreach (var category in new[] { "groceries", "dining" })
+        {
+            await Expenses.CreateAsync(user.Id, new CreateExpenseRequest(
+                group.Id, me, "Expense", 6.67m, "EUR", TestData.Jan1, SplitType.Equal,
+                [new SplitInputDto(me, null)], null, null, null, null, null, null, null, category));
+        }
+
+        Currency.GetRateAsync("EUR", "CAD", Arg.Any<DateTimeOffset?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(1.5m));
+
+        var dashboard = await Stats.GetDashboardAsync(user.Id, new StatsQuery());
+
+        var bucket = dashboard.SpendOverTime.ShouldHaveSingleItem();
+        bucket.Amount.ShouldBe(20.01m);
+
+        // Rounded on their own these come to 20.00, a cent short of the bar.
+        bucket.ByCategory!.Sum(c => c.Amount).ShouldBe(bucket.Amount);
+        bucket.ByCategory!.Select(c => c.Amount).ShouldBe([10.01m, 10.00m]);
     }
 
     [Fact]

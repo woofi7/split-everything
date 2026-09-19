@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { RouterLinkStub } from '@vue/test-utils'
+import { RouterLinkStub, type VueWrapper } from '@vue/test-utils'
 import ActivityView from '@/views/ActivityView.vue'
 import StatsView from '@/views/StatsView.vue'
 import { db } from '@/offline/db'
@@ -225,18 +225,8 @@ describe('StatsView', () => {
       },
     ],
     byCategory: [
-      {
-        colorHex: '#16a34a',
-        amount: 100,
-        expenseCount: 2,
-        share: 0.667,
-      },
-      {
-        colorHex: '#94a3b8',
-        amount: 50,
-        expenseCount: 1,
-        share: 0.333,
-      },
+      { key: 'groceries', amount: 100, expenseCount: 2 },
+      { key: null, amount: 50, expenseCount: 1 },
     ],
     byMember: [
       { memberId: 'm1', memberName: 'Alice', paid: 100, owed: 75, net: 25 },
@@ -743,6 +733,314 @@ describe('StatsView', () => {
     const { wrapper } = await mountView(StatsView, { api: api({ spendOverTime: [] }) })
 
     expect(wrapper.find('[data-testid="spend-chart"]').exists()).toBe(false)
+  })
+
+  /**
+   * Every category traced over the bars.
+   *
+   * The bars are the whole month and a category is part of it, so on one scale a
+   * line runs under the bar tops and the gap reads as everything else. It answers
+   * what neither half of the screen could on its own: the breakdown gives one
+   * number for the window, the bars give the months, and nothing said whether a
+   * category was creeping up while the total held steady.
+   */
+  describe('tracing the categories over the bars', () => {
+    const categories = [
+      {
+        key: 'groceries',
+        name: 'Groceries',
+        iconName: 'cart-shopping',
+        colorHex: '#16a34a',
+        sortOrder: 10,
+        keywords: ['metro'],
+      },
+      {
+        key: 'dining',
+        name: 'Dining out',
+        iconName: 'utensils',
+        colorHex: '#f97316',
+        sortOrder: 20,
+        keywords: ['resto'],
+      },
+    ]
+
+    /** Two months. Groceries held at 50; dining halved. */
+    const traced = (overrides: Record<string, unknown> = {}) =>
+      fakeApi({
+        '/groups/group-1/categories': () => categories,
+        '/groups': () => [testGroup()],
+        '/stats': () =>
+          dashboard({
+            byCategory: [
+              { key: 'groceries', amount: 75, expenseCount: 2 },
+              { key: 'dining', amount: 75, expenseCount: 2 },
+            ],
+            spendOverTime: [
+              {
+                bucket: '2026-01-01',
+                amount: 100,
+                expenseCount: 2,
+                byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+                byCategory: [
+                  { key: 'groceries', amount: 50 },
+                  { key: 'dining', amount: 50 },
+                ],
+              },
+              {
+                bucket: '2026-02-01',
+                amount: 50,
+                expenseCount: 1,
+                byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 50 }],
+                byCategory: [
+                  { key: 'groceries', amount: 25 },
+                  { key: 'dining', amount: 25 },
+                ],
+              },
+            ],
+            ...overrides,
+          }),
+      })
+
+    async function mountTraced(overrides: Record<string, unknown> = {}) {
+      const mounted = await mountView(StatsView, { api: traced(overrides) })
+      await settle()
+      return mounted
+    }
+
+    const lineFor = (wrapper: VueWrapper, key: string) =>
+      wrapper.find(`[data-testid="overlay-line"] polyline[data-category="${key}"]`)
+
+    it('draws one for every category, with nothing to switch on', async () => {
+      const { wrapper } = await mountTraced()
+
+      const lines = wrapper.findAll('[data-testid="overlay-line"] polyline[data-category]')
+      expect(lines.map((line) => line.attributes('stroke'))).toEqual(['#16a34a', '#f97316'])
+    })
+
+    /**
+     * The same scale as the bars, which is what makes a line readable as part of
+     * them: half of a full-height January is halfway up, and half of a half-height
+     * February meets the top of that bar.
+     */
+    it('draws them on the bars own scale', async () => {
+      const { wrapper } = await mountTraced()
+
+      expect(lineFor(wrapper, 'groceries').attributes('points')).toBe('25,50 75,75')
+    })
+
+    /**
+     * One stroke each, lifted by a shadow. They were drawn over a wider stroke
+     * in the card's own colour to keep them legible against a segment of the
+     * same colour, which read as a black outline around every line.
+     */
+    it('draws each line on its own, lifted by a shadow rather than outlined', async () => {
+      const { wrapper } = await mountTraced()
+
+      const strokes = wrapper
+        .findAll('[data-testid="overlay-line"] polyline')
+        .map((line) => line.attributes('stroke'))
+
+      expect(strokes).toEqual(['#16a34a', '#f97316'])
+      expect(wrapper.find('[data-testid="overlay-line"]').attributes('style'))
+        .toContain('drop-shadow')
+    })
+
+    it('names them in a key of their own, apart from the people', async () => {
+      const { wrapper } = await mountTraced()
+
+      const key = wrapper.findAll('[data-testid="category-key"]')
+      expect(key.map((row) => row.text())).toEqual(['Groceries', 'Dining out'])
+      // The payers keep their own key; two rows that looked alike would read as one.
+      expect(wrapper.find('[data-testid="chart-key"]').exists()).toBe(true)
+    })
+
+    /** The question a bar is asked: what was this month, and what went on what. */
+    it('says what each category came to in the bar being asked about', async () => {
+      const { wrapper } = await mountTraced()
+
+      await wrapper.findAll('[data-testid="bar"]')[1].trigger('click')
+      await settle(1)
+
+      const amounts = wrapper
+        .findAll('[data-testid="category-key-amount"]')
+        .map((row) => row.text().replace(/\s+/g, ' '))
+
+      // February: 25 of its 50 on each, which is half of that month apiece.
+      expect(amounts).toEqual(['$25.00 50%', '$25.00 50%'])
+    })
+
+    it('dims a category that was nothing in the bar being asked about', async () => {
+      const { wrapper } = await mountTraced({
+        spendOverTime: [
+          {
+            bucket: '2026-01-01',
+            amount: 100,
+            expenseCount: 2,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+            byCategory: [{ key: 'groceries', amount: 100 }],
+          },
+          {
+            bucket: '2026-02-01',
+            amount: 50,
+            expenseCount: 1,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 50 }],
+            byCategory: [{ key: 'dining', amount: 50 }],
+          },
+        ],
+      })
+
+      await wrapper.findAll('[data-testid="bar"]')[0].trigger('click')
+      await settle(1)
+
+      const dining = wrapper.find('[data-testid="category-key"][data-category="dining"]')
+      expect(dining.classes()).toContain('opacity-40')
+    })
+
+    it('names every category in what a bar tells a screen reader', async () => {
+      const { wrapper } = await mountTraced()
+
+      const label = wrapper.findAll('[data-testid="bar"]')[0].attributes('aria-label')
+      expect(label).toContain('Groceries')
+      expect(label).toContain('Dining out')
+    })
+
+    it('traces what nobody filed, like any other row', async () => {
+      const { wrapper } = await mountTraced({
+        byCategory: [{ key: null, amount: 50, expenseCount: 1 }],
+        spendOverTime: [
+          {
+            bucket: '2026-01-01',
+            amount: 100,
+            expenseCount: 2,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+            byCategory: [{ key: null, amount: 50 }],
+          },
+          {
+            bucket: '2026-02-01',
+            amount: 50,
+            expenseCount: 1,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 50 }],
+            byCategory: [],
+          },
+        ],
+      })
+
+      // Half of January, none of February.
+      expect(lineFor(wrapper, '').attributes('points')).toBe('25,50 75,100')
+    })
+
+    it('draws nothing when nothing was filed', async () => {
+      const { wrapper } = await mountTraced({ byCategory: [] })
+
+      expect(wrapper.find('[data-testid="overlay-line"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="chart-categories"]').exists()).toBe(false)
+    })
+
+    /**
+     * A server older than this screen answers without the per-bucket breakdown.
+     * Read as zero, every line would lie flat along the floor, which reads as
+     * categories nobody spent anything on rather than an answer that never came.
+     */
+    it('draws nothing when the answer has no buckets to trace through', async () => {
+      const { wrapper } = await mountTraced({
+        spendOverTime: [
+          {
+            bucket: '2026-01-01',
+            amount: 100,
+            expenseCount: 2,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+          },
+        ],
+      })
+
+      expect(wrapper.find('[data-testid="spend-chart"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="overlay-line"]').exists()).toBe(false)
+    })
+
+    /**
+     * What the server actually sends for what nobody filed.
+     *
+     * Its serialiser leaves a null out rather than writing it, so an unfiled row
+     * arrives as an amount and no key at all - not as the key: null these tests
+     * would otherwise all use. Checked by hand against the running API once,
+     * which is exactly the kind of thing that stops being true quietly.
+     */
+    it('reads a bucket that names no key for what nobody filed', async () => {
+      const { wrapper } = await mountTraced({
+        byCategory: [{ amount: 50, expenseCount: 1 }],
+        spendOverTime: [
+          {
+            bucket: '2026-01-01',
+            amount: 100,
+            expenseCount: 2,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+            byCategory: [{ amount: 50 }],
+          },
+          {
+            bucket: '2026-02-01',
+            amount: 50,
+            expenseCount: 1,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 50 }],
+            byCategory: [{ amount: 25 }],
+          },
+        ],
+      })
+
+      expect(wrapper.find('[data-testid="category-key"]').text()).toContain('Not filed')
+      expect(lineFor(wrapper, '').attributes('points')).toBe('25,50 75,75')
+    })
+
+    /**
+     * A quiet month, with the lines on. Nothing was spent, so nothing was spent
+     * on this category either - and a share of nothing is not a division.
+     */
+    it('answers for a bucket nothing happened in', async () => {
+      const { wrapper } = await mountTraced({
+        spendOverTime: [
+          {
+            bucket: '2026-01-01',
+            amount: 100,
+            expenseCount: 2,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+            byCategory: [{ key: 'groceries', amount: 100 }],
+          },
+          {
+            bucket: '2026-03-01',
+            amount: 50,
+            expenseCount: 1,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 50 }],
+            byCategory: [{ key: 'groceries', amount: 50 }],
+          },
+        ],
+      })
+
+      // February is between the two and has nothing in it, so the chart fills it.
+      const bars = wrapper.findAll('[data-testid="bar"]')
+      expect(bars).toHaveLength(3)
+
+      await bars[1].trigger('click')
+      await settle(1)
+
+      const row = wrapper.find('[data-testid="category-key"][data-category="groceries"]')
+      expect(row.text().replace(/\s+/g, ' ')).toContain('$0.00 0%')
+    })
+
+    /** A line between one point is nothing at all, which reads as a bug. */
+    it('marks a single bucket rather than drawing nothing', async () => {
+      const { wrapper } = await mountTraced({
+        spendOverTime: [
+          {
+            bucket: '2026-01-01',
+            amount: 100,
+            expenseCount: 1,
+            byMember: [{ memberId: 'm1', memberName: 'Alice', amount: 100 }],
+            byCategory: [{ key: 'groceries', amount: 25 }],
+          },
+        ],
+      })
+
+      expect(lineFor(wrapper, 'groceries').attributes('points')).toBe('25,75 75,75')
+    })
   })
 })
 

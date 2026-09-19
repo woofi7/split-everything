@@ -20,6 +20,7 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.Property(e => e.VectorClockJson).HasColumnType("jsonb").IsRequired();
         builder.Property(e => e.LastWriterDeviceId).HasMaxLength(64);
         builder.Property(e => e.ImportFingerprint).HasMaxLength(64);
+        builder.Property(e => e.CategoryKey).HasMaxLength(48);
 
         builder.HasIndex(e => new { e.GroupId, e.SpentAt });
         builder.HasIndex(e => new { e.GroupId, e.ServerSeq });
@@ -28,6 +29,8 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.HasIndex(e => e.ImportFingerprint);
         builder.HasIndex(e => e.ImportBatchId);
         builder.HasIndex(e => e.RecurringExpenseId);
+        // The stats screen totals a group's spending by category.
+        builder.HasIndex(e => new { e.GroupId, e.CategoryKey });
 
         builder.HasOne(e => e.Group)
             .WithMany(g => g.Expenses)

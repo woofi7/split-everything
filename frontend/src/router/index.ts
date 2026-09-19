@@ -52,6 +52,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/SettleView.vue'),
   },
   {
+    // Filing the backlog. Its own screen because it is its own job: the group
+    // screen is for reading what was spent, and a list with a checkbox on every
+    // row is not that list.
+    path: '/groups/:groupId/file-expenses',
+    name: 'file-expenses',
+    component: () => import('@/views/FileExpensesView.vue'),
+  },
+  {
     path: '/groups/:groupId/expenses/:expenseId',
     name: 'expense',
     component: () => import('@/views/ExpenseView.vue'),
