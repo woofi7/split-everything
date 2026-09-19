@@ -145,6 +145,7 @@ const spentOn = (iso: string) =>
 </script>
 <template>
   <AppShell
+    width="wide"
     :title="t('File expenses')"
     :subtitle="group?.name"
     :back-to="{ name: 'group-settings', params: { groupId } }"
@@ -162,7 +163,7 @@ const spentOn = (iso: string) =>
       >
         {{ t('File the {count} the words already know', { count: guessCount }) }}
       </button>
-      <div class="mt-3 flex flex-col gap-2">
+      <div class="mt-3 flex flex-col gap-2 lg:flex-row">
         <select
           v-model="shown"
           data-testid="filing-filter"
@@ -247,7 +248,7 @@ const spentOn = (iso: string) =>
     <div
       v-if="applying.length > 0"
       data-testid="filing-bar"
-      class="fixed right-4 left-4 z-40 flex items-center gap-2 rounded-xl border p-2 shadow-lg"
+      class="fixed right-4 left-4 z-40 flex items-center gap-2 rounded-xl border p-2 shadow-lg lg:left-[15rem]"
       style="bottom: calc(6rem + env(safe-area-inset-bottom)); background: var(--surface-raised); border-color: var(--border)"
     >
       <select

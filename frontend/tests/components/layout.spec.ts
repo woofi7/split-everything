@@ -136,7 +136,22 @@ describe('AppShell', () => {
   it('clears the notch at the top of the page', () => {
     const wrapper = mountShell({})
 
-    expect(wrapper.find('main').classes().join(' ')).toContain('safe-area-inset-top')
+    expect(wrapper.find('[data-testid="page-body"]').classes().join(' '))
+      .toContain('safe-area-inset-top')
+  })
+
+  it('scrolls the window rather than the column of content', () => {
+    const wrapper = mountShell({})
+    const scroller = wrapper.find('[data-app-page]')
+
+    expect(scroller.classes()).toContain('overflow-y-auto')
+    expect(scroller.classes().join(' ')).not.toContain('max-w-')
+    expect(scroller.classes()).not.toContain('mx-auto')
+
+    const body = wrapper.find('[data-testid="page-body"]')
+    expect(body.classes()).toContain('mx-auto')
+    expect(body.classes()).toContain('max-w-2xl')
+    expect(body.classes()).not.toContain('overflow-y-auto')
   })
 
   it('shows the sync state', () => {
@@ -162,8 +177,9 @@ describe('AppShell', () => {
     const withNav = mountShell({})
     const withoutNav = mountShell({ showNav: false })
 
-    expect(withNav.find('main').classes()).toContain('pb-10')
-    expect(withoutNav.find('main').classes()).toContain('pb-[max(2rem,env(safe-area-inset-bottom))]')
+    expect(withNav.find('[data-testid="page-body"]').classes()).toContain('pb-10')
+    expect(withoutNav.find('[data-testid="page-body"]').classes())
+      .toContain('pb-[max(2rem,env(safe-area-inset-bottom))]')
   })
 
   describe('as a frame', () => {

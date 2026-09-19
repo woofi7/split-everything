@@ -105,6 +105,7 @@ const archivedGroups = computed(() => rows.value.filter((row) => row.isArchived)
 </script>
 <template>
   <AppShell
+    width="wide"
     :title="auth.user?.displayName ?? t('Profile')"
     :subtitle="auth.user?.email"
     :pending-count="expenses.pendingCount"
@@ -125,7 +126,7 @@ const archivedGroups = computed(() => rows.value.filter((row) => row.isArchived)
     </template>
     <section class="mb-4">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Your groups') }}</h2>
-      <ul v-if="liveGroups.length > 0" class="flex flex-col gap-2">
+      <ul v-if="liveGroups.length > 0" class="flex flex-col gap-2 lg:grid lg:grid-cols-2">
         <li v-for="row in liveGroups" :key="row.id">
           <RouterLink
             :to="{ name: 'group', params: { groupId: row.id } }"
@@ -159,7 +160,7 @@ const archivedGroups = computed(() => rows.value.filter((row) => row.isArchived)
     </section>
     <section v-if="archivedGroups.length > 0" class="mb-4">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Archived') }}</h2>
-      <ul class="flex flex-col gap-2">
+      <ul class="flex flex-col gap-2 lg:grid lg:grid-cols-2">
         <li v-for="row in archivedGroups" :key="row.id">
           <RouterLink
             :to="{ name: 'group', params: { groupId: row.id } }"

@@ -214,7 +214,7 @@ async function cancel(): Promise<void> {
 }
 </script>
 <template>
-  <AppShell :title="t('Import')" :back-to="{ name: 'profile' }" :back-label="t('Profile')">
+  <AppShell width="wide" :title="t('Import')" :back-to="{ name: 'profile' }" :back-label="t('Profile')">
     <section v-if="!session" class="flex flex-col gap-4">
       <div v-if="!settleUpActive" data-testid="statement-import" class="surface-card p-4">
         <h2 class="font-medium">{{ t('A bank or credit card statement') }}</h2>

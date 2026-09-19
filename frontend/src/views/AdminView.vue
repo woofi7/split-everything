@@ -127,6 +127,7 @@ const on = (iso: string | null) =>
 </script>
 <template>
   <AppShell
+    width="wide"
     :title="t('Server groups')"
     :subtitle="auth.user?.email"
     :back-to="{ name: 'profile-settings' }"

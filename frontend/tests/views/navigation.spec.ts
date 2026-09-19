@@ -191,6 +191,6 @@ describe('the bottom tab bar', () => {
       expenses: [testExpense()],
     })
 
-    expect(wrapper.find('main').classes()).toContain('pb-10')
+    expect(wrapper.find('[data-testid="page-body"]').classes()).toContain('pb-10')
   })
 })

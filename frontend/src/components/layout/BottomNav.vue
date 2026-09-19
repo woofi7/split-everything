@@ -2,37 +2,7 @@
 import { t } from '@/i18n'
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-
-const tabs = [
-  {
-    name: 'dashboard',
-    label: t('Dashboard'),
-    to: { name: 'dashboard' },
-    owns: ['dashboard', 'group'],
-    icon: 'M4 6h16M4 12h16M4 18h10',
-  },
-  {
-    name: 'activity',
-    label: t('Activity'),
-    to: { name: 'activity' },
-    owns: ['activity'],
-    icon: 'M12 8v4l3 2M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0',
-  },
-  {
-    name: 'stats',
-    label: t('Stats'),
-    to: { name: 'stats' },
-    owns: ['stats'],
-    icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
-  },
-  {
-    name: 'profile',
-    label: t('Profile'),
-    to: { name: 'profile' },
-    owns: ['profile'],
-    icon: 'M5 20a7 7 0 0 1 14 0M12 3a4 4 0 1 1 0 8a4 4 0 0 1 0-8',
-  },
-]
+import { navTabs as tabs } from './navTabs'
 
 const route = useRoute()
 const currentName = computed(() => String(route?.name ?? ''))
@@ -40,7 +10,7 @@ const isActive = (tab: { owns: string[] }) => tab.owns.includes(currentName.valu
 </script>
 <template>
   <nav
-    class="relative z-30 shrink-0 overflow-visible border-t bg-[var(--surface-raised)] pb-[env(safe-area-inset-bottom)]"
+    class="relative z-30 shrink-0 overflow-visible border-t bg-[var(--surface-raised)] pb-[env(safe-area-inset-bottom)] lg:hidden"
     style="border-color: var(--border)"
     :aria-label="t('Main')"
   >

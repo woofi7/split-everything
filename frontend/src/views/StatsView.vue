@@ -344,6 +344,7 @@ async function refresh(): Promise<void> {
 </script>
 <template>
   <AppShell
+    width="wide"
     :title="groups.mainGroup?.name ?? 'Stats'"
     :subtitle="groups.mainGroup ? t('Stats') : undefined"
     :pending-count="expenses.pendingCount"
@@ -386,214 +387,216 @@ async function refresh(): Promise<void> {
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">
         {{ scopeName }}
       </h2>
-      <section class="surface-card mb-4 grid grid-cols-3 gap-3 p-4 text-center">
-        <div>
-          <p class="text-xs text-[var(--text-muted)]">{{ t('Total') }}</p>
-          <MoneyAmount :amount="dashboard.totalSpend" :currency="dashboard.currency" size="sm" />
-        </div>
-        <div>
-          <p class="text-xs text-[var(--text-muted)]">{{ t('Your share') }}</p>
-          <MoneyAmount :amount="dashboard.myShare" :currency="dashboard.currency" size="sm" />
-        </div>
-        <div>
-          <p class="text-xs text-[var(--text-muted)]">{{ t('You paid') }}</p>
-          <MoneyAmount :amount="dashboard.myPaid" :currency="dashboard.currency" size="sm" />
-        </div>
-      </section>
-      <section v-if="points.length > 0" class="surface-card mb-4 p-4">
-        <div class="mb-3 flex items-baseline justify-between gap-2">
-          <h2 class="min-w-0 truncate text-sm font-medium text-[var(--text-muted)]">{{ t('Spending over time') }}
-          </h2>
-          <p
-            v-if="selected"
-            data-testid="bar-readout"
-            class="flex shrink-0 items-baseline gap-2 text-sm"
-          >
-            <span class="text-[var(--text-muted)]">{{ bucketRange(selected.bucket) }}</span>
-            <span class="font-semibold tabular-nums">
-              {{ formatMoney(selected.amount, dashboard.currency) }}
-            </span>
-          </p>
-        </div>
-        <div class="relative">
-          <ul
-            class="flex h-32 items-end"
-            :class="chartGap"
-            data-testid="spend-chart"
-            role="group"
-            :aria-label="chartDescription"
-          >
-            <li
-              v-for="point in points"
-              :key="point.bucket"
-              class="flex h-full flex-1 items-end"
+      <div class="lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
+        <section class="surface-card mb-4 grid grid-cols-3 gap-3 p-4 text-center lg:col-span-2 lg:mb-0">
+          <div>
+            <p class="text-xs text-[var(--text-muted)]">{{ t('Total') }}</p>
+            <MoneyAmount :amount="dashboard.totalSpend" :currency="dashboard.currency" size="sm" />
+          </div>
+          <div>
+            <p class="text-xs text-[var(--text-muted)]">{{ t('Your share') }}</p>
+            <MoneyAmount :amount="dashboard.myShare" :currency="dashboard.currency" size="sm" />
+          </div>
+          <div>
+            <p class="text-xs text-[var(--text-muted)]">{{ t('You paid') }}</p>
+            <MoneyAmount :amount="dashboard.myPaid" :currency="dashboard.currency" size="sm" />
+          </div>
+        </section>
+        <section v-if="points.length > 0" class="surface-card mb-4 p-4 lg:col-span-2 lg:mb-0">
+          <div class="mb-3 flex items-baseline justify-between gap-2">
+            <h2 class="min-w-0 truncate text-sm font-medium text-[var(--text-muted)]">{{ t('Spending over time') }}
+            </h2>
+            <p
+              v-if="selected"
+              data-testid="bar-readout"
+              class="flex shrink-0 items-baseline gap-2 text-sm"
             >
-              <button
-                type="button"
-                data-testid="bar"
-                class="flex h-full w-full cursor-pointer items-end transition-opacity"
-                :class="selectedBucket && selectedBucket !== point.bucket ? 'opacity-40' : ''"
-                :aria-pressed="selectedBucket === point.bucket"
-                :aria-label="bucketTitle(point)"
-                @mouseenter="look(point.bucket)"
-                @mouseleave="lookAway"
-                @focus="look(point.bucket)"
-                @blur="lookAway"
-                @click="pin(point.bucket)"
+              <span class="text-[var(--text-muted)]">{{ bucketRange(selected.bucket) }}</span>
+              <span class="font-semibold tabular-nums">
+                {{ formatMoney(selected.amount, dashboard.currency) }}
+              </span>
+            </p>
+          </div>
+          <div class="relative">
+            <ul
+              class="flex h-32 items-end"
+              :class="chartGap"
+              data-testid="spend-chart"
+              role="group"
+              :aria-label="chartDescription"
+            >
+              <li
+                v-for="point in points"
+                :key="point.bucket"
+                class="flex h-full flex-1 items-end"
               >
-                <span
-                  v-if="point.amount <= 0"
-                  data-testid="bar-empty"
-                  class="block h-0.5 w-full rounded-full"
-                  style="background: var(--border)"
-                />
-                <span
-                  v-else
-                  data-testid="bar-fill"
-                  class="flex w-full flex-col-reverse overflow-hidden rounded-t"
-                  :style="{ height: `${barHeightPercent(point.amount)}%` }"
+                <button
+                  type="button"
+                  data-testid="bar"
+                  class="flex h-full w-full cursor-pointer items-end transition-opacity"
+                  :class="selectedBucket && selectedBucket !== point.bucket ? 'opacity-40' : ''"
+                  :aria-pressed="selectedBucket === point.bucket"
+                  :aria-label="bucketTitle(point)"
+                  @mouseenter="look(point.bucket)"
+                  @mouseleave="lookAway"
+                  @focus="look(point.bucket)"
+                  @blur="lookAway"
+                  @click="pin(point.bucket)"
                 >
                   <span
-                    v-for="member in segmentsOf(point)"
-                    :key="member.memberId"
-                    data-testid="bar-segment"
-                    class="block w-full"
-                    :style="{
-                      height: `${member.share * 100}%`,
-                      backgroundColor: colourOf(member.memberId),
-                    }"
+                    v-if="point.amount <= 0"
+                    data-testid="bar-empty"
+                    class="block h-0.5 w-full rounded-full"
+                    style="background: var(--border)"
                   />
-                </span>
-              </button>
-            </li>
-          </ul>
-          <svg
-            v-if="tracedLines.length > 0"
-            data-testid="overlay-line"
-            class="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-            style="filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55))"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <polyline
-              v-for="line in tracedLines"
-              :key="line.key"
-              :points="line.points"
-              :data-category="line.key"
-              fill="none"
-              :stroke="line.colour"
-              stroke-width="2"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-              vector-effect="non-scaling-stroke"
-            />
-          </svg>
-        </div>
-        <div
-          data-testid="chart-dates"
-          class="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]"
-        >
-          <span>{{ bucketLabel(points[0].bucket) }}</span>
-          <span>{{ bucketLabel(points[points.length - 1].bucket) }}</span>
-        </div>
-        <ul
-          v-if="chartPeople.length > 0"
-          data-testid="chart-key"
-          class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs"
-        >
-          <li
-            v-for="person in chartPeople"
-            :key="person.memberId"
-            class="flex items-center gap-1.5"
-            :class="selected && paidIn(selected, person.memberId) === 0 ? 'opacity-40' : ''"
-          >
-            <span
-              class="h-2 w-2 shrink-0 rounded-full"
-              :style="{ backgroundColor: colourOf(person.memberId) }"
+                  <span
+                    v-else
+                    data-testid="bar-fill"
+                    class="flex w-full flex-col-reverse overflow-hidden rounded-t"
+                    :style="{ height: `${barHeightPercent(point.amount)}%` }"
+                  >
+                    <span
+                      v-for="member in segmentsOf(point)"
+                      :key="member.memberId"
+                      data-testid="bar-segment"
+                      class="block w-full"
+                      :style="{
+                        height: `${member.share * 100}%`,
+                        backgroundColor: colourOf(member.memberId),
+                      }"
+                    />
+                  </span>
+                </button>
+              </li>
+            </ul>
+            <svg
+              v-if="tracedLines.length > 0"
+              data-testid="overlay-line"
+              class="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+              style="filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55))"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
               aria-hidden="true"
-            />
-            <span class="text-[var(--text-muted)]">{{ person.memberName }}</span>
-            <span v-if="selected" data-testid="key-amount" class="tabular-nums">
-              {{ formatMoney(paidIn(selected, person.memberId), dashboard.currency) }}
-              <span class="text-[var(--text-muted)]">
-                {{ shareIn(selected, person.memberId) }}
-              </span>
-            </span>
-          </li>
-        </ul>
-        <ul
-          v-if="tracedLines.length > 0"
-          data-testid="chart-categories"
-          class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs"
-        >
-          <li
-            v-for="line in tracedLines"
-            :key="line.key"
-            data-testid="category-key"
-            :data-category="line.key"
-            class="flex items-center gap-1.5"
-            :class="selected && amountIn(selected, line.key) === 0 ? 'opacity-40' : ''"
+            >
+              <polyline
+                v-for="line in tracedLines"
+                :key="line.key"
+                :points="line.points"
+                :data-category="line.key"
+                fill="none"
+                :stroke="line.colour"
+                stroke-width="2"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+          </div>
+          <div
+            data-testid="chart-dates"
+            class="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]"
           >
-            <span
-              class="h-0.5 w-3 shrink-0 rounded-full"
-              :style="{ backgroundColor: line.colour }"
-              aria-hidden="true"
-            />
-            <span class="text-[var(--text-muted)]">{{ line.name }}</span>
-            <span v-if="selected" data-testid="category-key-amount" class="tabular-nums">
-              {{ formatMoney(amountIn(selected, line.key), dashboard.currency) }}
-              <span class="text-[var(--text-muted)]">
-                {{ shareOfCategory(selected, line.key) }}
-              </span>
-            </span>
-          </li>
-        </ul>
-      </section>
-      <section v-if="spendByCategory.length > 0" class="surface-card mb-4 p-4">
-        <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">{{ t('Where it went') }}</h2>
-        <ul class="flex flex-col gap-2.5">
-          <li
-            v-for="row in spendByCategory"
-            :key="row.key"
-            data-testid="category-row"
-            :data-category="row.key"
-            class="flex flex-col gap-1"
+            <span>{{ bucketLabel(points[0].bucket) }}</span>
+            <span>{{ bucketLabel(points[points.length - 1].bucket) }}</span>
+          </div>
+          <ul
+            v-if="chartPeople.length > 0"
+            data-testid="chart-key"
+            class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs"
           >
-            <span class="flex items-baseline justify-between gap-3 text-sm">
-              <span class="flex min-w-0 items-center gap-2">
-                <FontAwesomeIcon
-                  :icon="row.icon.definition"
-                  class="h-3.5 w-3.5 shrink-0"
-                  :style="{ color: row.colour }"
-                  aria-hidden="true"
-                />
-                <span class="truncate">{{ row.name }}</span>
-                <span class="shrink-0 text-xs text-[var(--text-muted)]">{{ row.expenseCount }}</span>
-              </span>
-              <span class="shrink-0 tabular-nums">
-                {{ formatMoney(row.amount, dashboard.currency) }}
-              </span>
-            </span>
-            <span class="h-1.5 w-full overflow-hidden rounded-full" style="background: var(--surface-sunken)">
+            <li
+              v-for="person in chartPeople"
+              :key="person.memberId"
+              class="flex items-center gap-1.5"
+              :class="selected && paidIn(selected, person.memberId) === 0 ? 'opacity-40' : ''"
+            >
               <span
-                class="block h-full rounded-full"
-                :style="{ width: `${Math.max(row.share * 100, 2)}%`, backgroundColor: row.colour }"
+                class="h-2 w-2 shrink-0 rounded-full"
+                :style="{ backgroundColor: colourOf(person.memberId) }"
                 aria-hidden="true"
               />
-            </span>
-          </li>
-        </ul>
-      </section>
-      <section v-if="dashboard.byMember.length > 0" class="surface-card p-4">
-        <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">{{ t('Who owes whom') }}</h2>
-        <ul class="flex flex-col gap-2 text-sm">
-          <li v-for="member in dashboard.byMember" :key="member.memberId" class="flex justify-between">
-            <span>{{ member.memberName }}</span>
-            <MoneyAmount :amount="member.net" :currency="dashboard.currency" signed size="sm" />
-          </li>
-        </ul>
-      </section>
+              <span class="text-[var(--text-muted)]">{{ person.memberName }}</span>
+              <span v-if="selected" data-testid="key-amount" class="tabular-nums">
+                {{ formatMoney(paidIn(selected, person.memberId), dashboard.currency) }}
+                <span class="text-[var(--text-muted)]">
+                  {{ shareIn(selected, person.memberId) }}
+                </span>
+              </span>
+            </li>
+          </ul>
+          <ul
+            v-if="tracedLines.length > 0"
+            data-testid="chart-categories"
+            class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs"
+          >
+            <li
+              v-for="line in tracedLines"
+              :key="line.key"
+              data-testid="category-key"
+              :data-category="line.key"
+              class="flex items-center gap-1.5"
+              :class="selected && amountIn(selected, line.key) === 0 ? 'opacity-40' : ''"
+            >
+              <span
+                class="h-0.5 w-3 shrink-0 rounded-full"
+                :style="{ backgroundColor: line.colour }"
+                aria-hidden="true"
+              />
+              <span class="text-[var(--text-muted)]">{{ line.name }}</span>
+              <span v-if="selected" data-testid="category-key-amount" class="tabular-nums">
+                {{ formatMoney(amountIn(selected, line.key), dashboard.currency) }}
+                <span class="text-[var(--text-muted)]">
+                  {{ shareOfCategory(selected, line.key) }}
+                </span>
+              </span>
+            </li>
+          </ul>
+        </section>
+        <section v-if="spendByCategory.length > 0" class="surface-card mb-4 p-4 lg:mb-0">
+          <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">{{ t('Where it went') }}</h2>
+          <ul class="flex flex-col gap-2.5">
+            <li
+              v-for="row in spendByCategory"
+              :key="row.key"
+              data-testid="category-row"
+              :data-category="row.key"
+              class="flex flex-col gap-1"
+            >
+              <span class="flex items-baseline justify-between gap-3 text-sm">
+                <span class="flex min-w-0 items-center gap-2">
+                  <FontAwesomeIcon
+                    :icon="row.icon.definition"
+                    class="h-3.5 w-3.5 shrink-0"
+                    :style="{ color: row.colour }"
+                    aria-hidden="true"
+                  />
+                  <span class="truncate">{{ row.name }}</span>
+                  <span class="shrink-0 text-xs text-[var(--text-muted)]">{{ row.expenseCount }}</span>
+                </span>
+                <span class="shrink-0 tabular-nums">
+                  {{ formatMoney(row.amount, dashboard.currency) }}
+                </span>
+              </span>
+              <span class="h-1.5 w-full overflow-hidden rounded-full" style="background: var(--surface-sunken)">
+                <span
+                  class="block h-full rounded-full"
+                  :style="{ width: `${Math.max(row.share * 100, 2)}%`, backgroundColor: row.colour }"
+                  aria-hidden="true"
+                />
+              </span>
+            </li>
+          </ul>
+        </section>
+        <section v-if="dashboard.byMember.length > 0" class="surface-card mb-4 p-4 lg:mb-0">
+          <h2 class="mb-3 text-sm font-medium text-[var(--text-muted)]">{{ t('Who owes whom') }}</h2>
+          <ul class="flex flex-col gap-2 text-sm">
+            <li v-for="member in dashboard.byMember" :key="member.memberId" class="flex justify-between">
+              <span>{{ member.memberName }}</span>
+              <MoneyAmount :amount="member.net" :currency="dashboard.currency" signed size="sm" />
+            </li>
+          </ul>
+        </section>
+      </div>
     </template>
     <p v-else-if="isLoading" class="py-12 text-center text-sm text-[var(--text-muted)]">{{ t('Loading stats') }}
     </p>

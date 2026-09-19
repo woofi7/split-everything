@@ -134,6 +134,7 @@ async function refresh(): Promise<void> {
 </script>
 <template>
   <AppShell
+    width="wide"
     :title="groups.mainGroup?.name ?? 'Activity'"
     :subtitle="groups.mainGroup ? t('Activity') : undefined"
     :pending-count="expenses.pendingCount"

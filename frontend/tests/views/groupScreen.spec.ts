@@ -21,6 +21,31 @@ vi.mock('vue-router', () => ({
 
 const api = () => fakeApi({ '/groups': () => testGroup() })
 
+describe('the dashboard on a wide screen', () => {
+  it('keeps the month and the balances in view while the expenses scroll', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense()],
+    })
+
+    const rail = wrapper.find('aside')
+    expect(rail.exists()).toBe(true)
+    expect(rail.classes()).toContain('lg:sticky')
+    expect(rail.classes()).toContain('lg:self-start')
+  })
+
+  it('stacks the month above the balances in one column', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: fakeApi({ '/groups': () => testGroup() }),
+      expenses: [testExpense()],
+    })
+
+    const cards = wrapper.findAll('aside > section')
+    expect(cards.length).toBeGreaterThan(0)
+    for (const card of cards) expect(card.classes()).toContain('surface-card')
+  })
+})
+
 describe('the group screen', () => {
   it('marks the corner with the group icon rather than the app icon', async () => {
     const { wrapper } = await mountView(DashboardView, {

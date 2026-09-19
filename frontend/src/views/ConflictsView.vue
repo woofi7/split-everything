@@ -94,6 +94,7 @@ async function discard(operationId: string): Promise<void> {
 </script>
 <template>
   <AppShell
+    width="wide"
     :title="t('Needs attention')"
     :pending-count="expenses.pendingCount"
     :rejected-count="expenses.rejectedCount"
