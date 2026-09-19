@@ -4,6 +4,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import AddKindSwitch from '@/components/expenses/AddKindSwitch.vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faRightLeft } from '@fortawesome/free-solid-svg-icons'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
@@ -185,7 +187,7 @@ async function save(): Promise<void> {
           :title="t('The other way round')"
           @click="swap"
         >
-          <span aria-hidden="true">&rarr;</span>
+          <FontAwesomeIcon :icon="faRightLeft" class="h-5 w-5" aria-hidden="true" />
         </button>
         <label class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Who received it') }}</span>
