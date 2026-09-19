@@ -13,6 +13,7 @@ defineProps<{ current: 'expense' | 'payment' }>()
   >
     <RouterLink
       :to="{ name: 'add-expense' }"
+      replace
       data-testid="record-expense"
       class="tap-target flex items-center justify-center rounded-lg text-sm font-medium"
       :class="current === 'expense' ? 'bg-[var(--surface-raised)] text-accent' : 'text-[var(--text-muted)]'"
@@ -21,6 +22,7 @@ defineProps<{ current: 'expense' | 'payment' }>()
     </RouterLink>
     <RouterLink
       :to="{ name: 'add-payment' }"
+      replace
       data-testid="record-payment"
       class="tap-target flex items-center justify-center rounded-lg text-sm font-medium"
       :class="current === 'payment' ? 'bg-[var(--surface-raised)] text-accent' : 'text-[var(--text-muted)]'"
