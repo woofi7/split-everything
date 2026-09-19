@@ -27,6 +27,7 @@ const isOpen = ref(false)
 const query = ref('')
 const activeIndex = ref(0)
 const search = useTemplateRef<HTMLInputElement>('search')
+const trigger = useTemplateRef<HTMLButtonElement>('trigger')
 
 const chosen = computed(() => categoryFor(props.modelValue, props.categories))
 
@@ -70,6 +71,7 @@ async function open(): Promise<void> {
 function close(): void {
   isOpen.value = false
   query.value = ''
+  trigger.value?.focus()
 }
 
 function move(offset: number): void {
@@ -132,9 +134,11 @@ function matchedOn(result: { item: Category; fieldIndex: number }): string | nul
 <template>
   <div class="relative">
     <button
+      ref="trigger"
       type="button"
       data-testid="category"
       :data-category="modelValue ?? ''"
+      :aria-label="t('Category')"
       class="tap-target flex w-full items-center gap-2 rounded-lg border bg-[var(--surface-raised)] px-2 text-left text-sm"
       style="border-color: var(--border)"
       :disabled="isCreating"
@@ -174,59 +178,65 @@ function matchedOn(result: { item: Category; fieldIndex: number }): string | nul
         @keydown.esc.prevent="close"
       />
       <ul id="category-picker-results" role="listbox" class="max-h-64 overflow-y-auto">
-        <li
-          v-for="(result, index) in results"
-          :key="result.item.key"
-          data-testid="category-option"
-          :data-category="result.item.key"
-          role="option"
-          :aria-selected="index === activeIndex"
-          class="tap-target flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
-          :class="index === activeIndex ? 'bg-brand-600/15' : ''"
-          @click="choose(result.item.key)"
-          @mousemove="activeIndex = index"
-        >
-          <FontAwesomeIcon
-            :icon="resolveIcon(result.item.iconName).definition"
-            class="h-3.5 w-3.5 shrink-0"
-            :style="{ color: result.item.colorHex }"
-            aria-hidden="true"
-          />
-          <span class="min-w-0 flex-1 truncate">
-            <template v-for="(part, at) in nameSegments(result)" :key="at">
-              <mark v-if="part.matched" class="bg-transparent font-semibold text-accent">{{ part.text }}</mark>
-              <template v-else>{{ part.text }}</template>
-            </template>
-          </span>
-          <span
-            v-if="matchedOn(result)"
-            class="shrink-0 truncate text-xs text-[var(--text-muted)]"
-          >{{ matchedOn(result) }}
-          </span>
+        <li v-for="(result, index) in results" :key="result.item.key" role="presentation">
+          <button
+            type="button"
+            data-testid="category-option"
+            :data-category="result.item.key"
+            role="option"
+            :aria-selected="index === activeIndex"
+            class="tap-target flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+            :class="index === activeIndex ? 'bg-brand-600/15' : ''"
+            @click="choose(result.item.key)"
+            @mousemove="activeIndex = index"
+          >
+            <FontAwesomeIcon
+              :icon="resolveIcon(result.item.iconName).definition"
+              class="h-3.5 w-3.5 shrink-0"
+              :style="{ color: result.item.colorHex }"
+              aria-hidden="true"
+            />
+            <span class="min-w-0 flex-1 truncate">
+              <template v-for="(part, at) in nameSegments(result)" :key="at">
+                <mark v-if="part.matched" class="bg-transparent font-semibold text-accent">{{ part.text }}</mark>
+                <template v-else>{{ part.text }}</template>
+              </template>
+            </span>
+            <span
+              v-if="matchedOn(result)"
+              class="shrink-0 truncate text-xs text-[var(--text-muted)]"
+            >{{ matchedOn(result) }}
+            </span>
+          </button>
         </li>
-        <li
-          v-if="canCreate"
-          data-testid="category-create"
-          role="option"
-          :aria-selected="activeIndex === results.length"
-          class="tap-target flex cursor-pointer items-center gap-2 border-t px-3 py-2 text-sm text-accent"
-          style="border-color: var(--border)"
-          :class="activeIndex === results.length ? 'bg-brand-600/15' : ''"
-          @click="create"
-          @mousemove="activeIndex = results.length"
-        >
-          <span aria-hidden="true">+</span>
-          <span class="min-w-0 flex-1 truncate">{{ t('Add "{name}"', { name: trimmed }) }}</span>
+        <li v-if="canCreate" role="presentation">
+          <button
+            type="button"
+            data-testid="category-create"
+            role="option"
+            :aria-selected="activeIndex === results.length"
+            class="tap-target flex w-full items-center gap-2 border-t px-3 py-2 text-left text-sm text-accent"
+            style="border-color: var(--border)"
+            :class="activeIndex === results.length ? 'bg-brand-600/15' : ''"
+            @click="create"
+            @mousemove="activeIndex = results.length"
+          >
+            <span aria-hidden="true">+</span>
+            <span class="min-w-0 flex-1 truncate">{{ t('Add "{name}"', { name: trimmed }) }}</span>
+          </button>
         </li>
-        <li
-          data-testid="category-none"
-          role="option"
-          :aria-selected="activeIndex === rowCount - 1"
-          class="tap-target flex cursor-pointer items-center px-3 py-2 text-sm text-[var(--text-muted)]"
-          :class="activeIndex === rowCount - 1 ? 'bg-brand-600/15' : ''"
-          @click="choose(null)"
-          @mousemove="activeIndex = rowCount - 1"
-        >{{ t('Not filed') }}
+        <li role="presentation">
+          <button
+            type="button"
+            data-testid="category-none"
+            role="option"
+            :aria-selected="activeIndex === rowCount - 1"
+            class="tap-target flex w-full items-center px-3 py-2 text-left text-sm text-[var(--text-muted)]"
+            :class="activeIndex === rowCount - 1 ? 'bg-brand-600/15' : ''"
+            @click="choose(null)"
+            @mousemove="activeIndex = rowCount - 1"
+          >{{ t('Not filed') }}
+          </button>
         </li>
       </ul>
     </div>

@@ -58,6 +58,7 @@ export default tseslint.config(
         ErrorEvent: 'readonly',
         PromiseRejectionEvent: 'readonly',
         Element: 'readonly',
+        HTMLButtonElement: 'readonly',
         HTMLElement: 'readonly',
         HTMLInputElement: 'readonly',
         HTMLSelectElement: 'readonly',

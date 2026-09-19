@@ -601,7 +601,7 @@ async function save(): Promise<void> {
             </option>
           </select>
         </label>
-        <label v-if="categories.length > 0" class="flex min-w-0 flex-col gap-1">
+        <div v-if="categories.length > 0" class="flex min-w-0 flex-col gap-1">
           <span class="flex items-baseline justify-between gap-2 text-xs text-[var(--text-muted)]">
             <span>{{ t('Category') }}</span>
             <span v-if="guessedName" data-testid="category-guess" class="truncate text-accent">
@@ -616,7 +616,7 @@ async function save(): Promise<void> {
             @update:model-value="chooseCategory($event ?? '')"
             @create="createCategory"
           />
-        </label>
+        </div>
         <label v-if="!isShared" class="flex min-w-0 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Who paid') }}</span>
           <select

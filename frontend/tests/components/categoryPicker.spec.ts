@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { h } from 'vue'
 import CategoryPicker from '@/components/expenses/CategoryPicker.vue'
 import type { Category } from '@/domain/categories'
 
@@ -17,6 +18,34 @@ const categories = [
   category('dining', 'Dining out', ['resto']),
   category('shopping', 'Shopping'),
 ]
+
+describe('the category picker inside a label', () => {
+  const inLabel = () =>
+    mount(
+      {
+        render: () => h('label', {}, [h('span', 'Category'), h(CategoryPicker, { modelValue: null, categories })]),
+      },
+      { attachTo: document.body },
+    )
+
+  it('shuts when an option is chosen', async () => {
+    const wrapper = inLabel()
+
+    await wrapper.find('[data-testid="category"]').trigger('click')
+    await wrapper.find('[data-testid="category-option"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="category-search"]').exists()).toBe(false)
+  })
+
+  it('shuts when Not filed is chosen', async () => {
+    const wrapper = inLabel()
+
+    await wrapper.find('[data-testid="category"]').trigger('click')
+    await wrapper.find('[data-testid="category-none"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="category-search"]').exists()).toBe(false)
+  })
+})
 
 describe('the category picker', () => {
   const mountPicker = (props: Partial<InstanceType<typeof CategoryPicker>['$props']> = {}) =>
