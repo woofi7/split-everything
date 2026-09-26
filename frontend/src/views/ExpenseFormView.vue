@@ -16,6 +16,7 @@ import { memberColor, memberColors } from '@/domain/memberColors'
 import { lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpenseDate'
 import { bucketOf } from '@/domain/buckets'
 import { categoryFor, guessCategory } from '@/domain/categories'
+import { lastExpensePayer, rememberExpensePayer } from '@/domain/lastExpensePayer'
 
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
@@ -228,7 +229,9 @@ async function selectGroup(nextGroupId: string): Promise<void> {
   participantIds.value = active.map((member) => member.id)
 
   const mine = active.find((member) => member.userId === auth.user?.id)?.id
-  paidByMemberId.value = mine ?? active[0]?.id ?? ''
+  const remembered = isEditing.value ? null : lastExpensePayer(nextGroupId)
+  const lastPayer = active.find((member) => member.id === remembered)?.id
+  paidByMemberId.value = lastPayer ?? mine ?? active[0]?.id ?? ''
 
   applyGroupDefault(loaded?.defaultSplitType, loaded?.defaultSplitValues, active.map((m) => m.id))
 }
@@ -504,6 +507,7 @@ async function save(): Promise<void> {
       const added = await expenses.add({ groupId: group.value.id, ...fields })
 
       rememberExpenseDate(spentAt.value)
+      if (!isShared.value) rememberExpensePayer(group.value.id, fields.paidByMemberId)
 
       await router.replace({
         name: 'group',

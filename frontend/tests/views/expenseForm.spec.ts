@@ -960,6 +960,21 @@ describe('ExpenseFormView remembering the date', () => {
     expect(wrapper.find('[data-testid="use-today"]').exists()).toBe(false)
   })
 
+  it('starts on whoever paid the last expense added today in that group', async () => {
+    const first = await mountView()
+
+    await first.wrapper.find('input[placeholder="Groceries"]').setValue('Groceries')
+    await first.wrapper.find('input[inputmode="decimal"]').setValue('60')
+    await first.wrapper.find('[data-testid="paid-by"]').setValue(bob)
+    await settle()
+    await first.wrapper.find('form').trigger('submit')
+    await waitFor(() => (localStorage.getItem('split-everything.last-expense-payer') ?? '').includes(bob))
+
+    const { wrapper } = await mountView()
+
+    expect((wrapper.find('[data-testid="paid-by"]').element as HTMLSelectElement).value).toBe(bob)
+  })
+
   it('remembers the date an expense was added on', async () => {
     const { wrapper } = await mountView()
 
