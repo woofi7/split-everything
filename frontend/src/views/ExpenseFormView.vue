@@ -15,7 +15,7 @@ import { formatMoney, parseAmountInput, roundMoney } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
 import { lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpenseDate'
 import { bucketOf } from '@/domain/buckets'
-import { categoriseByKeywords, categoryFor } from '@/domain/categories'
+import { categoryFor, guessCategory } from '@/domain/categories'
 
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
@@ -118,7 +118,7 @@ const categories = computed(() => groups.categoriesOf(groupId.value))
 watch([description, categories], () => {
   if (!isGuess.value && categoryKey.value !== null) return
 
-  const guessed = categoriseByKeywords(description.value, categories.value)
+  const guessed = guessCategory(description.value, groupId.value, expenses.expenses, categories.value)
   categoryKey.value = guessed
   isGuess.value = guessed !== null
 })

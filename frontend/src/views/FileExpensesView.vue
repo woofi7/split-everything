@@ -5,7 +5,7 @@ import { useRoute } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { categoriseByKeywords, categoryFor, fold } from '@/domain/categories'
+import { categoryFor, fold, guessCategory } from '@/domain/categories'
 import { resolveIcon } from '@/domain/icons'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
@@ -110,7 +110,7 @@ const guesses = computed(() => {
   for (const expense of inGroup.value) {
     if (filedAs(expense)) continue
 
-    const key = categoriseByKeywords(expense.description, categories.value)
+    const key = guessCategory(expense.description, groupId.value, expenses.expenses, categories.value)
     if (!key) continue
 
     const bucket = byCategory.get(key)
