@@ -2,11 +2,11 @@
 import { t } from '@/i18n'
 import { RouterLink } from 'vue-router'
 
-defineProps<{ current: 'expense' | 'payment' }>()
+defineProps<{ current: 'expense' | 'payment' | 'settlement' }>()
 </script>
 <template>
   <div
-    class="mb-3 grid grid-cols-2 gap-1 rounded-xl p-1"
+    class="mb-3 grid grid-cols-3 gap-1 rounded-xl p-1"
     style="background: var(--surface-sunken)"
     role="group"
     :aria-label="t('What to record')"
@@ -28,6 +28,15 @@ defineProps<{ current: 'expense' | 'payment' }>()
       :class="current === 'payment' ? 'bg-[var(--surface-raised)] text-accent' : 'text-[var(--text-muted)]'"
       :aria-current="current === 'payment' ? 'page' : undefined"
     >{{ t('Payment') }}
+    </RouterLink>
+    <RouterLink
+      :to="{ name: 'add-settlement' }"
+      replace
+      data-testid="record-settlement"
+      class="tap-target flex items-center justify-center rounded-lg text-sm font-medium"
+      :class="current === 'settlement' ? 'bg-[var(--surface-raised)] text-accent' : 'text-[var(--text-muted)]'"
+      :aria-current="current === 'settlement' ? 'page' : undefined"
+    >{{ t('Settlement') }}
     </RouterLink>
   </div>
 </template>

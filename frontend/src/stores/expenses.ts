@@ -84,6 +84,16 @@ export interface SettlementDraft {
   receiptId?: string | null
 }
 
+export interface BalanceMove {
+  groupId: string
+  fromMemberId: string
+  toMemberId: string
+  amount: number
+  targetGroupId: string
+  settledAt?: Date
+  note?: string | null
+}
+
 export const useExpensesStore = defineStore('expenses', () => {
   const expenses = ref<LocalExpense[]>([])
   const settlements = ref<LocalSettlement[]>([])
@@ -433,6 +443,25 @@ export const useExpensesStore = defineStore('expenses', () => {
     await useGroupsStore().loadAll()
 
     return result
+  }
+
+  async function moveBalance(move: BalanceMove): Promise<void> {
+    const client = requireApi()
+
+    try {
+      await client.post('/settlements/move', {
+        ...move,
+        settledAt: move.settledAt?.toISOString() ?? null,
+        note: move.note?.trim() || null,
+      })
+    } catch (caught) {
+      if ((caught instanceof ApiError && caught.isOffline) || looksOffline(caught)) {
+        throw new Error('Moving a balance to another group needs a connection.', { cause: caught })
+      }
+      throw caught
+    }
+
+    await sync()
   }
 
   async function remove(expenseId: string): Promise<void> {
@@ -820,6 +849,7 @@ export const useExpensesStore = defineStore('expenses', () => {
     transfer,
     crossGroupBalance,
     offsetAcrossGroups,
+    moveBalance,
     comment,
     removeComment,
     settle,

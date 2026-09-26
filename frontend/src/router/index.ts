@@ -55,6 +55,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/PaymentFormView.vue'),
   },
   {
+    path: '/add/settlement',
+    name: 'add-settlement',
+    component: () => import('@/views/PaymentFormView.vue'),
+    props: { kind: 'settlement' },
+  },
+  {
     path: '/groups/:groupId/expenses/:expenseId/edit',
     name: 'edit-expense',
     component: () => import('@/views/ExpenseFormView.vue'),
