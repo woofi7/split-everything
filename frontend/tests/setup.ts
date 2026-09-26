@@ -1,5 +1,8 @@
 import 'fake-indexeddb/auto'
-import { vi } from 'vitest'
+import { afterEach, vi } from 'vitest'
+import { enableAutoUnmount } from '@vue/test-utils'
+
+enableAutoUnmount(afterEach)
 
 if (!globalThis.crypto?.randomUUID) {
   Object.defineProperty(globalThis.crypto, 'randomUUID', {
