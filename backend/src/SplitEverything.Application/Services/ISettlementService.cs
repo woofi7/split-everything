@@ -19,4 +19,7 @@ public interface ISettlementService
 
     Task<OffsetAcrossGroupsResult> OffsetAcrossGroupsAsync(
         Guid userId, OffsetAcrossGroupsRequest request, CancellationToken ct = default);
+
+    Task<MoveBalanceResult> MoveBalanceAsync(
+        Guid userId, MoveBalanceRequest request, CancellationToken ct = default);
 }

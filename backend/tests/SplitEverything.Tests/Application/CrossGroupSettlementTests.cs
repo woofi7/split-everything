@@ -252,4 +252,79 @@ public class CrossGroupSettlementTests(PostgresFixture fixture) : ServiceTestBas
         after.Groups.ShouldHaveSingleItem().Net.ShouldBe(20m);
         after.Groups[0].GroupName.ShouldBe("Colocation");
     }
+
+    private async Task<(Guid Me, Guid Them, GroupDto Flat, Guid MyFlat, Guid TheirFlat, GroupDto Trip)>
+        DebtsFacingTheSameWayAsync()
+    {
+        var me = await TestData.SeedUserAsync(Db, "Nicolas");
+        var them = await TestData.SeedUserAsync(Db, "Emma");
+        var (flat, myFlat, theirFlat) = await ShareGroupAsync(me.Id, them.Id, "Colocation");
+        var (trip, myTrip, theirTrip) = await ShareGroupAsync(me.Id, them.Id, "Ski trip");
+
+        await SpendAsync(me.Id, flat.Id, theirFlat, myFlat, 140m);
+        await SpendAsync(me.Id, trip.Id, theirTrip, myTrip, 60m);
+
+        return (me.Id, them.Id, flat, myFlat, theirFlat, trip);
+    }
+
+    [Fact]
+    public async Task Moving_a_balance_clears_it_here_and_adds_it_there()
+    {
+        var (me, them, flat, myFlat, theirFlat, trip) = await DebtsFacingTheSameWayAsync();
+
+        await Settlements.MoveBalanceAsync(me, new MoveBalanceRequest(
+            flat.Id, myFlat, theirFlat, 70m, trip.Id, null, null));
+
+        var after = await Settlements.GetCrossGroupBalanceAsync(me, them);
+
+        after.Groups.ShouldHaveSingleItem().GroupId.ShouldBe(trip.Id);
+        after.Groups[0].Net.ShouldBe(-100m);
+    }
+
+    [Fact]
+    public async Task A_moved_balance_is_one_settlement_in_each_group_tied_together()
+    {
+        var (me, _, flat, myFlat, theirFlat, trip) = await DebtsFacingTheSameWayAsync();
+
+        var result = await Settlements.MoveBalanceAsync(me, new MoveBalanceRequest(
+            flat.Id, myFlat, theirFlat, 70m, trip.Id, null, null));
+
+        var written = await NewContext().Settlements.ToListAsync();
+        var inFlat = written.Single(s => s.Id == result.SourceSettlementId);
+        var inTrip = written.Single(s => s.Id == result.TargetSettlementId);
+
+        inFlat.GroupId.ShouldBe(flat.Id);
+        inFlat.Note.ShouldBe("Moved to Ski trip");
+        inTrip.GroupId.ShouldBe(trip.Id);
+        inTrip.Note.ShouldBe("Moved from Colocation");
+        inFlat.OffsetSettlementId.ShouldBe(inTrip.Id);
+        inTrip.OffsetSettlementId.ShouldBe(inFlat.Id);
+
+        var entries = await NewContext().SyncLog.Where(e => e.EntityType == SyncEntityType.Settlement).ToListAsync();
+        entries.Select(e => e.GroupId).ShouldBe([flat.Id, trip.Id], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task A_balance_cannot_move_to_a_group_kept_in_another_currency()
+    {
+        var me = await TestData.SeedUserAsync(Db, "Nicolas");
+        var them = await TestData.SeedUserAsync(Db, "Emma");
+        var (flat, myFlat, theirFlat) = await ShareGroupAsync(me.Id, them.Id, "Colocation");
+        var (spain, _, _) = await ShareGroupAsync(me.Id, them.Id, "Voyage Espagne", "EUR");
+
+        await Should.ThrowAsync<ValidationException>(() => Settlements.MoveBalanceAsync(me.Id,
+            new MoveBalanceRequest(flat.Id, myFlat, theirFlat, 10m, spain.Id, null, null)));
+    }
+
+    [Fact]
+    public async Task A_balance_cannot_move_to_a_group_the_other_person_is_not_in()
+    {
+        var me = await TestData.SeedUserAsync(Db, "Nicolas");
+        var them = await TestData.SeedUserAsync(Db, "Emma");
+        var (flat, myFlat, theirFlat) = await ShareGroupAsync(me.Id, them.Id, "Colocation");
+        var solo = await Groups.CreateAsync(me.Id, new CreateGroupRequest("Solo", "CAD", null, null, null, null));
+
+        await Should.ThrowAsync<ValidationException>(() => Settlements.MoveBalanceAsync(me.Id,
+            new MoveBalanceRequest(flat.Id, myFlat, theirFlat, 10m, solo.Id, null, null)));
+    }
 }

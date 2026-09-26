@@ -40,6 +40,11 @@ public sealed class SettlementsController(
         OffsetAcrossGroupsRequest request, CancellationToken ct)
         => Ok(await settlements.OffsetAcrossGroupsAsync(UserId, request, ct));
 
+    [HttpPost("move")]
+    public async Task<ActionResult<MoveBalanceResult>> Move(
+        MoveBalanceRequest request, CancellationToken ct)
+        => Ok(await settlements.MoveBalanceAsync(UserId, request, ct));
+
     [HttpPost("nudge")]
     public async Task<IActionResult> Nudge(NudgeRequest request, CancellationToken ct)
     {

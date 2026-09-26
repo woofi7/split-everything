@@ -327,52 +327,125 @@ public sealed class SettlementService(
 
         var byGroup = shared.ToDictionary(g => g.GroupId);
         var now = clock.UtcNow;
-        var deviceId = GroupService.DeviceFor(userId);
-        var touched = new Dictionary<Guid, long>();
-        var recorded = new List<Settlement>();
+        var halves = new List<PairHalf>();
 
         foreach (var offset in offsets)
         {
             var owed = byGroup[offset.OwedGroupId];
             var owing = byGroup[offset.OwingGroupId];
 
-            var theyPay = NewOffsetSettlement(owed, owed.TheirMemberId, owed.MyMemberId, offset.Amount,
-                now, request.Note, owing.Name);
-            var iPay = NewOffsetSettlement(owing, owing.MyMemberId, owing.TheirMemberId, offset.Amount,
-                now, request.Note, owed.Name);
+            var theyPay = NewPairedSettlement(owed.GroupId, owed.Currency, owed.LineageId,
+                owed.TheirMemberId, owed.MyMemberId, offset.Amount, now,
+                NoteOr(request.Note, $"Cancelled against {owing.Name}"));
+            var iPay = NewPairedSettlement(owing.GroupId, owing.Currency, owing.LineageId,
+                owing.MyMemberId, owing.TheirMemberId, offset.Amount, now,
+                NoteOr(request.Note, $"Cancelled against {owed.Name}"));
 
-            theyPay.OffsetSettlementId = iPay.Id;
-            iPay.OffsetSettlementId = theyPay.Id;
+            halves.Add(new PairHalf(theyPay, owed.MyMemberId,
+                $"{Format(offset.Amount, owed.Currency)} cancelled against {owing.Name}"));
+            halves.Add(new PairHalf(iPay, owing.MyMemberId,
+                $"{Format(offset.Amount, owing.Currency)} cancelled against {owed.Name}"));
+        }
 
-            db.Settlements.Add(theyPay);
-            db.Settlements.Add(iPay);
-            recorded.Add(theyPay);
-            recorded.Add(iPay);
+        await RecordPairsAsync(userId, halves, ct);
 
-            foreach (var (settlement, group, counterpart) in new[]
-                     {
-                         (theyPay, owed, owing.Name),
-                         (iPay, owing, owed.Name)
-                     })
-            {
-                var seq = await writer.RecordAsync(settlement, SyncEntityType.Settlement, group.GroupId,
-                    SyncOperation.Create, deviceId, userId, SettlementPayload(settlement), ct: ct);
-                touched[group.GroupId] = seq;
+        var after = await SharedGroupsAsync(userId, request.WithUserId, ct);
 
-                await activity.RecordAsync(group.GroupId, ActivityKind.SettlementCreated, userId, group.MyMemberId,
-                    SyncEntityType.Settlement, settlement.Id,
-                    $"{Format(offset.Amount, group.Currency)} cancelled against {counterpart}",
-                    new { settlement.Amount, settlement.Currency }, ct);
-            }
+        return new OffsetAcrossGroupsResult(offsets, Remainders(after, []), halves.Count);
+    }
+
+    public async Task<MoveBalanceResult> MoveBalanceAsync(
+        Guid userId, MoveBalanceRequest request, CancellationToken ct = default)
+    {
+        if (request.GroupId == request.TargetGroupId)
+            throw new ValidationException("Pick a different group to move the balance to.");
+        if (request.FromMemberId == request.ToMemberId)
+            throw new ValidationException("A settlement needs two different members.");
+
+        var actor = await GroupAccess.RequireMemberAsync(db, userId, request.GroupId, ct);
+        var targetActor = await GroupAccess.RequireMemberAsync(db, userId, request.TargetGroupId, ct);
+        var source = await GroupAccess.RequireGroupAsync(db, request.GroupId, ct);
+        var target = await GroupAccess.RequireGroupAsync(db, request.TargetGroupId, ct);
+        GroupAccess.RequireWritable(source);
+        GroupAccess.RequireWritable(target);
+
+        if (!string.Equals(source.BaseCurrency, target.BaseCurrency, StringComparison.OrdinalIgnoreCase))
+            throw new ValidationException("Both groups need to keep the same currency to move a balance between them.");
+
+        var amount = CurrencyPrecision.Round(request.Amount, source.BaseCurrency);
+        if (amount <= 0m)
+            throw new ValidationException("A settlement amount must be greater than zero.");
+
+        var from = await ActiveMemberAsync(request.GroupId, request.FromMemberId, ct);
+        var to = await ActiveMemberAsync(request.GroupId, request.ToMemberId, ct);
+        var targetFrom = await CounterpartAsync(request.TargetGroupId, from, target.Name, ct);
+        var targetTo = await CounterpartAsync(request.TargetGroupId, to, target.Name, ct);
+
+        var when = request.SettledAt ?? clock.UtcNow;
+        var inSource = NewPairedSettlement(source.Id, source.BaseCurrency, source.LineageId,
+            from.Id, to.Id, amount, when, NoteOr(request.Note, $"Moved to {target.Name}"));
+        var inTarget = NewPairedSettlement(target.Id, target.BaseCurrency, target.LineageId,
+            targetTo.Id, targetFrom.Id, amount, when, NoteOr(request.Note, $"Moved from {source.Name}"));
+
+        await RecordPairsAsync(userId,
+        [
+            new PairHalf(inSource, actor.Id, $"{Format(amount, source.BaseCurrency)} moved to {target.Name}"),
+            new PairHalf(inTarget, targetActor.Id, $"{Format(amount, target.BaseCurrency)} moved from {source.Name}")
+        ], ct);
+
+        return new MoveBalanceResult(inSource.Id, inTarget.Id);
+    }
+
+    private async Task<GroupMember> ActiveMemberAsync(Guid groupId, Guid memberId, CancellationToken ct)
+        => await db.GroupMembers.FirstOrDefaultAsync(m =>
+               m.Id == memberId && m.GroupId == groupId && m.Status == MembershipStatus.Active && !m.IsDeleted, ct)
+           ?? throw new ValidationException("Both sides of a settlement must be members of this group.");
+
+    private async Task<GroupMember> CounterpartAsync(
+        Guid groupId, GroupMember member, string groupName, CancellationToken ct)
+    {
+        var counterpart = member.UserId is { } memberUserId
+            ? await db.GroupMembers.FirstOrDefaultAsync(m =>
+                m.GroupId == groupId && m.UserId == memberUserId &&
+                m.Status == MembershipStatus.Active && !m.IsDeleted, ct)
+            : null;
+
+        return counterpart ?? throw new ValidationException($"{member.DisplayName} is not in {groupName}.");
+    }
+
+    private sealed record PairHalf(Settlement Settlement, Guid ActorMemberId, string Summary);
+
+    private async Task RecordPairsAsync(Guid userId, IReadOnlyList<PairHalf> halves, CancellationToken ct)
+    {
+        var deviceId = GroupService.DeviceFor(userId);
+        var touched = new Dictionary<Guid, long>();
+
+        for (var i = 0; i < halves.Count; i += 2)
+        {
+            halves[i].Settlement.OffsetSettlementId = halves[i + 1].Settlement.Id;
+            halves[i + 1].Settlement.OffsetSettlementId = halves[i].Settlement.Id;
+        }
+
+        foreach (var (settlement, actorMemberId, summary) in halves)
+        {
+            db.Settlements.Add(settlement);
+
+            touched[settlement.GroupId] = await writer.RecordAsync(settlement, SyncEntityType.Settlement,
+                settlement.GroupId, SyncOperation.Create, deviceId, userId, SettlementPayload(settlement), ct: ct);
+
+            await activity.RecordAsync(settlement.GroupId, ActivityKind.SettlementCreated, userId, actorMemberId,
+                SyncEntityType.Settlement, settlement.Id, summary,
+                new { settlement.Amount, settlement.Currency }, ct);
         }
 
         await db.SaveChangesAsync(ct);
-        var clocks = recorded.ToDictionary(s => s.Id, s => s.Clock.Counters);
+        var clocks = halves.ToDictionary(h => h.Settlement.Id, h => h.Settlement.Clock.Counters);
         db.ChangeTracker.Clear();
 
         foreach (var (groupId, seq) in touched)
         {
-            var accepted = recorded
+            var accepted = halves
+                .Select(h => h.Settlement)
                 .Where(s => s.GroupId == groupId)
                 .Select(s => new SyncAcceptedDto(s.Id, s.Id, s.ServerSeq, clocks[s.Id]))
                 .ToList();
@@ -380,10 +453,6 @@ public sealed class SettlementService(
             await broadcaster.BroadcastAsync(groupId, new SyncPushResult(
                 accepted, [], [], new Dictionary<Guid, long> { [groupId] = seq }), deviceId, ct);
         }
-
-        var after = await SharedGroupsAsync(userId, request.WithUserId, ct);
-
-        return new OffsetAcrossGroupsResult(offsets, Remainders(after, []), recorded.Count);
     }
 
     private sealed record SharedGroup(
@@ -494,25 +563,28 @@ public sealed class SettlementService(
         return remaining;
     }
 
-    private Settlement NewOffsetSettlement(
-        SharedGroup group, Guid fromMemberId, Guid toMemberId, decimal amount,
-        DateTimeOffset when, string? note, string counterpartName)
+    private Settlement NewPairedSettlement(
+        Guid groupId, string currency, Guid lineageId, Guid fromMemberId, Guid toMemberId,
+        decimal amount, DateTimeOffset when, string note)
         => new()
         {
             Id = Guid.CreateVersion7(),
-            GroupId = group.GroupId,
+            GroupId = groupId,
             FromMemberId = fromMemberId,
             ToMemberId = toMemberId,
             Amount = amount,
-            Currency = group.Currency,
+            Currency = currency,
             AmountInBaseCurrency = amount,
             ExchangeRate = 1m,
             SettledAt = when,
-            Note = string.IsNullOrWhiteSpace(note) ? $"Cancelled against {counterpartName}" : note.Trim(),
-            OriginLineageId = group.LineageId,
-            CreatedAt = when,
-            UpdatedAt = when
+            Note = note,
+            OriginLineageId = lineageId,
+            CreatedAt = clock.UtcNow,
+            UpdatedAt = clock.UtcNow
         };
+
+    private static string NoteOr(string? note, string fallback)
+        => string.IsNullOrWhiteSpace(note) ? fallback : note.Trim();
 
     private async Task<Dictionary<Guid, string>> MemberNamesAsync(Guid groupId, CancellationToken ct)
         => await db.GroupMembers

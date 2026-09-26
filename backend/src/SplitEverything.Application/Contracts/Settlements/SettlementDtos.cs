@@ -68,3 +68,9 @@ public sealed record OffsetAcrossGroupsResult(
     IReadOnlyList<PlannedOffsetDto> Applied,
     IReadOnlyList<CrossGroupRemainderDto> Remaining,
     int SettlementsRecorded);
+
+public sealed record MoveBalanceRequest(
+    Guid GroupId, Guid FromMemberId, Guid ToMemberId, decimal Amount, Guid TargetGroupId,
+    DateTimeOffset? SettledAt, string? Note);
+
+public sealed record MoveBalanceResult(Guid SourceSettlementId, Guid TargetSettlementId);
