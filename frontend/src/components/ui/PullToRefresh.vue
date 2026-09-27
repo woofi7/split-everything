@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import Spinner from '@/components/ui/Spinner.vue'
 
 const emit = defineEmits<{ refresh: [] }>()
 
@@ -171,19 +172,7 @@ onUnmounted(() => {
         class="flex h-9 w-9 items-center justify-center rounded-full border shadow-lg"
         style="background: var(--surface-raised); border-color: var(--border)"
       >
-        <svg
-          v-if="isRefreshing"
-          data-testid="pull-spinner"
-          class="pull-spin h-4 w-4 text-accent"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.4"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="9" class="opacity-25" />
-          <path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round" />
-        </svg>
+        <Spinner v-if="isRefreshing" data-testid="pull-spinner" size="md" />
         <svg
           v-else
           data-testid="pull-arrow"
@@ -201,23 +190,3 @@ onUnmounted(() => {
     </div>
   </Teleport>
 </template>
-<style scoped>
-.pull-spin {
-  animation: pull-spin 900ms linear infinite;
-}
-
-@keyframes pull-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pull-spin {
-    animation-duration: 2s;
-  }
-}
-</style>
