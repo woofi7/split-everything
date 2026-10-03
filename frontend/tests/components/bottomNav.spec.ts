@@ -49,7 +49,7 @@ describe('BottomNav', () => {
   })
 
   it('lights nothing on a screen no tab owns', () => {
-    for (const name of ['settle', 'group-settings', 'expense', 'import', 'sign-in']) {
+    for (const name of ['add-settlement', 'group-settings', 'expense', 'import', 'sign-in']) {
       expect(litTabs(mountNav(name))).toEqual([])
     }
   })

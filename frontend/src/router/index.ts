@@ -34,11 +34,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/GroupSettingsView.vue'),
   },
   {
-    path: '/groups/:groupId/settle',
-    name: 'settle',
-    component: () => import('@/views/SettleView.vue'),
-  },
-  {
     path: '/groups/:groupId/file-expenses',
     name: 'file-expenses',
     component: () => import('@/views/FileExpensesView.vue'),

@@ -35,44 +35,6 @@ export interface ExpenseDraft {
   categoryKey?: string | null
 }
 
-export interface CrossGroupGroup {
-  groupId: string
-  groupName: string
-  currency: string
-  net: number
-  canSettle: boolean
-}
-
-export interface PlannedOffset {
-  owedGroupId: string
-  owedGroupName: string
-  owingGroupId: string
-  owingGroupName: string
-  amount: number
-  currency: string
-}
-
-export interface CrossGroupRemainder {
-  currency: string
-  net: number
-  groupId: string | null
-  groupName: string | null
-}
-
-export interface CrossGroupBalance {
-  withUserId: string
-  withName: string
-  groups: CrossGroupGroup[]
-  offsets: PlannedOffset[]
-  remaining: CrossGroupRemainder[]
-}
-
-export interface OffsetResult {
-  applied: PlannedOffset[]
-  remaining: CrossGroupRemainder[]
-  settlementsRecorded: number
-}
-
 export interface SettlementDraft {
   groupId: string
   fromMemberId: string
@@ -419,31 +381,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     await useGroupsStore().loadAll()
   }
 
-  async function crossGroupBalance(withUserId: string): Promise<CrossGroupBalance> {
-    return requireApi().get<CrossGroupBalance>('/settlements/cross-group', { withUserId })
-  }
-
-  async function offsetAcrossGroups(withUserId: string, note?: string): Promise<OffsetResult> {
-    const client = requireApi()
-
-    let result: OffsetResult
-    try {
-      result = await client.post<OffsetResult>('/settlements/cross-group/offset', {
-        withUserId,
-        note: note?.trim() || null,
-      })
-    } catch (caught) {
-      if ((caught instanceof ApiError && caught.isOffline) || looksOffline(caught)) {
-        throw new Error('Cancelling debts across groups needs a connection.', { cause: caught })
-      }
-      throw caught
-    }
-
-    await sync()
-    await useGroupsStore().loadAll()
-
-    return result
-  }
 
   async function moveBalance(move: BalanceMove): Promise<void> {
     const client = requireApi()
@@ -847,8 +784,6 @@ export const useExpensesStore = defineStore('expenses', () => {
     refile,
     remove,
     transfer,
-    crossGroupBalance,
-    offsetAcrossGroups,
     moveBalance,
     comment,
     removeComment,

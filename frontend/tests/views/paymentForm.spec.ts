@@ -16,9 +16,10 @@ import {
 import { today } from '@/domain/lastExpenseDate'
 
 const push = vi.fn()
+const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: {}, query: {}, fullPath: '/add/payment' }),
+  useRoute: () => ({ params: {}, query: route.query, fullPath: '/add/payment' }),
   useRouter: () => ({ push, replace: vi.fn() }),
   RouterLink: RouterLinkStub,
 }))
@@ -202,6 +203,15 @@ describe('recording a settlement', () => {
     expect((wrapper.find('[data-testid="paid-from"]').element as HTMLSelectElement).value).toBe(ALICE)
     expect((wrapper.find('[data-testid="paid-to"]').element as HTMLSelectElement).value).toBe(CAROL)
     expect((wrapper.find('[data-testid="amount"]').element as HTMLInputElement).value).toBe('60.00')
+  })
+
+  it('opens on the transfer it was sent from', async () => {
+    route.query = { groupId: GROUP_ID, from: BOB, to: ALICE }
+    const { wrapper } = await mountForm()
+    route.query = {}
+
+    expect((wrapper.find('[data-testid="paid-from"]').element as HTMLSelectElement).value).toBe(BOB)
+    expect((wrapper.find('[data-testid="paid-to"]').element as HTMLSelectElement).value).toBe(ALICE)
   })
 
   it('writes an ordinary settlement when it stays in the group', async () => {

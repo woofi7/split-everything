@@ -10,6 +10,7 @@ import {
   settle,
   testExpense,
   testGroup,
+  testSettlement,
   textOf,
 } from '../support/viewHarness'
 
@@ -168,7 +169,7 @@ describe('the group screen', () => {
     expect(textOf(wrapper)).toContain('No expenses yet')
   })
 
-  it('links a suggested transfer to the settle screen with it prefilled', async () => {
+  it('opens the settlement form on a suggested transfer', async () => {
     const { wrapper } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense()],
@@ -185,10 +186,38 @@ describe('the group screen', () => {
       .map((candidate) => candidate.props().to as { query?: Record<string, unknown> })
       .find((to) => to?.query?.from !== undefined)
 
-    expect(prefilled).toBeDefined()
-    expect(prefilled!.query!.from).toBe(BOB)
-    expect(prefilled!.query!.to).toBe(ALICE)
-    expect(prefilled!.query!.amount).toBe('30.00')
+    expect(prefilled).toEqual({
+      name: 'add-settlement',
+      query: { groupId: GROUP_ID, from: BOB, to: ALICE },
+    })
+  })
+
+  it('lists what the group has already settled', async () => {
+    const { wrapper } = await mountView(DashboardView, {
+      api: api(),
+      expenses: [testExpense()],
+      settlements: [testSettlement({ note: 'Cancelled against Ski trip' })],
+    })
+    await settle()
+
+    expect(wrapper.findAll('[data-testid="settlement-row"]')).toHaveLength(1)
+    expect(textOf(wrapper)).toContain('Bob paid Alice')
+    expect(textOf(wrapper)).toContain('Cancelled against Ski trip')
+  })
+
+  it('takes a settlement back', async () => {
+    const { wrapper, expensesStore } = await mountView(DashboardView, {
+      api: api(),
+      expenses: [testExpense()],
+      settlements: [testSettlement()],
+    })
+    await settle()
+
+    await wrapper.find('[data-testid="unsettle-settlement-1"]').trigger('click')
+    await settle()
+
+    expect(expensesStore.settlementsForGroup(GROUP_ID)).toHaveLength(0)
+    expect(wrapper.find('[data-testid="settlement-row"]').exists()).toBe(false)
   })
 
   it('links to the group settings from the gear', async () => {

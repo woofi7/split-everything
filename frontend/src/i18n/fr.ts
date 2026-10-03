@@ -47,8 +47,6 @@ export const fr: Record<string, string> = {
   'Back to your groups': 'Retour à vos groupes',
   'Not found': 'Introuvable',
 
-  'Suggested transfers': 'Virements suggérés',
-  Use: 'Utiliser',
   'Who paid': 'Qui a payé',
   '{name} paid': '{name} a payé',
   '{first} and {second} paid': '{first} et {second} ont payé',
@@ -208,9 +206,10 @@ export const fr: Record<string, string> = {
   'Reading the rows': 'Lecture des lignes',
   'Importing {count} rows': 'Importation de {count} lignes',
   'Who received it': "Qui l'a reçu",
-  Note: 'Note',
   'Settle up': 'Régler',
-  Etransfer: 'Virement Interac',
+  'Already settled': 'Déjà réglé',
+  'Take this settlement back': 'Annuler ce règlement',
+  'Could not take that settlement back.': "Impossible d'annuler ce règlement.",
 
   'A bank or credit card statement': 'Un relevé bancaire ou de carte de crédit',
   'The file is read on this device and never uploaded. Only the transactions you confirm are sent, and everything else is discarded when you leave this screen.':
@@ -288,21 +287,8 @@ export const fr: Record<string, string> = {
     "Définie pour tout le monde dans le groupe. L'application entière la porte tant que vous êtes sur ce groupe.",
   'No colour of its own': 'Aucune couleur propre',
 
-  'Already settled': 'Déjà réglé',
-  'Take this settlement back': 'Annuler ce règlement',
-  'Could not take that settlement back.': "Impossible d'annuler ce règlement.",
 
-  'You also owe each other elsewhere': "Vous vous devez aussi de l'argent ailleurs",
-  '{name} and you have balances facing both ways. Cancelling them out moves no money: it writes a settlement in each group so what is really outstanding sits in one place.':
-    "{name} et vous avez des soldes qui se font face. Les annuler ne déplace aucun argent : un règlement est inscrit dans chaque groupe pour que ce qui reste dû se retrouve à un seul endroit.",
-  'owes you': 'vous doit',
-  'you owe': 'vous devez',
   archived: 'archivé',
-  'Cancel out {amount}': 'Annuler {amount}',
-  Cancelling: 'Annulation',
-  'Cancelled. {amount} is left in {group}.': 'Annulé. Il reste {amount} dans {group}.',
-  'Cancelled. You are square.': 'Annulé. Vous êtes quittes.',
-  'Could not cancel those out.': "Impossible d'annuler ces soldes.",
 
   'Move to another group': 'Déplacer vers un autre groupe',
   'It goes with its history, its comments and who paid. Anything typed above and not saved stays behind.':
@@ -434,7 +420,6 @@ export const fr: Record<string, string> = {
   'Could not read that export.': 'Impossible de lire cet export.',
   'Could not read that file.': 'Impossible de lire ce fichier.',
   'Could not read those rows.': 'Impossible de lire ces lignes.',
-  'Could not record the settlement.': "Impossible d'enregistrer le règlement.",
   'Could not reload from the server.': 'Impossible de recharger depuis le serveur.',
   'Could not remove that person.': 'Impossible de retirer cette personne.',
   'Could not reopen the group.': 'Impossible de rouvrir le groupe.',

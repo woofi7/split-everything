@@ -22,6 +22,7 @@ import { formatMoney } from '@/domain/money'
 import { useAuthStore } from '@/stores/auth'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
+import { report } from '@/ui/toasts'
 import { checkForAppUpdate } from '@/native/appUpdate'
 import type { LocalExpense } from '@/offline/db'
 
@@ -402,6 +403,18 @@ const categoryOf = (expense: LocalExpense) =>
 const spentOn = (iso: string) =>
   new Date(iso).toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
 
+const recentSettlements = computed(() =>
+  group.value ? expenses.settlementsForGroup(group.value.id).slice(0, 6) : [],
+)
+
+async function unsettle(settlementId: string): Promise<void> {
+  try {
+    await expenses.unsettle(settlementId)
+  } catch (caught) {
+    report(caught, t('Could not take that settlement back.'))
+  }
+}
+
 const pull = useTemplateRef<{ done: () => void }>('pull')
 
 async function refresh(): Promise<void> {
@@ -528,12 +541,11 @@ async function refresh(): Promise<void> {
                   </span>
                   <RouterLink
                     :to="{
-                      name: 'settle',
-                      params: { groupId: group.id },
+                      name: 'add-settlement',
                       query: {
+                        groupId: group.id,
                         from: transfer.fromMemberId,
                         to: transfer.toMemberId,
-                        amount: transfer.amount.toFixed(2),
                       },
                     }"
                     class="btn btn-press btn-secondary min-h-0 shrink-0 px-2 py-1 text-xs"
@@ -543,6 +555,39 @@ async function refresh(): Promise<void> {
                 </li>
               </ul>
             </div>
+          </section>
+          <section v-if="recentSettlements.length > 0" class="surface-card mb-4 p-4 lg:mb-0">
+            <p class="text-sm text-[var(--text-muted)]">{{ t('Already settled') }}</p>
+            <ul class="mt-3 flex flex-col gap-2 text-sm">
+              <li
+                v-for="entry in recentSettlements"
+                :key="entry.id"
+                data-testid="settlement-row"
+                class="flex items-center justify-between gap-2"
+              >
+                <span class="min-w-0">
+                  <span class="block truncate">
+                    {{ memberName(entry.fromMemberId) }} paid {{ memberName(entry.toMemberId) }}
+                  </span>
+                  <span class="block truncate text-xs text-[var(--text-muted)]">
+                    {{ spentOn(entry.settledAt) }}<template v-if="entry.note"> - {{ entry.note }}</template>
+                  </span>
+                </span>
+                <span class="flex shrink-0 items-center gap-2">
+                  <MoneyAmount :amount="entry.amount" :currency="entry.currency" size="sm" />
+                  <button
+                    type="button"
+                    :data-testid="`unsettle-${entry.id}`"
+                    class="tap-target px-2 text-xs text-[var(--text-muted)]"
+                    :aria-label="t('Take this settlement back')"
+                    :title="t('Take this settlement back')"
+                    @click="unsettle(entry.id)"
+                  >
+                    <span aria-hidden="true">x</span>
+                  </button>
+                </span>
+              </li>
+            </ul>
           </section>
         </aside>
         <section class="lg:col-start-1 lg:row-start-1">

@@ -10,7 +10,6 @@ export function previousScreen(): string | null {
 
 const SCREENS: ReadonlyArray<[RegExp, string]> = [
   [/^\/groups\/[^/]+\/settings/, 'Settings'],
-  [/^\/groups\/[^/]+\/settle/, 'Settle up'],
   [/^\/groups\/[^/]+\/expenses\/[^/]+/, 'Expense'],
   [/^\/groups\/new/, 'New group'],
   [/^\/groups\/[^/]+/, 'Group'],
@@ -23,6 +22,7 @@ const SCREENS: ReadonlyArray<[RegExp, string]> = [
   [/^\/conflicts/, 'Sync'],
   [/^\/import/, 'Import'],
   [/^\/add\/payment/, 'Add payment'],
+  [/^\/add\/settlement/, 'Add settlement'],
   [/^\/add/, 'Add expense'],
 ]
 

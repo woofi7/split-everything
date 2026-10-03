@@ -152,7 +152,7 @@ describe('route guard', () => {
       'new-group',
       'add-expense',
       'expense',
-      'settle',
+      'add-settlement',
       'activity',
       'stats',
       'import',

@@ -62,6 +62,13 @@ async function selectGroup(nextGroupId: string): Promise<void> {
 
   if (!isSettlement.value) return
 
+  const asked = [route.query.from, route.query.to].map((id) => String(id ?? ''))
+  if (asked[0] !== asked[1] && asked.every((id) => active.some((member) => member.id === id))) {
+    fromMemberId.value = asked[0]
+    toMemberId.value = asked[1]
+    return
+  }
+
   const myTransfer = expenses
     .settleUpPlan(nextGroupId)
     .find((transfer) => transfer.fromMemberId === mine || transfer.toMemberId === mine)

@@ -28,7 +28,7 @@ describe('the screen behind this one', () => {
     expect(labelForPath('/dashboard')).toBe('Dashboard')
     expect(labelForPath('/groups/abc')).toBe('Group')
     expect(labelForPath('/groups/abc/settings')).toBe('Settings')
-    expect(labelForPath('/groups/abc/settle')).toBe('Settle up')
+    expect(labelForPath('/add/settlement')).toBe('Add settlement')
     expect(labelForPath('/groups/abc/expenses/def')).toBe('Expense')
     expect(labelForPath('/groups/new')).toBe('New group')
   })

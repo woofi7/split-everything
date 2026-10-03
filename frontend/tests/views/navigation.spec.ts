@@ -12,7 +12,6 @@ import JoinView from '@/views/JoinView.vue'
 import NewGroupView from '@/views/NewGroupView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import ProfileView from '@/views/ProfileView.vue'
-import SettleView from '@/views/SettleView.vue'
 import SignInView from '@/views/SignInView.vue'
 import StatsView from '@/views/StatsView.vue'
 import { GROUP_ID, fakeApi, mountView, testExpense, testGroup } from '../support/viewHarness'
@@ -69,7 +68,6 @@ const inApp: Array<[string, Component]> = [
   ['New group', NewGroupView],
   ['Add expense', ExpenseFormView],
   ['Expense', ExpenseView],
-  ['Settle up', SettleView],
   ['Activity', ActivityView],
   ['Stats', StatsView],
   ['Import', ImportView],
@@ -87,7 +85,6 @@ const subScreens: Array<[string, Component, string]> = [
   ['Group settings', GroupSettingsView, 'Roommates'],
   ['New group', NewGroupView, 'Dashboard'],
   ['Expense', ExpenseView, 'Roommates'],
-  ['Settle up', SettleView, 'Roommates'],
   ['Import', ImportView, 'Profile'],
   ['Conflicts', ConflictsView, 'Profile'],
   ['Not found', NotFoundView, 'Dashboard'],
