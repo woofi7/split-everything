@@ -655,6 +655,37 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
 
         return expense.Id;
     }
+
+    [Fact]
+    public async Task An_offline_edit_that_swaps_who_paid_and_who_owes_is_applied()
+    {
+        var (userId, group, alice, bob) = await SetupAsync();
+        var expenseId = Guid.CreateVersion7();
+
+        await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.Expense, expenseId, SyncOperation.Create,
+                ExpenseJson(expenseId, group.Id, alice, 20m, "Taxi", [(bob, 20m)]),
+                Clocks((TestData.DeviceB, 1)))
+        ]));
+
+        var swapped = await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.Expense, expenseId, SyncOperation.Update,
+                ExpenseJson(expenseId, group.Id, bob, 20m, "Taxi", [(alice, 20m)]),
+                Clocks((TestData.DeviceB, 2)))
+        ]));
+
+        swapped.Accepted.ShouldHaveSingleItem();
+        swapped.Rejected.ShouldBeEmpty();
+
+        await using var read = NewContext();
+        var stored = await read.Expenses
+            .Include(e => e.Payers)
+            .Include(e => e.Splits)
+            .FirstAsync(e => e.Id == expenseId);
+        stored.PaidByMemberId.ShouldBe(bob);
+        stored.Payers.Where(p => !p.IsDeleted).ShouldHaveSingleItem().MemberId.ShouldBe(bob);
+        stored.Splits.Where(s => !s.IsDeleted).ShouldHaveSingleItem().MemberId.ShouldBe(alice);
+    }
 }
 
 public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixture)

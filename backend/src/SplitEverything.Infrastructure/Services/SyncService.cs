@@ -462,7 +462,7 @@ public sealed class SyncService(
 
         foreach (var given in wanted.Values)
         {
-            expense.Payers.Add(new ExpensePayer
+            db.ExpensePayers.Add(new ExpensePayer
             {
                 ExpenseId = expense.Id,
                 GroupId = expense.GroupId,
@@ -510,7 +510,7 @@ public sealed class SyncService(
 
         foreach (var incoming in wanted.Values)
         {
-            expense.Splits.Add(new ExpenseSplit
+            db.ExpenseSplits.Add(new ExpenseSplit
             {
                 ExpenseId = expense.Id,
                 GroupId = expense.GroupId,
