@@ -16,7 +16,7 @@ namespace SplitEverything.Tests.Application;
 
 public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
-    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity);
+    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
 
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
     {
@@ -659,7 +659,7 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
 
 public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
-    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity);
+    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
 
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
     {

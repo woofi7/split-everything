@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SplitEverything.Application.Abstractions;
 using SplitEverything.Application.Common;
 using SplitEverything.Application.Contracts.Sync;
@@ -18,7 +19,8 @@ public sealed class SyncService(
     ISyncWriter writer,
     ISyncBroadcaster broadcaster,
     IClock clock,
-    IActivityService activity) : ISyncService
+    IActivityService activity,
+    ILogger<SyncService> logger) : ISyncService
 {
     public async Task<SyncPushResult> PushAsync(
         Guid userId, SyncPushRequest request, CancellationToken ct = default)
@@ -77,11 +79,32 @@ public sealed class SyncService(
                 db.ChangeTracker.Clear();
                 rejected.Add(new SyncRejectedDto(operation.OperationId, operation.EntityId, ex.Message, ex.Code));
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                db.ChangeTracker.Clear();
+                logger.LogError(ex,
+                    "Sync push failed on {Operation} {EntityType} {EntityId} in group {GroupId} (operation {OperationId}, user {UserId}, device {DeviceId})",
+                    operation.Operation, operation.EntityType, operation.EntityId, operation.GroupId,
+                    operation.OperationId, userId, request.DeviceId);
+                rejected.Add(new SyncRejectedDto(operation.OperationId, operation.EntityId,
+                    "The server could not apply this change.", "ServerError"));
+            }
             finally
             {
                 db.ChangeTracker.Clear();
             }
         }
+
+        foreach (var rejection in rejected.Where(r => r.Code != "ServerError"))
+            logger.LogWarning(
+                "Sync push rejected {EntityId} (operation {OperationId}, user {UserId}, device {DeviceId}): {Code} {Reason}",
+                rejection.EntityId, rejection.OperationId, userId, request.DeviceId, rejection.Code, rejection.Reason);
+
+        foreach (var conflict in conflicts)
+            logger.LogInformation(
+                "Sync push conflict on {EntityType} {EntityId} in group {GroupId} (user {UserId}, device {DeviceId}): {Fields}",
+                conflict.EntityType, conflict.EntityId, conflict.GroupId, userId, request.DeviceId,
+                string.Join(", ", conflict.ConflictingFields));
 
         var cursors = await CursorsAsync(membership, ct);
         var result = new SyncPushResult(accepted, conflicts, rejected, cursors);

@@ -241,7 +241,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     {
         var owner = await TestData.SeedUserAsync(Db, "Owner");
         var other = await TestData.SeedUserAsync(Db, "Other");
-        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity);
+        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
         await sync.AcknowledgeAsync(owner.Id, TestData.DeviceA, new Dictionary<Guid, long>());
 
         await Should.ThrowAsync<ForbiddenException>(() => sync.AcknowledgeAsync(
@@ -252,7 +252,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     public async Task Acknowledging_without_a_device_id_is_rejected()
     {
         var user = await TestData.SeedUserAsync(Db);
-        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity);
+        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
 
         await Should.ThrowAsync<ValidationException>(() => sync.AcknowledgeAsync(
             user.Id, "  ", new Dictionary<Guid, long>()));
@@ -262,7 +262,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     public async Task Resolving_a_conflict_that_does_not_exist_is_a_not_found()
     {
         var user = await TestData.SeedUserAsync(Db);
-        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity);
+        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
 
         await Should.ThrowAsync<NotFoundException>(() => sync.ResolveConflictAsync(user.Id,
             new SplitEverything.Application.Contracts.Sync.ResolveConflictRequest(
@@ -274,7 +274,7 @@ public class EdgeCaseTests(PostgresFixture fixture) : ServiceTestBase(fixture)
     {
         var (_, group, _, _) = await SetupAsync();
         var stranger = await TestData.SeedUserAsync(Db, "Stranger");
-        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity);
+        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
 
         await Should.ThrowAsync<ForbiddenException>(
             () => sync.GetOpenConflictsAsync(stranger.Id, group.Id));

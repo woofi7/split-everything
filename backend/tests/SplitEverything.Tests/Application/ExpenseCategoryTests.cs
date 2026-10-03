@@ -148,7 +148,7 @@ public class ExpenseCategoryTests(PostgresFixture fixture) : ServiceTestBase(fix
         var metro = await Expenses.CreateAsync(userId, Expense(group, payer, "Metro", 60m, null));
         var iga = await Expenses.CreateAsync(userId, Expense(group, payer, "IGA", 40m, null));
 
-        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity);
+        var sync = new SyncService(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
 
         var result = await sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
             Operation(group.Id, SyncEntityType.Expense, metro.Id, SyncOperation.Update,
