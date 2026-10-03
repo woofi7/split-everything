@@ -14,12 +14,6 @@ public interface ISettlementService
 
     Task NudgeAsync(Guid userId, NudgeRequest request, CancellationToken ct = default);
 
-    Task<CrossGroupBalanceDto> GetCrossGroupBalanceAsync(
-        Guid userId, Guid withUserId, CancellationToken ct = default);
-
-    Task<OffsetAcrossGroupsResult> OffsetAcrossGroupsAsync(
-        Guid userId, OffsetAcrossGroupsRequest request, CancellationToken ct = default);
-
     Task<MoveBalanceResult> MoveBalanceAsync(
         Guid userId, MoveBalanceRequest request, CancellationToken ct = default);
 }

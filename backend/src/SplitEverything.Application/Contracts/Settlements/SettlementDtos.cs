@@ -44,31 +44,6 @@ public sealed record GroupNetDto(Guid GroupId, string GroupName, string Currency
 
 public sealed record NudgeRequest(Guid GroupId, Guid MemberId, string? Message);
 
-public sealed record CrossGroupBalanceDto(
-    Guid WithUserId,
-    string WithName,
-    IReadOnlyList<CrossGroupGroupDto> Groups,
-    IReadOnlyList<PlannedOffsetDto> Offsets,
-    IReadOnlyList<CrossGroupRemainderDto> Remaining);
-
-public sealed record CrossGroupGroupDto(
-    Guid GroupId, string GroupName, string Currency, decimal Net, bool CanSettle);
-
-public sealed record PlannedOffsetDto(
-    Guid OwedGroupId, string OwedGroupName,
-    Guid OwingGroupId, string OwingGroupName,
-    decimal Amount, string Currency);
-
-public sealed record CrossGroupRemainderDto(
-    string Currency, decimal Net, Guid? GroupId, string? GroupName);
-
-public sealed record OffsetAcrossGroupsRequest(Guid WithUserId, string? Note);
-
-public sealed record OffsetAcrossGroupsResult(
-    IReadOnlyList<PlannedOffsetDto> Applied,
-    IReadOnlyList<CrossGroupRemainderDto> Remaining,
-    int SettlementsRecorded);
-
 public sealed record MoveBalanceRequest(
     Guid GroupId, Guid FromMemberId, Guid ToMemberId, decimal Amount, Guid TargetGroupId,
     DateTimeOffset? SettledAt, string? Note);

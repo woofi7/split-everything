@@ -45,62 +45,6 @@ public class SettlementEndpointTests(PostgresFixture fixture) : ApiTestBase(fixt
     }
 
     [Fact]
-    public async Task What_two_people_owe_each_other_is_answered_group_by_group()
-    {
-        var (_, emmaUserId, group) = await ADebtAsync();
-
-        var balance = await Client.GetFromJsonAsync<CrossGroupBalanceDto>(
-            $"/api/settlements/cross-group?withUserId={emmaUserId}", Json);
-
-        balance!.WithUserId.ShouldBe(emmaUserId);
-        var row = balance.Groups.Single(candidate => candidate.GroupId == group.Id);
-        row.Net.ShouldBe(30m);
-    }
-
-    [Fact]
-    public async Task Cancelling_across_groups_squares_the_two_halves()
-    {
-        var (_, emmaUserId, first) = await ADebtAsync();
-
-        var created = await Client.PostAsJsonAsync("/api/groups",
-            new CreateGroupRequest("Ski trip", "CAD", null, null, null, null), Json);
-        var second = (await created.Content.ReadFromJsonAsync<GroupDto>(Json))!;
-
-        (await Client.PostAsJsonAsync($"/api/groups/{second.Id}/members/user",
-            new AddUserMemberRequest(emmaUserId), Json)).EnsureSuccessStatusCode();
-
-        var withEmma = (await Client.GetFromJsonAsync<GroupDto>($"/api/groups/{second.Id}", Json))!;
-        var hers = withEmma.Members.Single(member => member.UserId == emmaUserId).Id;
-
-        (await Client.PostAsJsonAsync("/api/expenses",
-            new CreateExpenseRequest(
-                second.Id, hers, "Lift pass", 40m, "CAD", DateTimeOffset.UtcNow, SplitType.Equal,
-                withEmma.Members.Select(member => new SplitInputDto(member.Id, null)).ToList(),
-                null, null, null, null, null, null), Json)).EnsureSuccessStatusCode();
-
-        var response = await Client.PostAsJsonAsync("/api/settlements/cross-group/offset",
-            new OffsetAcrossGroupsRequest(emmaUserId, null), Json);
-
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var result = (await response.Content.ReadFromJsonAsync<OffsetAcrossGroupsResult>(Json))!;
-
-        result.Applied.ShouldHaveSingleItem().Amount.ShouldBe(20m);
-        result.SettlementsRecorded.ShouldBe(2);
-        result.Remaining.ShouldContain(row => row.GroupId == first.Id && row.Net == 10m);
-    }
-
-    [Fact]
-    public async Task Nothing_facing_the_other_way_is_a_400_rather_than_a_no_op()
-    {
-        var (_, emmaUserId, _) = await ADebtAsync();
-
-        var response = await Client.PostAsJsonAsync("/api/settlements/cross-group/offset",
-            new OffsetAcrossGroupsRequest(emmaUserId, null), Json);
-
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
     public async Task A_nudge_is_accepted_and_says_nothing_back()
     {
         var (_, emmaUserId, group) = await ADebtAsync();
