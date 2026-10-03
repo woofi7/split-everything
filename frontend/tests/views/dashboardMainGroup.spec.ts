@@ -320,6 +320,20 @@ describe('DashboardView on the main group', () => {
       expect(card!.find('[data-testid="settle-up"]').exists()).toBe(true)
     })
 
+    it('opens the settlement form on this group from settle up', async () => {
+      const { wrapper } = await mountView(DashboardView, {
+        api: fakeApi({ '/groups': () => testGroup() }),
+        expenses: [testExpense({ paidByMemberId: ALICE })],
+      })
+      await settle()
+
+      const link = wrapper
+        .findAllComponents(RouterLinkStub)
+        .find((candidate) => candidate.attributes('data-testid') === 'settle-up')
+
+      expect(link!.props().to).toEqual({ name: 'add-settlement', query: { groupId: GROUP_ID } })
+    })
+
     it('keeps the simplify toggle beside the list it switches', async () => {
       const { wrapper } = await mountView(DashboardView, {
         api: fakeApi({ '/groups': () => testGroup() }),

@@ -458,7 +458,7 @@ async function refresh(): Promise<void> {
             <div class="flex items-center justify-between gap-2">
               <p class="text-sm text-[var(--text-muted)]">{{ t('Balances') }}</p>
               <RouterLink
-                :to="{ name: 'settle', params: { groupId: group.id } }"
+                :to="{ name: 'add-settlement', query: { groupId: group.id } }"
                 data-testid="settle-up"
                 class="btn btn-press btn-secondary min-h-0 shrink-0 px-3 py-1.5 text-xs"
                 style="border-color: var(--border)"
