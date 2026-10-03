@@ -60,7 +60,18 @@ async function selectGroup(nextGroupId: string): Promise<void> {
   toMemberId.value = mine
   fromMemberId.value = other
 
-  if (isSettlement.value && owed.value < 0) swap()
+  if (!isSettlement.value) return
+
+  const myTransfer = expenses
+    .settleUpPlan(nextGroupId)
+    .find((transfer) => transfer.fromMemberId === mine || transfer.toMemberId === mine)
+
+  if (myTransfer) {
+    fromMemberId.value = myTransfer.fromMemberId
+    toMemberId.value = myTransfer.toMemberId
+  } else if (owed.value < 0) {
+    swap()
+  }
 }
 
 const userOf = (memberId: string) => members.value.find((member) => member.id === memberId)?.userId
@@ -105,12 +116,12 @@ async function loadOtherGroups(): Promise<void> {
 const owed = computed(() => {
   if (!groupId.value || !fromMemberId.value || !toMemberId.value) return 0
 
-  return expenses.rawDebts(groupId.value).reduce((sum, debt) => {
-    if (debt.fromMemberId === fromMemberId.value && debt.toMemberId === toMemberId.value) {
-      return sum + debt.amount
+  return expenses.settleUpPlan(groupId.value).reduce((sum, transfer) => {
+    if (transfer.fromMemberId === fromMemberId.value && transfer.toMemberId === toMemberId.value) {
+      return sum + transfer.amount
     }
-    if (debt.fromMemberId === toMemberId.value && debt.toMemberId === fromMemberId.value) {
-      return sum - debt.amount
+    if (transfer.fromMemberId === toMemberId.value && transfer.toMemberId === fromMemberId.value) {
+      return sum - transfer.amount
     }
     return sum
   }, 0)

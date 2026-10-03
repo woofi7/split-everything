@@ -176,6 +176,34 @@ describe('recording a settlement', () => {
     expect((wrapper.find('[data-testid="amount"]').element as HTMLInputElement).value).toBe('30.00')
   })
 
+  it('fills in what the simplified balance says, not who paid for whom', async () => {
+    const CAROL = 'member-carol'
+    const group = {
+      ...withBob(),
+      members: [
+        ...withBob().members,
+        { ...withBob().members[1], id: CAROL, userId: 'user-carol', displayName: 'Carol' },
+      ],
+    }
+    const only = (memberId: string) => [
+      { memberId, amount: 60, amountInBaseCurrency: 60, inputValue: null },
+    ]
+
+    const { wrapper } = await mountView(SettlementForm, {
+      api: fakeApi({ [`/groups/${GROUP_ID}`]: () => group, '/groups': () => group }),
+      groups: [group],
+      expenses: [
+        testExpense({ id: 'carol-for-bob', paidByMemberId: CAROL, splits: only(BOB) }),
+        testExpense({ id: 'bob-for-alice', paidByMemberId: BOB, splits: only(ALICE) }),
+      ],
+    })
+    await settle()
+
+    expect((wrapper.find('[data-testid="paid-from"]').element as HTMLSelectElement).value).toBe(ALICE)
+    expect((wrapper.find('[data-testid="paid-to"]').element as HTMLSelectElement).value).toBe(CAROL)
+    expect((wrapper.find('[data-testid="amount"]').element as HTMLInputElement).value).toBe('60.00')
+  })
+
   it('writes an ordinary settlement when it stays in the group', async () => {
     const { wrapper, expensesStore } = await mountForm()
 
