@@ -192,32 +192,16 @@ describe('the group screen', () => {
     })
   })
 
-  it('lists what the group has already settled', async () => {
+  it('leaves past settlements to the activity page', async () => {
     const { wrapper } = await mountView(DashboardView, {
-      api: api(),
-      expenses: [testExpense()],
-      settlements: [testSettlement({ note: 'Cancelled against Ski trip' })],
-    })
-    await settle()
-
-    expect(wrapper.findAll('[data-testid="settlement-row"]')).toHaveLength(1)
-    expect(textOf(wrapper)).toContain('Bob paid Alice')
-    expect(textOf(wrapper)).toContain('Cancelled against Ski trip')
-  })
-
-  it('takes a settlement back', async () => {
-    const { wrapper, expensesStore } = await mountView(DashboardView, {
       api: api(),
       expenses: [testExpense()],
       settlements: [testSettlement()],
     })
     await settle()
 
-    await wrapper.find('[data-testid="unsettle-settlement-1"]').trigger('click')
-    await settle()
-
-    expect(expensesStore.settlementsForGroup(GROUP_ID)).toHaveLength(0)
     expect(wrapper.find('[data-testid="settlement-row"]').exists()).toBe(false)
+    expect(textOf(wrapper)).not.toContain('Already settled')
   })
 
   it('links to the group settings from the gear', async () => {

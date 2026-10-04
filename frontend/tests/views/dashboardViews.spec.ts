@@ -12,6 +12,7 @@ import {
   settle,
   testExpense,
   testGroup,
+  testSettlement,
   textOf,
 } from '../support/viewHarness'
 
@@ -174,6 +175,50 @@ describe('ActivityView', () => {
     await settle()
 
     expect(textOf(wrapper)).toContain('No activity stored on this device yet')
+  })
+})
+
+describe('ActivityView showing what is already settled', () => {
+  const feed = () => fakeApi({ '/activity': () => ({ items: [] }), '/groups': () => [testGroup()] })
+
+  it('keeps the settlements folded away at the top until asked', async () => {
+    const { wrapper } = await mountView(ActivityView, {
+      api: feed(),
+      settlements: [testSettlement({ note: 'Cancelled against Ski trip' })],
+    })
+    await settle()
+
+    expect(wrapper.find('[data-testid="already-settled-toggle"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="section-count"]').text()).toBe('1')
+    expect(wrapper.find('[data-testid="settlement-row"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="already-settled-toggle"]').trigger('click')
+
+    expect(wrapper.findAll('[data-testid="settlement-row"]')).toHaveLength(1)
+    expect(textOf(wrapper)).toContain('Bob paid Alice')
+    expect(textOf(wrapper)).toContain('Cancelled against Ski trip')
+  })
+
+  it('takes a settlement back', async () => {
+    const { wrapper, expensesStore } = await mountView(ActivityView, {
+      api: feed(),
+      settlements: [testSettlement()],
+    })
+    await settle()
+
+    await wrapper.find('[data-testid="already-settled-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="unsettle-settlement-1"]').trigger('click')
+    await settle()
+
+    expect(expensesStore.settlementsForGroup(GROUP_ID)).toHaveLength(0)
+    expect(wrapper.find('[data-testid="already-settled-toggle"]').exists()).toBe(false)
+  })
+
+  it('shows nothing when nothing has been settled', async () => {
+    const { wrapper } = await mountView(ActivityView, { api: feed() })
+    await settle()
+
+    expect(wrapper.find('[data-testid="already-settled-toggle"]').exists()).toBe(false)
   })
 })
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from '@/i18n'
+import { intlLocale, t } from '@/i18n'
 import { computed, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -7,6 +7,8 @@ import GroupMark from '@/components/groups/GroupMark.vue'
 import GroupSettingsButton from '@/components/groups/GroupSettingsButton.vue'
 import GroupSwipe from '@/components/groups/GroupSwipe.vue'
 import PullToRefresh from '@/components/ui/PullToRefresh.vue'
+import CollapsibleSection from '@/components/ui/CollapsibleSection.vue'
+import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { checkForAppUpdate } from '@/native/appUpdate'
@@ -14,6 +16,7 @@ import { useApi } from '@/api/provider'
 import { looksOffline } from '@/api/client'
 import { db } from '@/offline/db'
 import { memberColor } from '@/domain/memberColors'
+import { report } from '@/ui/toasts'
 
 interface ActivityEntry {
   id: number
@@ -39,6 +42,7 @@ const KEPT_ENTRIES = 300
 
 onMounted(async () => {
   await groups.loadAll()
+  await expenses.hydrate()
   await load()
 })
 
@@ -119,6 +123,25 @@ function targetOf(entry: ActivityEntry) {
   return { name: 'group', params: { groupId: entry.groupId } }
 }
 
+const settled = computed(() =>
+  groups.mainGroupId ? expenses.settlementsForGroup(groups.mainGroupId) : [],
+)
+
+const memberName = (memberId: string) =>
+  (groups.mainGroupId ? groups.membersOf(groups.mainGroupId) : [])
+    .find((member) => member.id === memberId)?.displayName ?? ''
+
+const settledOn = (iso: string) =>
+  new Date(iso).toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' })
+
+async function unsettle(settlementId: string): Promise<void> {
+  try {
+    await expenses.unsettle(settlementId)
+  } catch (caught) {
+    report(caught, t('Could not take that settlement back.'))
+  }
+}
+
 const pull = useTemplateRef<{ done: () => void }>('pull')
 
 async function refresh(): Promise<void> {
@@ -150,6 +173,43 @@ async function refresh(): Promise<void> {
     </template>
     <GroupSwipe />
     <PullToRefresh ref="pull" @refresh="refresh" />
+    <CollapsibleSection
+      v-if="settled.length > 0"
+      :title="t('Already settled')"
+      :count="settled.length"
+      testid="already-settled"
+    >
+      <ul class="flex flex-col gap-2 text-sm">
+        <li
+          v-for="entry in settled"
+          :key="entry.id"
+          data-testid="settlement-row"
+          class="flex items-center justify-between gap-2"
+        >
+          <span class="min-w-0">
+            <span class="block truncate">
+              {{ memberName(entry.fromMemberId) }} paid {{ memberName(entry.toMemberId) }}
+            </span>
+            <span class="block truncate text-xs text-[var(--text-muted)]">
+              {{ settledOn(entry.settledAt) }}<template v-if="entry.note"> - {{ entry.note }}</template>
+            </span>
+          </span>
+          <span class="flex shrink-0 items-center gap-2">
+            <MoneyAmount :amount="entry.amount" :currency="entry.currency" size="sm" />
+            <button
+              type="button"
+              :data-testid="`unsettle-${entry.id}`"
+              class="tap-target px-2 text-xs text-[var(--text-muted)]"
+              :aria-label="t('Take this settlement back')"
+              :title="t('Take this settlement back')"
+              @click="unsettle(entry.id)"
+            >
+              <span aria-hidden="true">x</span>
+            </button>
+          </span>
+        </li>
+      </ul>
+    </CollapsibleSection>
     <ul v-if="entries.length > 0" class="flex flex-col gap-2">
       <li v-for="entry in entries" :key="entry.id">
         <RouterLink
