@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatCompact,
+  formatRate,
   currencyDecimals,
   minorUnit,
   roundMoney,
@@ -121,5 +123,27 @@ describe('formatAmount', () => {
   it('respects the currency precision', () => {
     expect(formatAmount(12.5, 'JPY')).toBe('13')
     expect(formatAmount(12.5, 'KWD')).toBe('12.500')
+  })
+})
+
+describe('compact amounts', () => {
+  it('shortens thousands and millions with k and m', () => {
+    expect(formatCompact(1500, 'en-CA')).toBe('1.5k')
+    expect(formatCompact(1_500_000, 'en-CA')).toBe('1.5m')
+    expect(formatCompact(12_345_678, 'en-CA')).toBe('12.35m')
+  })
+
+  it('keeps the French decimal comma', () => {
+    expect(formatCompact(1_500_000, 'fr-CA').replace(/\s/g, ' ')).toBe('1,5 m')
+  })
+})
+
+describe('exchange rates', () => {
+  it('reads an ordinary rate as is', () => {
+    expect(formatRate('EUR', 'CAD', 1.5, 'en-CA')).toBe('1 EUR = 1.5000 CAD')
+  })
+
+  it('turns a tiny rate round so it can be read', () => {
+    expect(formatRate('VND', 'CAD', 0.00005442, 'en-CA')).toBe('1 CAD = 18,376 VND')
   })
 })

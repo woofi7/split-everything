@@ -1377,4 +1377,49 @@ describe('ExpenseFormView currency', () => {
     expect(chosenValue(wrapper, 'currency')).toBe('JPY')
     expect(inBody('[data-testid="currency-search"]', wrapper).exists()).toBe(false)
   })
+
+  describe('an amount too long for the field', () => {
+    function pretendTooWide() {
+      const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(500)
+      const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(100)
+      return () => {
+        scroll.mockRestore()
+        client.mockRestore()
+      }
+    }
+
+    it('shrinks the font, then shows it in k and m once typed', async () => {
+      const restore = pretendTooWide()
+      try {
+        const { wrapper } = await mountView()
+        const input = wrapper.find('[data-testid="amount"]')
+
+        await input.trigger('focus')
+        await input.setValue('1500000')
+        await settle()
+        expect(wrapper.find('[data-testid="amount-compact"]').exists()).toBe(false)
+        expect((input.element as HTMLInputElement).style.fontSize).toBe('16px')
+
+        await input.trigger('blur')
+        await settle()
+        expect(wrapper.find('[data-testid="amount-compact"]').text()).toBe('1.5m')
+
+        await input.trigger('focus')
+        await settle()
+        expect(wrapper.find('[data-testid="amount-compact"]').exists()).toBe(false)
+      } finally {
+        restore()
+      }
+    })
+
+    it('keeps the full number while it fits', async () => {
+      const { wrapper } = await mountView()
+
+      await wrapper.find('[data-testid="amount"]').setValue('1500000')
+      await wrapper.find('[data-testid="amount"]').trigger('blur')
+      await settle()
+
+      expect(wrapper.find('[data-testid="amount-compact"]').exists()).toBe(false)
+    })
+  })
 })

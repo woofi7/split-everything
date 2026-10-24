@@ -108,3 +108,9 @@ export function formatRate(from: string, to: string, rate: number, locale = intl
 
   return `1 ${unit} = ${value.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${quote}`
 }
+
+export function formatCompact(amount: number, locale = intlLocale.value): string {
+  return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 2 })
+    .format(amount)
+    .toLowerCase()
+}

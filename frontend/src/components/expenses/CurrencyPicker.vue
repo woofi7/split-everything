@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { intlLocale, t } from '@/i18n'
 import { computed } from 'vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { faCoins } from '@fortawesome/free-solid-svg-icons'
 import SearchSelect from '@/components/ui/SearchSelect.vue'
 import type { SelectOption } from '@/components/ui/selectOption'
 import { currencyKeywords, currencyName } from '@/domain/currencies'
@@ -49,11 +47,10 @@ const options = computed<SelectOption[]>(() =>
         :aria-label="t('Currency')"
         aria-haspopup="listbox"
         :aria-expanded="open ? 'true' : 'false'"
-        class="flex h-full items-center gap-1.5 rounded-md px-2 text-sm font-medium"
+        class="flex h-full items-center gap-1 rounded-md px-2 text-sm font-medium"
         :class="baseCurrency && modelValue !== baseCurrency ? 'bg-[var(--surface-sunken)] text-accent' : 'text-[var(--text-muted)]'"
         @click="toggle"
       >
-        <FontAwesomeIcon :icon="faCoins" class="h-3.5 w-3.5" aria-hidden="true" />
         {{ modelValue }}
         <span class="text-xs" aria-hidden="true">&#9662;</span>
       </button>

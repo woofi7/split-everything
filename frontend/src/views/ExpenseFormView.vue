@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { intlLocale, t } from '@/i18n'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import AddKindSwitch from '@/components/expenses/AddKindSwitch.vue'
@@ -13,7 +13,8 @@ import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { notify, report } from '@/ui/toasts'
 import { calculateSplit, splitValuesFor, type SplitType } from '@/domain/splitting'
-import { formatMoney, formatRate, parseAmountInput, roundMoney } from '@/domain/money'
+import { formatCompact, formatMoney, formatRate, parseAmountInput, roundMoney } from '@/domain/money'
+import { useFitText } from '@/ui/fitText'
 import { memberColor, memberColors } from '@/domain/memberColors'
 import { lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpenseDate'
 import { bucketOf } from '@/domain/buckets'
@@ -204,6 +205,15 @@ function lookUpRate(): Promise<ExchangeRate | null> {
 
 watch([currency, baseCurrency, spentAt], () => {
   rateLookup = lookUpRate()
+})
+
+const amountBox = useTemplateRef<HTMLElement>('amountBox')
+const amountFit = useFitText(amountBox)
+const isAmountFocused = ref(false)
+const showsCompactAmount = computed(() => amountFit.overflows.value && !isAmountFocused.value && amount.value > 0)
+
+watch([amountInput, currency, () => payers.value.length], () => {
+  void nextTick(amountFit.fit)
 })
 
 const convertedAmount = computed(() =>
@@ -581,23 +591,36 @@ async function save(): Promise<void> {
           <div class="relative">
             <p
               v-if="isShared"
+              ref="amountBox"
               data-testid="shared-total"
-              class="tap-target flex items-center rounded-lg border bg-[var(--surface-sunken)] pl-3 pr-24 text-2xl font-semibold tabular-nums"
+              class="tap-target flex items-center overflow-hidden rounded-lg border bg-[var(--surface-sunken)] pl-3 pr-20 font-semibold whitespace-nowrap tabular-nums"
+              :class="showsCompactAmount ? 'text-transparent' : ''"
               style="border-color: var(--border)"
             >
               {{ formatMoney(paidTotal, currency || baseCurrency) }}
             </p>
             <input
               v-else
+              ref="amountBox"
               v-model="amountInput"
               type="text"
               inputmode="decimal"
               required
               placeholder="0.00"
               data-testid="amount"
-              class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] pl-3 pr-24 text-2xl font-semibold tabular-nums"
+              class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] pl-3 pr-20 font-semibold tabular-nums"
+              :class="showsCompactAmount ? 'text-transparent' : ''"
               style="border-color: var(--border)"
+              @focus="isAmountFocused = true"
+              @blur="isAmountFocused = false"
             />
+            <span
+              v-if="showsCompactAmount"
+              data-testid="amount-compact"
+              class="pointer-events-none absolute inset-y-0 left-3 flex items-center font-semibold tabular-nums"
+              :style="{ fontSize: `${amountFit.size.value}px` }"
+              aria-hidden="true"
+            >{{ formatCompact(amount) }}</span>
             <CurrencyPicker v-model="currency" :currencies="currencyOptions" :base-currency="baseCurrency" />
           </div>
         </label>
