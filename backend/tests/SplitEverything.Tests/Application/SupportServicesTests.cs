@@ -654,7 +654,7 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
     [Fact]
     public async Task A_rate_is_fetched_and_applied()
     {
-        var handler = new StubHttpHandler("""{"amount":1,"base":"EUR","date":"2026-08-31","rates":{"CAD":1.48}}""");
+        var handler = new StubHttpHandler("""[{"date":"2026-08-31","base":"EUR","quote":"CAD","rate":1.48}]""");
 
         var result = await Create(handler).ConvertAsync(100m, "EUR", "CAD");
 
@@ -665,7 +665,7 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
     [Fact]
     public async Task A_converted_amount_is_rounded_to_the_target_currency()
     {
-        var handler = new StubHttpHandler("""{"amount":1,"base":"EUR","date":"2026-08-31","rates":{"JPY":161.377}}""");
+        var handler = new StubHttpHandler("""[{"date":"2026-08-31","base":"EUR","quote":"JPY","rate":161.377}]""");
 
         var result = await Create(handler).ConvertAsync(10m, "EUR", "JPY");
 
@@ -675,7 +675,7 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
     [Fact]
     public async Task A_fetched_rate_is_cached_for_the_day()
     {
-        var handler = new StubHttpHandler("""{"amount":1,"base":"EUR","date":"2026-08-31","rates":{"CAD":1.48}}""");
+        var handler = new StubHttpHandler("""[{"date":"2026-08-31","base":"EUR","quote":"CAD","rate":1.48}]""");
         var converter = Create(handler);
 
         await converter.ConvertAsync(100m, "EUR", "CAD");
@@ -688,7 +688,7 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
     [Fact]
     public async Task A_cached_rate_survives_a_new_converter_instance()
     {
-        var first = new StubHttpHandler("""{"amount":1,"base":"EUR","date":"2026-08-31","rates":{"CAD":1.48}}""");
+        var first = new StubHttpHandler("""[{"date":"2026-08-31","base":"EUR","quote":"CAD","rate":1.48}]""");
         await Create(first).ConvertAsync(100m, "EUR", "CAD");
 
         var second = new StubHttpHandler("{}");
@@ -701,7 +701,7 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
     [Fact]
     public async Task A_stale_cached_rate_is_used_when_the_service_is_unreachable()
     {
-        var first = new StubHttpHandler("""{"amount":1,"base":"EUR","date":"2026-08-31","rates":{"CAD":1.48}}""");
+        var first = new StubHttpHandler("""[{"date":"2026-08-31","base":"EUR","quote":"CAD","rate":1.48}]""");
         await Create(first).ConvertAsync(100m, "EUR", "CAD");
 
         var offline = new StubHttpHandler(string.Empty, HttpStatusCode.ServiceUnavailable);
@@ -723,7 +723,7 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
     [Fact]
     public async Task A_response_missing_the_requested_currency_is_an_error()
     {
-        var handler = new StubHttpHandler("""{"amount":1,"base":"EUR","date":"2026-08-31","rates":{"USD":1.1}}""");
+        var handler = new StubHttpHandler("""[{"date":"2026-08-31","base":"EUR","quote":"USD","rate":1.1}]""");
 
         await Should.ThrowAsync<AppException>(() => Create(handler).ConvertAsync(100m, "EUR", "CAD"));
     }
@@ -732,11 +732,23 @@ public class FrankfurterCurrencyConverterTests(PostgresFixture fixture) : Databa
     public async Task Refreshing_the_cache_stores_every_pair_it_was_asked_for()
     {
         var handler = new StubHttpHandler(
-            """{"amount":1,"base":"CAD","date":"2026-08-31","rates":{"EUR":0.68,"USD":0.74}}""");
+            """[{"date":"2026-08-31","base":"CAD","quote":"EUR","rate":0.68},{"date":"2026-08-31","base":"CAD","quote":"USD","rate":0.74}]""");
 
         await Create(handler).RefreshCacheAsync(["CAD", "EUR", "USD"]);
 
         (await NewContext().ExchangeRates.CountAsync()).ShouldBeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task A_tiny_rate_like_the_dong_is_asked_of_the_v2_api_and_kept_whole()
+    {
+        var handler = new StubHttpHandler("""[{"date":"2026-08-31","base":"VND","quote":"CAD","rate":0.00005442}]""");
+
+        var result = await Create(handler).ConvertAsync(1_000_000m, "VND", "CAD");
+
+        handler.LastRequestUri.ShouldBe("https://api.frankfurter.dev/v2/rates?date=2026-08-31&base=VND&quotes=CAD");
+        result.Rate.ShouldBe(0.00005442m);
+        result.Amount.ShouldBe(54.42m);
     }
 
     [Fact]

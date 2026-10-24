@@ -103,7 +103,7 @@ public sealed class FrankfurterCurrencyConverter(
     private async Task<Dictionary<string, decimal>> FetchAsync(
         string from, IReadOnlyList<string> to, DateOnly date, CancellationToken ct)
     {
-        var path = $"v1/{date:yyyy-MM-dd}?base={from}&symbols={string.Join(',', to)}";
+        var path = $"v2/rates?date={date:yyyy-MM-dd}&base={from}&quotes={string.Join(',', to)}";
 
         using var response = await http.GetAsync(path, ct);
         if (!response.IsSuccessStatusCode)
@@ -112,17 +112,19 @@ public sealed class FrankfurterCurrencyConverter(
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
-        if (!document.RootElement.TryGetProperty("rates", out var rates)
-            || rates.ValueKind != JsonValueKind.Object)
-        {
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
             throw new JsonException("Frankfurter response had no rates.");
-        }
 
         var result = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-        foreach (var property in rates.EnumerateObject())
+        foreach (var entry in document.RootElement.EnumerateArray())
         {
-            if (property.Value.TryGetDecimal(out var value))
-                result[property.Name.ToUpperInvariant()] = value;
+            if (entry.TryGetProperty("quote", out var quote)
+                && quote.GetString() is { } code
+                && entry.TryGetProperty("rate", out var rate)
+                && rate.TryGetDecimal(out var value))
+            {
+                result[code.ToUpperInvariant()] = value;
+            }
         }
 
         return result;
