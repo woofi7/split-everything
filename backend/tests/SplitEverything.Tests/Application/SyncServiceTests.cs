@@ -8,6 +8,7 @@ using SplitEverything.Application.Contracts.Groups;
 using SplitEverything.Application.Contracts.Sync;
 using SplitEverything.Domain.Common;
 using SplitEverything.Domain.Sync;
+using SplitEverything.Infrastructure.Currency;
 using SplitEverything.Infrastructure.Services;
 using SplitEverything.Infrastructure.Sync;
 using SplitEverything.Tests.Support;
@@ -16,7 +17,7 @@ namespace SplitEverything.Tests.Application;
 
 public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
-    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
+    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity, Currency, Logger<SyncService>());
 
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
     {
@@ -686,11 +687,75 @@ public class SyncServiceTests(PostgresFixture fixture) : ServiceTestBase(fixture
         stored.Payers.Where(p => !p.IsDeleted).ShouldHaveSingleItem().MemberId.ShouldBe(bob);
         stored.Splits.Where(s => !s.IsDeleted).ShouldHaveSingleItem().MemberId.ShouldBe(alice);
     }
+
+    private static string UsdExpenseJson(
+        Guid id, Guid groupId, Guid payer, decimal amount, decimal deviceRate,
+        IReadOnlyList<(Guid MemberId, decimal Amount)> splits)
+        => JsonSerializer.Serialize(new
+        {
+            id,
+            groupId,
+            paidByMemberId = payer,
+            description = "Trip",
+            amount,
+            currency = "USD",
+            amountInBaseCurrency = amount,
+            exchangeRate = deviceRate,
+            spentAt = TestData.Jan1,
+            splitType = (int)SplitType.Equal,
+            splits = splits.Select(s => new { memberId = s.MemberId, amount = s.Amount, amountInBaseCurrency = s.Amount })
+        });
+
+    [Fact]
+    public async Task A_foreign_currency_expense_is_converted_at_the_rate_of_its_day()
+    {
+        var (userId, group, alice, bob) = await SetupAsync();
+        Currency.GetRateAsync("USD", "CAD", TestData.Jan1, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(1.3333m));
+        var expenseId = Guid.CreateVersion7();
+
+        var result = await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.Expense, expenseId, SyncOperation.Create,
+                UsdExpenseJson(expenseId, group.Id, alice, 10m, 1m, [(alice, 5m), (bob, 5m)]),
+                Clocks((TestData.DeviceB, 1)))
+        ]));
+
+        result.Accepted.ShouldHaveSingleItem();
+        var context = NewContext();
+        var stored = await context.Expenses.Include(e => e.Splits).Include(e => e.Payers)
+            .FirstAsync(e => e.Id == expenseId);
+        stored.Currency.ShouldBe("USD");
+        stored.Amount.ShouldBe(10m);
+        stored.ExchangeRate.ShouldBe(1.3333m);
+        stored.AmountInBaseCurrency.ShouldBe(13.33m);
+        stored.Splits.Sum(s => s.AmountInBaseCurrency).ShouldBe(13.33m);
+        stored.Payers.Where(y => !y.IsDeleted).Sum(y => y.AmountInBaseCurrency).ShouldBe(13.33m);
+    }
+
+    [Fact]
+    public async Task Without_any_rate_the_device_rate_is_kept()
+    {
+        var (userId, group, alice, bob) = await SetupAsync();
+        Currency.GetRateAsync("USD", "CAD", Arg.Any<DateTimeOffset?>(), Arg.Any<CancellationToken>())
+            .Returns<decimal>(_ => throw new CurrencyUnavailableException("down"));
+        var expenseId = Guid.CreateVersion7();
+
+        var result = await Sync.PushAsync(userId, new SyncPushRequest(TestData.DeviceB, [
+            Operation(group.Id, SyncEntityType.Expense, expenseId, SyncOperation.Create,
+                UsdExpenseJson(expenseId, group.Id, alice, 10m, 1.5m, [(alice, 5m), (bob, 5m)]),
+                Clocks((TestData.DeviceB, 1)))
+        ]));
+
+        result.Accepted.ShouldHaveSingleItem();
+        var stored = await NewContext().Expenses.FirstAsync(e => e.Id == expenseId);
+        stored.ExchangeRate.ShouldBe(1.5m);
+        stored.AmountInBaseCurrency.ShouldBe(15m);
+    }
 }
 
 public class SyncRejectionTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
-    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
+    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity, Currency, Logger<SyncService>());
 
     private async Task<(Guid UserId, GroupDto Group, Guid Alice, Guid Bob)> SetupAsync()
     {

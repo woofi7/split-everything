@@ -9,6 +9,7 @@ using SplitEverything.Application.Services;
 using SplitEverything.Domain.Common;
 using SplitEverything.Domain.Entities;
 using SplitEverything.Domain.Sync;
+using SplitEverything.Infrastructure.Currency;
 using SplitEverything.Infrastructure.Persistence;
 using SplitEverything.Infrastructure.Sync;
 
@@ -20,6 +21,7 @@ public sealed class SyncService(
     ISyncBroadcaster broadcaster,
     IClock clock,
     IActivityService activity,
+    ICurrencyConverter currencyConverter,
     ILogger<SyncService> logger) : ISyncService
 {
     public async Task<SyncPushResult> PushAsync(
@@ -309,6 +311,10 @@ public sealed class SyncService(
     private async Task<Outcome> ApplyExpenseAsync(
         Guid userId, string deviceId, SyncOperationDto operation, bool force, CancellationToken ct)
     {
+        var conversion = operation.Operation == SyncOperation.Delete
+            ? null
+            : await ResolveConversionAsync(operation, ct);
+
         var stored = await db.Expenses
             .Include(e => e.Payers)
             .Include(e => e.Splits)
@@ -377,6 +383,8 @@ public sealed class SyncService(
                 return Outcome.Reject("What everyone paid does not add up to the expense total.", "InvalidPayload");
         }
 
+        if (conversion is not null) ConvertToBase(payload, currency, conversion);
+
         var isNew = stored is null;
         stored ??= new Expense
         {
@@ -392,6 +400,7 @@ public sealed class SyncService(
         stored.Currency = currency;
         stored.AmountInBaseCurrency = payload.AmountInBaseCurrency ?? payload.Amount.Value;
         stored.ExchangeRate = payload.ExchangeRate ?? 1m;
+        stored.ExchangeRateAsOf = conversion?.AsOf;
         stored.SpentAt = payload.SpentAt ?? operation.ClientTimestamp;
         stored.SplitType = payload.SplitType ?? SplitType.Equal;
         stored.ReceiptId = payload.ReceiptId;
@@ -424,6 +433,72 @@ public sealed class SyncService(
         });
 
         return new Outcome(OutcomeKind.Accepted, seq, stored.Clock);
+    }
+
+    private sealed record BaseConversion(string BaseCurrency, decimal Rate, DateTimeOffset? AsOf);
+
+    private async Task<BaseConversion?> ResolveConversionAsync(SyncOperationDto operation, CancellationToken ct)
+    {
+        var payload = SyncPayloads.Parse<SyncPayloads.ExpensePayload>(operation.PayloadJson);
+        if (payload?.Amount is null) return null;
+
+        var baseCurrency = await db.Groups
+            .Where(g => g.Id == operation.GroupId)
+            .Select(g => g.BaseCurrency)
+            .FirstOrDefaultAsync(ct);
+        if (baseCurrency is null) return null;
+
+        var currency = payload.Currency?.Trim().ToUpperInvariant() ?? "CAD";
+        if (currency == baseCurrency) return new BaseConversion(baseCurrency, 1m, null);
+
+        var spentAt = payload.SpentAt ?? operation.ClientTimestamp;
+        try
+        {
+            var rate = await currencyConverter.GetRateAsync(currency, baseCurrency, spentAt, ct);
+            return new BaseConversion(baseCurrency, rate, spentAt);
+        }
+        catch (CurrencyUnavailableException) when (payload.ExchangeRate is > 0m)
+        {
+            logger.LogWarning(
+                "No {From}->{To} rate for expense {EntityId}; keeping the device's rate {Rate}",
+                currency, baseCurrency, operation.EntityId, payload.ExchangeRate);
+            return new BaseConversion(baseCurrency, payload.ExchangeRate.Value, null);
+        }
+    }
+
+    private static void ConvertToBase(
+        SyncPayloads.ExpensePayload payload, string currency, BaseConversion conversion)
+    {
+        var rate = conversion.Rate;
+        var baseCurrency = conversion.BaseCurrency;
+        var total = currency == baseCurrency
+            ? payload.Amount!.Value
+            : CurrencyPrecision.Round(payload.Amount!.Value * rate, baseCurrency);
+
+        payload.ExchangeRate = rate;
+        payload.AmountInBaseCurrency = total;
+
+        foreach (var payer in payload.Payers)
+            payer.AmountInBaseCurrency = CurrencyPrecision.RoundStored(payer.Amount * rate, baseCurrency);
+        foreach (var split in payload.Splits)
+            split.AmountInBaseCurrency = CurrencyPrecision.RoundStored(split.Amount * rate, baseCurrency);
+
+        AbsorbResidue(payload.Payers, total, baseCurrency,
+            y => y.AmountInBaseCurrency!.Value, (y, value) => y.AmountInBaseCurrency = value);
+        AbsorbResidue(payload.Splits, total, baseCurrency,
+            s => s.AmountInBaseCurrency!.Value, (s, value) => s.AmountInBaseCurrency = value);
+    }
+
+    private static void AbsorbResidue<T>(
+        List<T> rows, decimal total, string baseCurrency, Func<T, decimal> read, Action<T, decimal> write)
+    {
+        if (rows.Count == 0) return;
+
+        var residue = CurrencyPrecision.RoundStored(total - rows.Sum(read), baseCurrency);
+        if (residue == 0m) return;
+
+        var largest = rows.OrderByDescending(row => Math.Abs(read(row))).First();
+        write(largest, CurrencyPrecision.RoundStored(read(largest) + residue, baseCurrency));
     }
 
     private void ApplyPayers(Expense expense, SyncPayloads.ExpensePayload payload)

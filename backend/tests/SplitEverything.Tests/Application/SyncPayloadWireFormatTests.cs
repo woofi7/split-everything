@@ -12,7 +12,7 @@ namespace SplitEverything.Tests.Application;
 
 public class SyncPayloadWireFormatTests(PostgresFixture fixture) : ServiceTestBase(fixture)
 {
-    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity, Logger<SyncService>());
+    private SyncService Sync => new(Db, Writer, Broadcaster, Clock, Activity, Currency, Logger<SyncService>());
 
     private async Task<(Guid UserId, GroupDto Group, Guid Alice)> SetupAsync()
     {
