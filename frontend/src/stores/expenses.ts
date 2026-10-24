@@ -10,7 +10,7 @@ import {
 } from '@/offline/db'
 import { calculateItemizedSplit, calculateSplit, type SplitType } from '@/domain/splitting'
 import { netBalances, simplifyDebts, pairwiseDebts, type MemberBalance, type Transfer } from '@/domain/balances'
-import { roundMoney } from '@/domain/money'
+import { roundMoney, roundShare } from '@/domain/money'
 import { clearReplica } from '@/offline/db'
 import type { SyncEngine } from '@/offline/syncEngine'
 import { ApiError, looksOffline, type ApiClient } from '@/api/client'
@@ -25,6 +25,8 @@ export interface ExpenseDraft {
   description: string
   amount: number
   currency: string
+  exchangeRate?: number
+  rateIsEstimate?: boolean
   spentAt: Date
   splitType: SplitType
   participantIds: string[]
@@ -132,30 +134,33 @@ export const useExpensesStore = defineStore('expenses', () => {
 
     const shares = computeShares(draft)
 
-    const isBaseCurrency = draft.currency === group.baseCurrency
+    const conversion = toBase(
+      draft.amount, draft.currency, group.baseCurrency, draft.exchangeRate, contributions, shares,
+    )
     const expense: LocalExpense = {
       id: newId(),
       groupId: draft.groupId,
       paidByMemberId: mainPayer(contributions),
-      payers: contributions.map((payer) => ({
+      payers: contributions.map((payer, index) => ({
         memberId: payer.memberId,
         amount: payer.amount,
-        amountInBaseCurrency: payer.amount,
+        amountInBaseCurrency: conversion.payers[index],
       })),
       description,
       amount: roundMoney(draft.amount, draft.currency),
       currency: draft.currency,
-      amountInBaseCurrency: roundMoney(draft.amount, draft.currency),
-      exchangeRate: 1,
+      amountInBaseCurrency: conversion.total,
+      exchangeRate: conversion.rate,
+      rateIsEstimate: draft.currency !== group.baseCurrency && Boolean(draft.rateIsEstimate),
       spentAt: draft.spentAt.toISOString(),
       splitType: draft.splitType,
       receiptId: draft.receiptId ?? null,
       notes: draft.notes ?? null,
       categoryKey: draft.categoryKey ?? null,
-      splits: shares.map((share) => ({
+      splits: shares.map((share, index) => ({
         memberId: share.memberId,
         amount: share.amount,
-        amountInBaseCurrency: isBaseCurrency ? share.amount : share.amount,
+        amountInBaseCurrency: conversion.splits[index],
         inputValue: share.inputValue,
       })),
       items: draft.items ?? [],
@@ -186,7 +191,7 @@ export const useExpensesStore = defineStore('expenses', () => {
 
   async function edit(
     expenseId: string,
-    changes: Partial<Pick<ExpenseDraft, 'description' | 'amount' | 'currency' | 'spentAt' | 'splitType' | 'participantIds' | 'splitValues' | 'items' | 'notes' | 'receiptId' | 'paidByMemberId' | 'payers' | 'categoryKey'>>,
+    changes: Partial<Pick<ExpenseDraft, 'description' | 'amount' | 'currency' | 'exchangeRate' | 'rateIsEstimate' | 'spentAt' | 'splitType' | 'participantIds' | 'splitValues' | 'items' | 'notes' | 'receiptId' | 'paidByMemberId' | 'payers' | 'categoryKey'>>,
   ): Promise<LocalExpense> {
     const existing = await db.expenses.get(expenseId)
     if (!existing) throw new Error('That expense is not on this device.')
@@ -238,28 +243,36 @@ export const useExpensesStore = defineStore('expenses', () => {
       items: changes.items ?? existing.items,
     })
 
+    const currency = changes.currency ?? existing.currency
+    const conversion = toBase(
+      amount, currency, group.baseCurrency, changes.exchangeRate ?? existing.exchangeRate, contributions, shares,
+    )
     const updated: LocalExpense = {
       ...existing,
       paidByMemberId: mainPayer(contributions),
-      payers: contributions.map((payer) => ({
+      payers: contributions.map((payer, index) => ({
         memberId: payer.memberId,
         amount: payer.amount,
-        amountInBaseCurrency: payer.amount,
+        amountInBaseCurrency: conversion.payers[index],
       })),
       description,
-      amount: roundMoney(amount, changes.currency ?? existing.currency),
-      currency: changes.currency ?? existing.currency,
-      amountInBaseCurrency: roundMoney(amount, changes.currency ?? existing.currency),
+      amount: roundMoney(amount, currency),
+      currency,
+      amountInBaseCurrency: conversion.total,
+      exchangeRate: conversion.rate,
+      rateIsEstimate:
+        currency !== group.baseCurrency &&
+        (changes.exchangeRate === undefined ? Boolean(existing.rateIsEstimate) : Boolean(changes.rateIsEstimate)),
       spentAt: (changes.spentAt ?? new Date(existing.spentAt)).toISOString(),
       splitType: changes.splitType ?? existing.splitType,
       receiptId: changes.receiptId ?? existing.receiptId,
       notes: changes.notes ?? existing.notes,
       categoryKey: changes.categoryKey === undefined ? existing.categoryKey : changes.categoryKey,
       items: changes.items ?? existing.items,
-      splits: shares.map((share) => ({
+      splits: shares.map((share, index) => ({
         memberId: share.memberId,
         amount: share.amount,
-        amountInBaseCurrency: share.amount,
+        amountInBaseCurrency: conversion.splits[index],
         inputValue: share.inputValue,
       })),
       revision: existing.revision + 1,
@@ -924,6 +937,49 @@ function mainPayer(payers: Array<{ memberId: string; amount: number }>): string 
   return [...payers].sort(
     (left, right) => right.amount - left.amount || left.memberId.localeCompare(right.memberId),
   )[0].memberId
+}
+
+function toBase(
+  amount: number,
+  currency: string,
+  baseCurrency: string,
+  exchangeRate: number | undefined,
+  payers: ReadonlyArray<{ amount: number }>,
+  shares: ReadonlyArray<{ amount: number }>,
+) {
+  if (currency === baseCurrency) {
+    return {
+      rate: 1,
+      total: roundMoney(amount, currency),
+      payers: payers.map((payer) => payer.amount),
+      splits: shares.map((share) => share.amount),
+    }
+  }
+
+  const rate = exchangeRate && exchangeRate > 0 ? exchangeRate : 1
+  const total = roundMoney(amount * rate, baseCurrency)
+
+  return {
+    rate,
+    total,
+    payers: absorbResidue(payers.map((payer) => roundShare(payer.amount * rate, baseCurrency)), total, baseCurrency),
+    splits: absorbResidue(shares.map((share) => roundShare(share.amount * rate, baseCurrency)), total, baseCurrency),
+  }
+}
+
+function absorbResidue(amounts: number[], total: number, baseCurrency: string): number[] {
+  if (amounts.length === 0) return amounts
+
+  const residue = roundShare(total - amounts.reduce((sum, value) => sum + value, 0), baseCurrency)
+  if (residue === 0) return amounts
+
+  const largest = amounts.reduce(
+    (best, value, index) => (Math.abs(value) > Math.abs(amounts[best]) ? index : best),
+    0,
+  )
+  return amounts.map((value, index) =>
+    index === largest ? roundShare(value + residue, baseCurrency) : value,
+  )
 }
 
 function toWirePayload(expense: LocalExpense) {

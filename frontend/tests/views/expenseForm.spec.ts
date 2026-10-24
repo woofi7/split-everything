@@ -9,7 +9,8 @@ import { useAuthStore } from '@/stores/auth'
 import { SyncEngine } from '@/offline/syncEngine'
 import { today } from '@/domain/lastExpenseDate'
 import { clearToasts, toasts } from '@/ui/toasts'
-import { textOf, waitFor } from '../support/viewHarness'
+import { fakeApi, textOf, waitFor } from '../support/viewHarness'
+import { setApiClient } from '@/api/provider'
 
 const groupId = 'group-1'
 const alice = 'member-alice'
@@ -1277,5 +1278,108 @@ describe('ExpenseFormView moving an expense to another group', () => {
     expect(toasts.value.map((toast) => toast.text).join(' '))
       .toContain('Both groups must share a base currency.')
     expect(replace).not.toHaveBeenCalled()
+  })
+})
+
+describe('ExpenseFormView currency', () => {
+  beforeEach(() => {
+    routeParams = {}
+    groupOverrides = {}
+    push.mockClear()
+    replace.mockClear()
+    localStorage.clear()
+    setApiClient(null)
+  })
+
+  async function addInEuros(wrapper: Awaited<ReturnType<typeof mountView>>['wrapper']) {
+    await wrapper.find('input[placeholder="Groceries"]').setValue('Dinner')
+    await wrapper.find('input[inputmode="decimal"]').setValue('100')
+    await pickCurrency(wrapper, 'EUR')
+  }
+
+  async function pickCurrency(wrapper: Awaited<ReturnType<typeof mountView>>['wrapper'], code: string) {
+    await wrapper.find('[data-testid="currency"]').trigger('click')
+    await settle()
+    await wrapper.find(`[data-testid="currency-option"][data-currency="${code}"]`).trigger('click')
+    await settle()
+  }
+
+  it('starts in the group currency, shown inside the amount field', async () => {
+    const { wrapper } = await mountView()
+
+    expect(wrapper.find('[data-testid="currency"]').attributes('data-currency')).toBe('CAD')
+    expect(wrapper.find('[data-testid="conversion"]').exists()).toBe(false)
+  })
+
+  it('previews the amount in the group currency at the rate of the day', async () => {
+    const api = fakeApi({ '/currency/rate': { rate: 1.5 } })
+    setApiClient(api as never)
+    const { wrapper } = await mountView()
+
+    await addInEuros(wrapper)
+
+    expect(api.get).toHaveBeenCalledWith('/currency/rate', { from: 'EUR', to: 'CAD', date: today() })
+    const preview = wrapper.find('[data-testid="conversion"]').text()
+    expect(preview).toContain('150.00')
+    expect(preview).toContain('1.5000')
+  })
+
+  it('saves the original amount with its conversion', async () => {
+    setApiClient(fakeApi({ '/currency/rate': { rate: 1.5 } }) as never)
+    const { wrapper, expenses } = await mountView()
+
+    await addInEuros(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const saved = expenses.forGroup(groupId)[0]
+    expect(saved.amount).toBe(100)
+    expect(saved.currency).toBe('EUR')
+    expect(saved.exchangeRate).toBe(1.5)
+    expect(saved.amountInBaseCurrency).toBe(150)
+    expect(saved.rateIsEstimate).toBe(false)
+  })
+
+  it('offline with no known rate, saves at par as an estimate', async () => {
+    const { wrapper, expenses } = await mountView()
+
+    await addInEuros(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const saved = expenses.forGroup(groupId)[0]
+    expect(saved.exchangeRate).toBe(1)
+    expect(saved.rateIsEstimate).toBe(true)
+  })
+
+  it('remembers the currency for the next expense in the group', async () => {
+    setApiClient(fakeApi({ '/currency/rate': { rate: 1.5 } }) as never)
+    const first = await mountView()
+    await addInEuros(first.wrapper)
+    await first.wrapper.find('form').trigger('submit')
+    await settle()
+    first.wrapper.unmount()
+
+    const { wrapper } = await mountView()
+
+    expect(wrapper.find('[data-testid="currency"]').attributes('data-currency')).toBe('EUR')
+  })
+
+  it('finds a currency by its name', async () => {
+    const { wrapper } = await mountView()
+
+    await wrapper.find('[data-testid="currency"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-testid="currency-search"]').setValue('yen')
+    await settle()
+
+    const first = wrapper.find('[data-testid="currency-option"]')
+    expect(first.attributes('data-currency')).toBe('JPY')
+
+    await wrapper.find('[data-testid="currency-search"]').trigger('keydown', { key: 'Enter' })
+    await settle()
+
+    expect(wrapper.find('[data-testid="currency"]').attributes('data-currency')).toBe('JPY')
+    expect(wrapper.find('[data-testid="currency-search"]').exists()).toBe(false)
   })
 })

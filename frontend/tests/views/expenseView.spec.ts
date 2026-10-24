@@ -104,22 +104,35 @@ describe('ExpenseView', () => {
     expect(textOf(wrapper)).toContain('Waiting to sync')
   })
 
-  it('warns that a foreign currency is converted on sync', async () => {
+  it('shows a foreign expense in the group currency with its rate', async () => {
     const { wrapper } = await mountView(ExpenseView, {
       api: api(),
-      expenses: [testExpense({ currency: 'EUR' })],
+      expenses: [testExpense({ currency: 'EUR', exchangeRate: 1.5, amountInBaseCurrency: 90 })],
     })
 
-    expect(textOf(wrapper)).toContain('Converted to the group currency')
+    const line = wrapper.find('[data-testid="expense-conversion"]')
+    expect(line.exists()).toBe(true)
+    expect(line.text()).toContain('90.00')
+    expect(line.text()).toContain('1.5000')
+    expect(line.text()).not.toContain('estimate')
   })
 
-  it('does not warn about the group currency', async () => {
+  it('flags a rate guessed offline as an estimate', async () => {
+    const { wrapper } = await mountView(ExpenseView, {
+      api: api(),
+      expenses: [testExpense({ currency: 'EUR', exchangeRate: 1.5, rateIsEstimate: true })],
+    })
+
+    expect(wrapper.find('[data-testid="expense-conversion"]').text()).toContain('estimate')
+  })
+
+  it('shows no conversion for the group currency', async () => {
     const { wrapper } = await mountView(ExpenseView, {
       api: api(),
       expenses: [testExpense()],
     })
 
-    expect(textOf(wrapper)).not.toContain('Converted to the group currency')
+    expect(wrapper.find('[data-testid="expense-conversion"]').exists()).toBe(false)
   })
 
   it('shows the notes when there are any', async () => {

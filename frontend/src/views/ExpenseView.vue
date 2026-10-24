@@ -181,9 +181,16 @@ async function remove(): Promise<void> {
           </li>
         </ul>
         <p
-          v-if="expense.currency !== groups.groups.find((g) => g.id === groupId)?.baseCurrency"
-          class="mt-1 text-xs text-[var(--text-muted)]"
-        >{{ t('Converted to the group currency when it syncs.') }}
+          v-if="group && expense.currency !== group.baseCurrency"
+          data-testid="expense-conversion"
+          class="mt-1 text-xs tabular-nums text-[var(--text-muted)]"
+        >
+          ≈ {{ formatMoney(expense.amountInBaseCurrency, group.baseCurrency) }}
+          · 1 {{ expense.currency }} = {{ expense.exchangeRate.toFixed(4) }} {{ group.baseCurrency }}
+          · {{ t('rate of {date}', { date: new Date(expense.spentAt).toLocaleDateString(intlLocale) }) }}
+          <span v-if="expense.rateIsEstimate || expense.pending" class="text-accent">
+            · {{ t('estimate, corrected when back online') }}
+          </span>
         </p>
         <p v-if="expense.notes" class="mt-2 text-sm">{{ expense.notes }}</p>
         <p

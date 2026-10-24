@@ -69,6 +69,7 @@ export interface LocalExpense {
   currency: string
   amountInBaseCurrency: number
   exchangeRate: number
+  rateIsEstimate?: boolean
   spentAt: string
   splitType: SplitType
   receiptId?: string | null

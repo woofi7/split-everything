@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import AddKindSwitch from '@/components/expenses/AddKindSwitch.vue'
 import CategoryPicker from '@/components/expenses/CategoryPicker.vue'
+import CurrencyPicker from '@/components/expenses/CurrencyPicker.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
@@ -17,6 +18,9 @@ import { lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpens
 import { bucketOf } from '@/domain/buckets'
 import { categoryFor, guessCategory } from '@/domain/categories'
 import { lastExpensePayer, rememberExpensePayer } from '@/domain/lastExpensePayer'
+import { currencyChoices, lastExpenseCurrency, rememberExpenseCurrency } from '@/domain/currencies'
+import { exchangeRate, type ExchangeRate } from '@/domain/exchangeRates'
+import { hasApiClient, useApi } from '@/api/provider'
 
 const groups = useGroupsStore()
 const expenses = useExpensesStore()
@@ -34,6 +38,7 @@ const isEditing = computed(() => editingId.value !== null)
 const groupId = ref(String(route.params.groupId ?? route.query.groupId ?? ''))
 const description = ref('')
 const amountInput = ref('')
+const currency = ref('')
 
 const spentAt = ref(isEditing.value ? today() : (lastExpenseDate() ?? today()))
 
@@ -90,6 +95,7 @@ function prefillFromExpense(): void {
 
   description.value = existing.description
   amountInput.value = existing.amount.toFixed(2)
+  currency.value = existing.currency
   spentAt.value = existing.spentAt.slice(0, 10)
   splitType.value = existing.splitType
   paidByMemberId.value = existing.paidByMemberId
@@ -172,7 +178,36 @@ async function createCategory(name: string): Promise<void> {
   }
 }
 const members = computed(() => group.value?.members.filter((m) => m.status === 'Active') ?? [])
-const currency = computed(() => group.value?.baseCurrency ?? auth.user?.defaultCurrency ?? 'CAD')
+const baseCurrency = computed(() => group.value?.baseCurrency ?? auth.user?.defaultCurrency ?? 'CAD')
+const isForeign = computed(() => currency.value !== '' && currency.value !== baseCurrency.value)
+const currencyOptions = computed(() => currencyChoices(baseCurrency.value, currency.value))
+
+const rate = ref<ExchangeRate | null>(null)
+let rateLookup: Promise<ExchangeRate | null> = Promise.resolve(null)
+
+function lookUpRate(): Promise<ExchangeRate | null> {
+  const from = currency.value
+  const to = baseCurrency.value
+  const date = spentAt.value
+  if (!from || from === to) {
+    rate.value = { rate: 1, isEstimate: false }
+    return Promise.resolve(rate.value)
+  }
+
+  rate.value = null
+  return exchangeRate(hasApiClient() ? useApi() : null, from, to, date).then((found) => {
+    if (currency.value === from && baseCurrency.value === to && spentAt.value === date) rate.value = found
+    return found
+  })
+}
+
+watch([currency, baseCurrency, spentAt], () => {
+  rateLookup = lookUpRate()
+})
+
+const convertedAmount = computed(() =>
+  rate.value ? roundMoney(amount.value * rate.value.rate, baseCurrency.value) : null,
+)
 const amount = computed(() =>
   isShared.value ? paidTotal.value : (parseAmountInput(amountInput.value) ?? 0),
 )
@@ -232,6 +267,10 @@ async function selectGroup(nextGroupId: string): Promise<void> {
   const remembered = isEditing.value ? null : lastExpensePayer(nextGroupId)
   const lastPayer = active.find((member) => member.id === remembered)?.id
   paidByMemberId.value = lastPayer ?? mine ?? active[0]?.id ?? ''
+
+  if (!isEditing.value) {
+    currency.value = lastExpenseCurrency(nextGroupId) ?? loaded?.baseCurrency ?? baseCurrency.value
+  }
 
   applyGroupDefault(loaded?.defaultSplitType, loaded?.defaultSplitValues, active.map((m) => m.id))
 }
@@ -317,7 +356,7 @@ const moveTargets = computed(() =>
     (candidate) =>
       candidate.id !== groupId.value &&
       !candidate.isArchived &&
-      candidate.baseCurrency === currency.value,
+      candidate.baseCurrency === baseCurrency.value,
   ),
 )
 
@@ -470,12 +509,16 @@ async function save(): Promise<void> {
     return
   }
 
+  const found = isForeign.value ? (rate.value ?? (await rateLookup)) : null
+
   const fields = {
     paidByMemberId: isShared.value ? contributions[0].memberId : paidByMemberId.value,
     payers: isShared.value ? contributions : undefined,
     description: description.value,
     amount: amount.value,
     currency: currency.value,
+    exchangeRate: isForeign.value ? (found?.rate ?? 1) : 1,
+    rateIsEstimate: isForeign.value && (found?.isEstimate ?? true),
     spentAt: new Date(`${spentAt.value}T12:00:00Z`),
     splitType: splitType.value,
     participantIds: participantIds.value,
@@ -507,6 +550,7 @@ async function save(): Promise<void> {
       const added = await expenses.add({ groupId: group.value.id, ...fields })
 
       rememberExpenseDate(spentAt.value)
+      rememberExpenseCurrency(group.value.id, currency.value)
       if (!isShared.value) rememberExpensePayer(group.value.id, fields.paidByMemberId)
 
       await router.replace({
@@ -532,28 +576,29 @@ async function save(): Promise<void> {
     <form class="flex flex-col gap-3" @submit.prevent="save">
       <div class="flex items-end gap-3">
         <label class="flex min-w-0 flex-1 flex-col gap-1">
-          <span class="text-xs text-[var(--text-muted)]">
-            {{ t('Amount ({currency})', { currency }) }}
-          </span>
-          <p
-            v-if="isShared"
-            data-testid="shared-total"
-            class="tap-target flex items-center rounded-lg border bg-[var(--surface-sunken)] px-3 text-2xl font-semibold tabular-nums"
-            style="border-color: var(--border)"
-          >
-            {{ formatMoney(paidTotal, currency) }}
-          </p>
-          <input
-            v-else
-            v-model="amountInput"
-            type="text"
-            inputmode="decimal"
-            required
-            placeholder="0.00"
-            data-testid="amount"
-            class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-3 text-2xl font-semibold tabular-nums"
-            style="border-color: var(--border)"
-          />
+          <span class="text-xs text-[var(--text-muted)]">{{ t('Amount') }}</span>
+          <div class="relative">
+            <p
+              v-if="isShared"
+              data-testid="shared-total"
+              class="tap-target flex items-center rounded-lg border bg-[var(--surface-sunken)] pl-3 pr-24 text-2xl font-semibold tabular-nums"
+              style="border-color: var(--border)"
+            >
+              {{ formatMoney(paidTotal, currency || baseCurrency) }}
+            </p>
+            <input
+              v-else
+              v-model="amountInput"
+              type="text"
+              inputmode="decimal"
+              required
+              placeholder="0.00"
+              data-testid="amount"
+              class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] pl-3 pr-24 text-2xl font-semibold tabular-nums"
+              style="border-color: var(--border)"
+            />
+            <CurrencyPicker v-model="currency" :currencies="currencyOptions" :base-currency="baseCurrency" />
+          </div>
         </label>
         <label class="flex shrink-0 flex-col gap-1">
           <span class="flex items-baseline justify-between gap-2 text-xs text-[var(--text-muted)]">
@@ -578,6 +623,19 @@ async function save(): Promise<void> {
           />
         </label>
       </div>
+      <p
+        v-if="isForeign"
+        data-testid="conversion"
+        class="-mt-1 text-xs tabular-nums text-[var(--text-muted)]"
+        aria-live="polite"
+      >
+        <template v-if="rate === null">{{ t('Looking up the rate...') }}</template>
+        <template v-else>
+          ≈ {{ formatMoney(convertedAmount ?? 0, baseCurrency) }}
+          · 1 {{ currency }} = {{ rate.rate.toFixed(4) }} {{ baseCurrency }}
+          <span v-if="rate.isEstimate" class="text-accent">· {{ t('estimate, corrected when back online') }}</span>
+        </template>
+      </p>
       <label class="flex flex-col gap-1">
         <span class="text-xs text-[var(--text-muted)]">{{ t('What was it') }}</span>
         <input
@@ -780,7 +838,7 @@ async function save(): Promise<void> {
     </form>
     <section v-if="isEditing" class="surface-card mt-4 p-4">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">{{ t('Move to another group') }}</h2>
-      <p v-if="moveTargets.length === 0" class="text-xs text-[var(--text-muted)]">{{ t('There is no other group in {currency} to move this to.', { currency }) }}
+      <p v-if="moveTargets.length === 0" class="text-xs text-[var(--text-muted)]">{{ t('There is no other group in {currency} to move this to.', { currency: baseCurrency }) }}
       </p>
       <template v-else-if="!isMoveOpen">
         <p class="mb-3 text-xs text-[var(--text-muted)]">{{ t('It goes with its history, its comments and who paid. Anything typed above and not saved stays behind.') }}

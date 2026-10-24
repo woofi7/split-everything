@@ -270,8 +270,11 @@ export const fr: Record<string, string> = {
     'Enregistrée immédiatement sur cet appareil, puis synchronisée dès votre retour en ligne.',
   Groceries: 'Épicerie',
   'Waiting to sync': 'En attente de synchronisation',
-  'Converted to the group currency when it syncs.':
-    'Convertie dans la devise du groupe lors de la synchronisation.',
+  Amount: 'Montant',
+  Search: 'Rechercher',
+  'Looking up the rate...': 'Recherche du taux...',
+  'estimate, corrected when back online': 'estimation, corrigée au retour en ligne',
+  'rate of {date}': 'taux du {date}',
   Items: 'Articles',
   Delete: 'Supprimer',
   Post: 'Publier',

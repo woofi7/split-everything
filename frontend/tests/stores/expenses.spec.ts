@@ -286,14 +286,57 @@ describe('expenses store', () => {
     expect(expense.splits.find((s) => s.memberId === bob)?.amount).toBe(10)
   })
 
-  it('marks a foreign currency expense for conversion on the server', async () => {
+  it('without a rate keeps a foreign expense at par as an estimate', async () => {
     const store = storeWith(false)
 
-    const expense = await store.add({ ...draft, currency: 'EUR' })
+    const expense = await store.add({ ...draft, currency: 'EUR', rateIsEstimate: true })
 
     expect(expense.currency).toBe('EUR')
     expect(expense.exchangeRate).toBe(1)
     expect(expense.amountInBaseCurrency).toBe(expense.amount)
+  })
+
+  describe('a foreign currency expense', () => {
+    it('converts the total, the payer and the splits at its rate', async () => {
+      const store = storeWith(false)
+
+      const expense = await store.add({ ...draft, amount: 10, currency: 'USD', exchangeRate: 1.3333 })
+
+      expect(expense.amount).toBe(10)
+      expect(expense.exchangeRate).toBe(1.3333)
+      expect(expense.amountInBaseCurrency).toBe(13.33)
+      expect(expense.payers?.[0].amountInBaseCurrency).toBe(13.33)
+      const splitTotal = expense.splits.reduce((sum, split) => sum + split.amountInBaseCurrency, 0)
+      expect(Number(splitTotal.toFixed(4))).toBe(13.33)
+    })
+
+    it('counts in the group balance in the group currency', async () => {
+      const store = storeWith(false)
+
+      await store.add({ ...draft, amount: 100, currency: 'EUR', exchangeRate: 1.5 })
+
+      const balances = store.balanceFor(groupId)
+      expect(balances.find((b) => b.memberId === bob)?.net).toBe(-75)
+    })
+
+    it('is converted again when edited at a new rate', async () => {
+      const store = storeWith(false)
+      const added = await store.add({ ...draft, amount: 100, currency: 'EUR', exchangeRate: 1.5 })
+
+      const edited = await store.edit(added.id, { exchangeRate: 1.4 })
+
+      expect(edited.amountInBaseCurrency).toBe(140)
+    })
+
+    it('drops the rate when moved back to the group currency', async () => {
+      const store = storeWith(false)
+      const added = await store.add({ ...draft, amount: 100, currency: 'EUR', exchangeRate: 1.5 })
+
+      const edited = await store.edit(added.id, { currency: 'CAD', exchangeRate: 1 })
+
+      expect(edited.exchangeRate).toBe(1)
+      expect(edited.amountInBaseCurrency).toBe(100)
+    })
   })
 
   it('edits an expense and bumps its revision', async () => {

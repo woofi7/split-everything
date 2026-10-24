@@ -10,7 +10,7 @@ import PullToRefresh from '@/components/ui/PullToRefresh.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import SpendPie from '@/components/ui/SpendPie.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
+import { faChevronRight, faCoins } from '@fortawesome/free-solid-svg-icons'
 import { bucketOf, formatMonthHeading } from '@/domain/buckets'
 import { matchesAnyNamePattern } from '@/domain/namePatterns'
 import { categoryFor } from '@/domain/categories'
@@ -698,7 +698,18 @@ async function refresh(): Promise<void> {
                           {{ spentOn(expense.spentAt) }}
                         </span>
                       </span>
-                      <MoneyAmount :amount="expense.amount" :currency="expense.currency" size="sm" />
+                      <span
+                        v-if="expense.currency !== currency"
+                        data-testid="expense-foreign"
+                        class="flex shrink-0 flex-col items-end leading-tight"
+                      >
+                        <MoneyAmount :amount="expense.amountInBaseCurrency" :currency="currency" size="sm" />
+                        <span class="flex items-center gap-1 text-[11px] tabular-nums text-accent">
+                          <FontAwesomeIcon :icon="faCoins" class="h-2.5 w-2.5" />
+                          {{ formatMoney(expense.amount, expense.currency) }}
+                        </span>
+                      </span>
+                      <MoneyAmount v-else :amount="expense.amount" :currency="expense.currency" size="sm" />
                     </RouterLink>
                   </li>
                 </template>
