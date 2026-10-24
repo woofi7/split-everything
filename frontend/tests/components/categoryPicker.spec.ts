@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { h } from 'vue'
 import CategoryPicker from '@/components/expenses/CategoryPicker.vue'
+import { allInBody, inBody } from '../support/viewHarness'
 import type { Category } from '@/domain/categories'
 
 const category = (key: string, name: string, keywords: string[] = []): Category => ({
@@ -32,18 +33,18 @@ describe('the category picker inside a label', () => {
     const wrapper = inLabel()
 
     await wrapper.find('[data-testid="category"]').trigger('click')
-    await wrapper.find('[data-testid="category-option"]').trigger('click')
+    await inBody('[data-testid="category-option"]').trigger('click')
 
-    expect(wrapper.find('[data-testid="category-search"]').exists()).toBe(false)
+    expect(inBody('[data-testid="category-search"]').exists()).toBe(false)
   })
 
   it('shuts when Not filed is chosen', async () => {
     const wrapper = inLabel()
 
     await wrapper.find('[data-testid="category"]').trigger('click')
-    await wrapper.find('[data-testid="category-none"]').trigger('click')
+    await inBody('[data-testid="category-none"]').trigger('click')
 
-    expect(wrapper.find('[data-testid="category-search"]').exists()).toBe(false)
+    expect(inBody('[data-testid="category-search"]').exists()).toBe(false)
   })
 })
 
@@ -64,45 +65,45 @@ describe('the category picker', () => {
   })
 
   it('shows the list before anything is typed', async () => {
-    const wrapper = await open(mountPicker())
+    await open(mountPicker())
 
-    expect(wrapper.findAll('[data-testid="category-option"]')).toHaveLength(3)
+    expect(allInBody('[data-testid="category-option"]')).toHaveLength(3)
   })
 
   it('finds a category by a few letters of its name', async () => {
-    const wrapper = await open(mountPicker())
+    await open(mountPicker())
 
-    await wrapper.find('[data-testid="category-search"]').setValue('dng')
+    await inBody('[data-testid="category-search"]').setValue('dng')
 
-    const found = wrapper.findAll('[data-testid="category-option"]')
-    expect(found[0].attributes('data-category')).toBe('dining')
+    const found = allInBody('[data-testid="category-option"]')
+    expect(found[0].attributes('data-value')).toBe('dining')
   })
 
   it('finds one by a word that files things there', async () => {
-    const wrapper = await open(mountPicker())
+    await open(mountPicker())
 
-    await wrapper.find('[data-testid="category-search"]').setValue('metro')
+    await inBody('[data-testid="category-search"]').setValue('metro')
 
-    const found = wrapper.findAll('[data-testid="category-option"]')
-    expect(found[0].attributes('data-category')).toBe('groceries')
+    const found = allInBody('[data-testid="category-option"]')
+    expect(found[0].attributes('data-value')).toBe('groceries')
     expect(found[0].text()).toContain('metro')
   })
 
   it('picks one, and says so', async () => {
     const wrapper = await open(mountPicker())
 
-    await wrapper.find('[data-category="dining"][data-testid="category-option"]').trigger('click')
+    await inBody('[data-value="dining"][data-testid="category-option"]').trigger('click')
 
     expect(wrapper.emitted('update:modelValue')).toEqual([['dining']])
-    expect(wrapper.find('[data-testid="category-search"]').exists()).toBe(false)
+    expect(inBody('[data-testid="category-search"]').exists()).toBe(false)
   })
 
   it('offers to make the one that is missing', async () => {
     const wrapper = await open(mountPicker())
 
-    await wrapper.find('[data-testid="category-search"]').setValue('Ski')
+    await inBody('[data-testid="category-search"]').setValue('Ski')
 
-    const create = wrapper.find('[data-testid="category-create"]')
+    const create = inBody('[data-testid="category-create"]')
     expect(create.text()).toContain('Ski')
 
     await create.trigger('click')
@@ -110,25 +111,25 @@ describe('the category picker', () => {
   })
 
   it('offers it even when something matched', async () => {
-    const wrapper = await open(mountPicker())
+    await open(mountPicker())
 
-    await wrapper.find('[data-testid="category-search"]').setValue('Din')
+    await inBody('[data-testid="category-search"]').setValue('Din')
 
-    expect(wrapper.findAll('[data-testid="category-option"]').length).toBeGreaterThan(0)
-    expect(wrapper.find('[data-testid="category-create"]').exists()).toBe(true)
+    expect(allInBody('[data-testid="category-option"]').length).toBeGreaterThan(0)
+    expect(inBody('[data-testid="category-create"]').exists()).toBe(true)
   })
 
   it('does not offer to make one that is already there', async () => {
-    const wrapper = await open(mountPicker())
+    await open(mountPicker())
 
-    await wrapper.find('[data-testid="category-search"]').setValue('dining out')
+    await inBody('[data-testid="category-search"]').setValue('dining out')
 
-    expect(wrapper.find('[data-testid="category-create"]').exists()).toBe(false)
+    expect(inBody('[data-testid="category-create"]').exists()).toBe(false)
   })
 
   it('takes the highlighted row on Enter, and walks the list with the arrows', async () => {
     const wrapper = await open(mountPicker())
-    const search = wrapper.find('[data-testid="category-search"]')
+    const search = inBody('[data-testid="category-search"]')
 
     await search.trigger('keydown.down')
     await search.trigger('keydown.enter')
@@ -139,7 +140,7 @@ describe('the category picker', () => {
   it('unfiles it from the bottom of the list', async () => {
     const wrapper = await open(mountPicker({ modelValue: 'dining' }))
 
-    await wrapper.find('[data-testid="category-none"]').trigger('click')
+    await inBody('[data-testid="category-none"]').trigger('click')
 
     expect(wrapper.emitted('update:modelValue')).toEqual([[null]])
   })
@@ -152,7 +153,7 @@ describe('the category picker', () => {
 
   it('stops at the top of the list rather than wrapping round', async () => {
     const wrapper = await open(mountPicker())
-    const search = wrapper.find('[data-testid="category-search"]')
+    const search = inBody('[data-testid="category-search"]')
 
     await search.setValue('Din')
     await search.trigger('keydown.up')
@@ -162,20 +163,20 @@ describe('the category picker', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([['dining']])
   })
 
-  it('stops at the bottom, which is "not filed"', async () => {
+  it('stops at the bottom, on the row that makes a new one', async () => {
     const wrapper = await open(mountPicker())
-    const search = wrapper.find('[data-testid="category-search"]')
+    const search = inBody('[data-testid="category-search"]')
 
     await search.setValue('Din')
     for (let press = 0; press < 6; press++) await search.trigger('keydown.down')
     await search.trigger('keydown.enter')
 
-    expect(wrapper.emitted('update:modelValue')).toEqual([[null]])
+    expect(wrapper.emitted('create')).toEqual([['Din']])
   })
 
   it('takes the create row on Enter when the highlight is on it', async () => {
     const wrapper = await open(mountPicker())
-    const search = wrapper.find('[data-testid="category-search"]')
+    const search = inBody('[data-testid="category-search"]')
 
     await search.setValue('Zzz')
     await search.trigger('keydown.enter')
@@ -183,13 +184,11 @@ describe('the category picker', () => {
     expect(wrapper.emitted('create')).toEqual([['Zzz']])
   })
 
-  it('takes "not filed" on Enter at the bottom', async () => {
+  it('finds "not filed" by searching for it', async () => {
     const wrapper = await open(mountPicker({ modelValue: 'dining' }))
-    const search = wrapper.find('[data-testid="category-search"]')
+    const search = inBody('[data-testid="category-search"]')
 
-    await search.setValue('Zzz')
-    await search.trigger('keydown.down')
-    await search.trigger('keydown.down')
+    await search.setValue('not filed')
     await search.trigger('keydown.enter')
 
     expect(wrapper.emitted('update:modelValue')).toEqual([[null]])
@@ -198,18 +197,18 @@ describe('the category picker', () => {
   it('highlights what the pointer is over', async () => {
     const wrapper = await open(mountPicker())
 
-    await wrapper.findAll('[data-testid="category-option"]')[2].trigger('mousemove')
-    await wrapper.find('[data-testid="category-search"]').trigger('keydown.enter')
+    await allInBody('[data-testid="category-option"]')[2].trigger('mousemove')
+    await inBody('[data-testid="category-search"]').trigger('keydown.enter')
 
     expect(wrapper.emitted('update:modelValue')).toEqual([['shopping']])
   })
 
   it('shuts on a press anywhere else', async () => {
-    const wrapper = await open(mountPicker())
+    await open(mountPicker())
 
-    await wrapper.find('.fixed.inset-0').trigger('click')
+    await inBody('.fixed.inset-0[aria-hidden="true"]').trigger('click')
 
-    expect(wrapper.find('[data-testid="category-search"]').exists()).toBe(false)
+    expect(inBody('[data-testid="category-search"]').exists()).toBe(false)
   })
 
   it('says it is adding, and cannot be opened while it does', async () => {
@@ -220,10 +219,10 @@ describe('the category picker', () => {
   })
 
   it('shuts on escape', async () => {
-    const wrapper = await open(mountPicker())
+    await open(mountPicker())
 
-    await wrapper.find('[data-testid="category-search"]').trigger('keydown.esc')
+    await inBody('[data-testid="category-search"]').trigger('keydown.esc')
 
-    expect(wrapper.find('[data-testid="category-search"]').exists()).toBe(false)
+    expect(inBody('[data-testid="category-search"]').exists()).toBe(false)
   })
 })

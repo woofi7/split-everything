@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { LOCALES, t } from '@/i18n'
+import CurrencyPicker from '@/components/expenses/CurrencyPicker.vue'
+import { SUPPORTED_CURRENCIES } from '@/domain/currencies'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -33,7 +35,6 @@ const displayName = ref(auth.user?.displayName ?? '')
 const defaultCurrency = ref(auth.user?.defaultCurrency ?? 'CAD')
 const confirmingDelete = ref(false)
 
-const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
 
 const isLight = computed(() => auth.theme === 'light')
 const isSaving = ref(false)
@@ -192,13 +193,7 @@ async function deleteAccount(): Promise<void> {
       <label class="flex flex-col gap-1">
         <span class="text-sm text-[var(--text-muted)]">{{ t('Your currency, used for totals across groups') }}
         </span>
-        <select
-          v-model="defaultCurrency"
-          class="tap-target rounded-lg border bg-[var(--surface)] px-3"
-          style="border-color: var(--border)"
-        >
-          <option v-for="code in currencies" :key="code" :value="code">{{ code }}</option>
-        </select>
+        <CurrencyPicker v-model="defaultCurrency" :currencies="SUPPORTED_CURRENCIES" variant="field" testid="default-currency" />
       </label>
       <button type="submit" class="hidden" aria-hidden="true" tabindex="-1" />
     </form>

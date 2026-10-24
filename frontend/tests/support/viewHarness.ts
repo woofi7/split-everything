@@ -1,4 +1,4 @@
-import { flushPromises, mount, RouterLinkStub, type VueWrapper } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount, RouterLinkStub, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { vi } from 'vitest'
 import type { Component } from 'vue'
@@ -316,4 +316,50 @@ export function textOf(wrapper: VueWrapper): string {
 
 export function saidOnScreen(): string[] {
   return toasts.value.map((toast) => toast.text)
+}
+
+type Findable = Pick<VueWrapper, 'find' | 'findAll'>
+
+export function inBody(selector: string, wrapper?: Findable) {
+  const inline = wrapper?.find(selector)
+  return inline?.exists() ? inline : new DOMWrapper(document.body).find(selector)
+}
+
+export function allInBody(selector: string, wrapper?: Findable) {
+  const inline = wrapper?.findAll(selector) ?? []
+  return inline.length > 0 ? inline : new DOMWrapper(document.body).findAll(selector)
+}
+
+export function optionsOf(testid: string, wrapper?: Findable) {
+  return allInBody(`[data-testid="${testid}-menu"] [role="option"][data-value]`, wrapper)
+}
+
+export async function openSelect(wrapper: Findable, testid: string): Promise<void> {
+  await wrapper.find(`[data-testid="${testid}"]`).trigger('click')
+  await flushPromises()
+}
+
+export async function chooseOption(wrapper: Findable, testid: string, value: string): Promise<void> {
+  await openSelect(wrapper, testid)
+  const option = optionsOf(testid, wrapper).find((candidate) => candidate.attributes('data-value') === value)
+  if (!option) throw new Error(`No option ${value} in ${testid}`)
+  await option.trigger('click')
+  await flushPromises()
+}
+
+export function chosenValue(wrapper: Findable, testid: string): string | undefined {
+  return wrapper.find(`[data-testid="${testid}"]`).attributes('data-value')
+}
+
+export async function listOptions(
+  wrapper: Findable,
+  testid: string,
+): Promise<Array<{ value: string; text: string }>> {
+  await openSelect(wrapper, testid)
+  const options = optionsOf(testid, wrapper).map((option) => ({
+    value: option.attributes('data-value') ?? '',
+    text: option.text(),
+  }))
+  await openSelect(wrapper, testid)
+  return options
 }

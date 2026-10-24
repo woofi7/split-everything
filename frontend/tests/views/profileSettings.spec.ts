@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import ProfileSettingsView from '@/views/ProfileSettingsView.vue'
 import { watchForInstallPrompt } from '@/native/install'
-import { fakeApi, mountView, settle, testUser, textOf } from '../support/viewHarness'
+import { chooseOption, chosenValue, fakeApi, mountView, settle, testUser, textOf } from '../support/viewHarness'
 
 const replace = vi.fn()
 
@@ -71,7 +71,7 @@ describe('the profile settings', () => {
       const { wrapper } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('input[type="text"]').setValue('Alice A')
-      await wrapper.find('select').setValue('EUR')
+      await chooseOption(wrapper, 'default-currency', 'EUR')
       await settle(1)
       await wrapper.find('[data-testid="save-settings"]').trigger('click')
       await settle()
@@ -88,13 +88,13 @@ describe('the profile settings', () => {
       const { wrapper } = await mountView(ProfileSettingsView, { api })
 
       await wrapper.find('input[type="text"]').setValue('Alice A')
-      await wrapper.find('select').setValue('EUR')
+      await chooseOption(wrapper, 'default-currency', 'EUR')
       await settle(1)
       await wrapper.find('[data-testid="cancel-changes"]').trigger('click')
       await settle(1)
 
       expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Alice')
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('CAD')
+      expect(chosenValue(wrapper, 'default-currency')).toBe('CAD')
       expect(wrapper.find('[data-testid="save-bar"]').exists()).toBe(false)
       expect(api.patch).not.toHaveBeenCalled()
     })
@@ -114,7 +114,7 @@ describe('the profile settings', () => {
     const { wrapper } = await mountView(ProfileSettingsView)
 
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Alice')
-    expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('CAD')
+    expect(chosenValue(wrapper, 'default-currency')).toBe('CAD')
   })
 
   it('saves a profile change', async () => {

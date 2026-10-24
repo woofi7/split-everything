@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
+import CurrencyPicker from '@/components/expenses/CurrencyPicker.vue'
+import { SUPPORTED_CURRENCIES } from '@/domain/currencies'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -24,7 +26,6 @@ const addable = ref<AddableUser[]>([])
 const chosen = ref<AddableUser[]>([])
 const isSaving = ref(false)
 
-const currencies = ['CAD', 'USD', 'EUR', 'GBP', 'CHF', 'AUD', 'JPY']
 
 onMounted(async () => {
   try {
@@ -91,13 +92,7 @@ async function save(): Promise<void> {
       <div class="grid grid-cols-2 gap-3">
         <label class="flex flex-col gap-1">
           <span class="text-sm text-[var(--text-muted)]">{{ t('Currency') }}</span>
-          <select
-            v-model="baseCurrency"
-            class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3"
-            style="border-color: var(--border)"
-          >
-            <option v-for="code in currencies" :key="code" :value="code">{{ code }}</option>
-          </select>
+          <CurrencyPicker v-model="baseCurrency" :currencies="SUPPORTED_CURRENCIES" variant="field" testid="group-currency" />
         </label>
         <div class="flex flex-col gap-1">
           <span class="text-sm text-[var(--text-muted)]">{{ t('Icon') }}</span>

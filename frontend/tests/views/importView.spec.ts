@@ -4,13 +4,15 @@ import ImportView from '@/views/ImportView.vue'
 import {
   ALICE,
   GROUP_ID,
+  chooseOption,
+  chosenValue,
   fakeApi,
   mountView,
   saidOnScreen,
   settle,
-  waitFor,
   testGroup,
   textOf,
+  waitFor,
 } from '../support/viewHarness'
 
 const replace = vi.fn()
@@ -183,7 +185,7 @@ describe('ImportView', () => {
 
     expect(textOf(wrapper)).toContain('0 to import')
     expect(textOf(wrapper)).toContain('1 left personal')
-    expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('')
+    expect(chosenValue(wrapper, 'row-group')).toBe('')
   })
 
   it('keeps the import button disabled until something is assigned', async () => {
@@ -202,7 +204,7 @@ describe('ImportView', () => {
     const { wrapper } = await mountView(ImportView, { api: api() })
     await chooseFile(wrapper)
 
-    await wrapper.find('select').setValue(GROUP_ID)
+    await chooseOption(wrapper, 'row-group', GROUP_ID)
     await settle(1)
 
     expect(textOf(wrapper)).toContain('1 to import')
@@ -286,7 +288,7 @@ describe('ImportView', () => {
 
     const { wrapper } = await mountView(ImportView, { api: client })
     await chooseFile(wrapper)
-    await wrapper.find('select').setValue(GROUP_ID)
+    await chooseOption(wrapper, 'row-group', GROUP_ID)
     await settle(1)
     await wrapper.findAll('button').find((b) => b.text().includes('Import'))!.trigger('click')
     await settle()
@@ -306,7 +308,7 @@ describe('ImportView', () => {
 
     const { wrapper } = await mountView(ImportView, { api: client })
     await chooseFile(wrapper)
-    await wrapper.find('select').setValue(GROUP_ID)
+    await chooseOption(wrapper, 'row-group', GROUP_ID)
     await settle(1)
     await wrapper.findAll('button').find((b) => b.text().includes('Import'))!.trigger('click')
     await settle()
@@ -326,7 +328,7 @@ describe('ImportView', () => {
 
     const { wrapper } = await mountView(ImportView, { api: client })
     await chooseFile(wrapper)
-    await wrapper.find('select').setValue(GROUP_ID)
+    await chooseOption(wrapper, 'row-group', GROUP_ID)
     await settle(1)
     await wrapper.findAll('button').find((b) => b.text().includes('Import'))!.trigger('click')
     await settle()

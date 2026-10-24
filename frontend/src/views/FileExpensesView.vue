@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t, intlLocale } from '@/i18n'
+import SearchSelect from '@/components/ui/SearchSelect.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -164,18 +165,12 @@ const spentOn = (iso: string) =>
         {{ t('File the {count} the words already know', { count: guessCount }) }}
       </button>
       <div class="mt-3 flex flex-col gap-2 lg:flex-row">
-        <select
+        <SearchSelect
           v-model="shown"
-          data-testid="filing-filter"
-          class="w-full rounded-lg border bg-[var(--surface)] px-3 py-2 text-sm"
-          style="border-color: var(--border)"
-        >
-          <option :value="UNFILED">{{ t('Not filed') }}</option>
-          <option :value="EVERYTHING">{{ t('Everything') }}</option>
-          <option v-for="category in categories" :key="category.key" :value="category.key">
-            {{ category.name }}
-          </option>
-        </select>
+          :options="[{ value: UNFILED, label: t('Not filed') }, { value: EVERYTHING, label: t('Everything') }, ...categories.map((category) => ({ value: category.key, label: category.name }))]"
+          :title="t('Show')"
+          testid="filing-filter"
+        />
         <input
           v-model="query"
           type="search"
@@ -251,18 +246,14 @@ const spentOn = (iso: string) =>
       class="fixed right-4 left-4 z-40 flex items-center gap-2 rounded-xl border p-2 shadow-lg lg:left-[15rem]"
       style="bottom: calc(6rem + env(safe-area-inset-bottom)); background: var(--surface-raised); border-color: var(--border)"
     >
-      <select
+      <SearchSelect
         v-model="target"
-        data-testid="filing-target"
-        class="min-w-0 flex-1 rounded-lg border bg-[var(--surface)] px-3 py-2 text-sm"
-        style="border-color: var(--border)"
-      >
-        <option :value="null" disabled>{{ t('Where do they go?') }}</option>
-        <option value="">{{ t('Not filed') }}</option>
-        <option v-for="category in categories" :key="category.key" :value="category.key">
-          {{ category.name }}
-        </option>
-      </select>
+        class="min-w-0 flex-1"
+        :options="[{ value: '', label: t('Not filed') }, ...categories.map((category) => ({ value: category.key, label: category.name }))]"
+        :title="t('Where do they go?')"
+        :placeholder="t('Where do they go?')"
+        testid="filing-target"
+      />
       <button
         type="button"
         data-testid="file-selected"

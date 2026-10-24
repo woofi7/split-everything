@@ -6,7 +6,9 @@ import {
   BOB,
   GROUP_ID,
   USER_ID,
+  chooseOption,
   fakeApi,
+  listOptions,
   mountView,
   saidOnScreen,
   settle,
@@ -666,8 +668,8 @@ describe('GroupSettingsView', () => {
     it('names both people once they are chosen', async () => {
       const { wrapper } = await openMerge()
 
-      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
-      await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
+      await chooseOption(wrapper, 'merge-source', BOB)
+      await chooseOption(wrapper, 'merge-target', 'member-emma')
       await settle(1)
 
       const text = wrapper.find('[data-testid="merge-confirm"]').text()
@@ -681,7 +683,7 @@ describe('GroupSettingsView', () => {
       expect(wrapper.find('[data-testid="merge-confirm-button"]').attributes('disabled'))
         .toBeDefined()
 
-      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
+      await chooseOption(wrapper, 'merge-source', BOB)
       await settle(1)
 
       expect(wrapper.find('[data-testid="merge-confirm-button"]').attributes('disabled'))
@@ -691,9 +693,7 @@ describe('GroupSettingsView', () => {
     it('offers a removed member as the one to merge away', async () => {
       const { wrapper } = await openMerge()
 
-      const options = wrapper
-        .findAll('[data-testid="merge-source"] option')
-        .map((option) => option.attributes('value'))
+      const options = (await listOptions(wrapper, 'merge-source')).map((option) => option.value)
 
       expect(options).toContain(BOB)
     })
@@ -701,9 +701,7 @@ describe('GroupSettingsView', () => {
     it('says which of two people with the same name is the removed one', async () => {
       const { wrapper } = await openMerge()
 
-      const labels = wrapper
-        .findAll('[data-testid="merge-source"] option')
-        .map((option) => option.text())
+      const labels = (await listOptions(wrapper, 'merge-source')).map((option) => option.text)
 
       expect(labels.some((label) => label.includes('Emma (removed)'))).toBe(true)
     })
@@ -711,9 +709,7 @@ describe('GroupSettingsView', () => {
     it('does not offer a removed member as the one to keep', async () => {
       const { wrapper } = await openMerge()
 
-      const options = wrapper
-        .findAll('[data-testid="merge-target"] option')
-        .map((option) => option.attributes('value'))
+      const options = (await listOptions(wrapper, 'merge-target')).map((option) => option.value)
 
       expect(options).not.toContain(BOB)
     })
@@ -722,9 +718,7 @@ describe('GroupSettingsView', () => {
       const { wrapper } = await openMerge()
       const owner = testGroup().members.find((m) => m.role === 'Owner')!
 
-      const options = wrapper
-        .findAll('[data-testid="merge-source"] option')
-        .map((option) => option.attributes('value'))
+      const options = (await listOptions(wrapper, 'merge-source')).map((option) => option.value)
 
       expect(options).not.toContain(owner.id)
     })
@@ -732,12 +726,10 @@ describe('GroupSettingsView', () => {
     it('does not offer the same person on both sides', async () => {
       const { wrapper } = await openMerge()
 
-      await wrapper.find('[data-testid="merge-source"]').setValue('member-emma')
+      await chooseOption(wrapper, 'merge-source', 'member-emma')
       await settle(1)
 
-      const options = wrapper
-        .findAll('[data-testid="merge-target"] option')
-        .map((option) => option.attributes('value'))
+      const options = (await listOptions(wrapper, 'merge-target')).map((option) => option.value)
 
       expect(options).not.toContain('member-emma')
     })
@@ -745,8 +737,8 @@ describe('GroupSettingsView', () => {
     it('merges once confirmed', async () => {
       const { wrapper, client } = await openMerge()
 
-      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
-      await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
+      await chooseOption(wrapper, 'merge-source', BOB)
+      await chooseOption(wrapper, 'merge-target', 'member-emma')
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
 
@@ -773,8 +765,8 @@ describe('GroupSettingsView', () => {
       const { wrapper, client } = await openMerge()
       client.post.mockRejectedValue(new Error('The group owner cannot be merged away.'))
 
-      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
-      await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
+      await chooseOption(wrapper, 'merge-source', BOB)
+      await chooseOption(wrapper, 'merge-target', 'member-emma')
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
 
@@ -787,8 +779,8 @@ describe('GroupSettingsView', () => {
       const { wrapper, client } = await openMerge()
       client.post.mockRejectedValue(new Error('The group owner cannot be merged away.'))
 
-      await wrapper.find('[data-testid="merge-source"]').setValue(BOB)
-      await wrapper.find('[data-testid="merge-target"]').setValue('member-emma')
+      await chooseOption(wrapper, 'merge-source', BOB)
+      await chooseOption(wrapper, 'merge-target', 'member-emma')
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')
       await settle()
       await wrapper.find('[data-testid="merge-confirm-button"]').trigger('click')

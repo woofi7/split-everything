@@ -99,3 +99,12 @@ export function parseAmountInput(input: string | null | undefined): number | nul
 
   return negative ? -Math.abs(value) : value
 }
+
+export function formatRate(from: string, to: string, rate: number, locale = intlLocale.value): string {
+  if (!(rate > 0)) return ''
+
+  const [unit, quote, value] = rate < 0.01 ? [to, from, 1 / rate] : [from, to, rate]
+  const decimals = value >= 100 ? 0 : 4
+
+  return `1 ${unit} = ${value.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${quote}`
+}

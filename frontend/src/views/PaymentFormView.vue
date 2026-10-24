@@ -9,6 +9,7 @@ import { faRightLeft } from '@fortawesome/free-solid-svg-icons'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
+import SearchSelect from '@/components/ui/SearchSelect.vue'
 import { notify, report } from '@/ui/toasts'
 import { parseAmountInput } from '@/domain/money'
 import { today } from '@/domain/lastExpenseDate'
@@ -271,17 +272,13 @@ async function save(): Promise<void> {
         <template v-else>
           <label class="flex flex-col gap-1">
             <span class="text-xs text-[var(--text-muted)]">{{ t('Group') }}</span>
-            <select
-              :value="groupId"
-              data-testid="group"
-              class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
-              style="border-color: var(--border)"
-              @change="selectGroup(($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="option in groups.visibleGroups" :key="option.id" :value="option.id">
-                {{ option.name }}
-              </option>
-            </select>
+            <SearchSelect
+              :model-value="groupId"
+              :options="groups.visibleGroups.map((option) => ({ value: option.id, label: option.name }))"
+              :title="t('Group')"
+              testid="group"
+              @update:model-value="selectGroup($event ?? '')"
+            />
           </label>
           <label
             v-if="isSettlement"
@@ -305,30 +302,22 @@ async function save(): Promise<void> {
           </p>
           <label v-if="moveElsewhere" class="flex flex-col gap-1">
             <span class="text-xs text-[var(--text-muted)]">{{ t('Move it to') }}</span>
-            <select
+            <SearchSelect
               v-model="targetGroupId"
-              data-testid="target-group"
-              class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
-              style="border-color: var(--border)"
-            >
-              <option v-for="option in targetGroups" :key="option.id" :value="option.id">
-                {{ option.name }}
-              </option>
-            </select>
+              :options="targetGroups.map((option) => ({ value: option.id, label: option.name }))"
+              :title="t('Move it to')"
+              testid="target-group"
+            />
           </label>
           <div class="flex items-end gap-2">
             <label class="flex min-w-0 flex-1 flex-col gap-1">
               <span class="text-xs text-[var(--text-muted)]">{{ isSettlement ? t('Who owes') : t('Who paid') }}</span>
-              <select
+              <SearchSelect
                 v-model="fromMemberId"
-                data-testid="paid-from"
-                class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
-                style="border-color: var(--border)"
-              >
-                <option v-for="member in members" :key="member.id" :value="member.id">
-                  {{ member.displayName }}
-                </option>
-              </select>
+                :options="members.map((member) => ({ value: member.id, label: member.displayName }))"
+                :title="isSettlement ? t('Who owes') : t('Who paid')"
+                testid="paid-from"
+              />
             </label>
             <button
               type="button"
@@ -343,16 +332,12 @@ async function save(): Promise<void> {
             </button>
             <label class="flex min-w-0 flex-1 flex-col gap-1">
               <span class="text-xs text-[var(--text-muted)]">{{ isSettlement ? t('Owed to') : t('Who received it') }}</span>
-              <select
+              <SearchSelect
                 v-model="toMemberId"
-                data-testid="paid-to"
-                class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
-                style="border-color: var(--border)"
-              >
-                <option v-for="member in members" :key="member.id" :value="member.id">
-                  {{ member.displayName }}
-                </option>
-              </select>
+                :options="members.map((member) => ({ value: member.id, label: member.displayName }))"
+                :title="isSettlement ? t('Owed to') : t('Who received it')"
+                testid="paid-to"
+              />
             </label>
           </div>
         </template>

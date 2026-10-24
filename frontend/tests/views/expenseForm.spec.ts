@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/auth'
 import { SyncEngine } from '@/offline/syncEngine'
 import { today } from '@/domain/lastExpenseDate'
 import { clearToasts, toasts } from '@/ui/toasts'
-import { fakeApi, textOf, waitFor } from '../support/viewHarness'
+import { chooseOption, chosenValue, fakeApi, inBody, openSelect, optionsOf, textOf, waitFor } from '../support/viewHarness'
 import { setApiClient } from '@/api/provider'
 
 const groupId = 'group-1'
@@ -539,10 +539,7 @@ describe('ExpenseFormView editing an expense', () => {
   it('keeps who paid', async () => {
     const { wrapper } = await mountEdit()
 
-    const payer = wrapper.findAll('select').find((select) =>
-      (select.element as HTMLSelectElement).value === bob,
-    )
-    expect(payer).toBeDefined()
+    expect(chosenValue(wrapper, 'paid-by')).toBe(bob)
   })
 
   it('does not offer to move the expense to another group', async () => {
@@ -629,7 +626,7 @@ describe('ExpenseFormView fits one screen', () => {
   it('asks for six things and no more', async () => {
     const { wrapper } = await mountView()
 
-    const fields = wrapper.findAll('input:not([type="checkbox"]), select')
+    const fields = wrapper.findAll('input:not([type="checkbox"]), button[aria-haspopup="listbox"]:not([data-testid="currency"])')
     expect(fields.length).toBeLessThanOrEqual(6)
   })
 
@@ -966,14 +963,14 @@ describe('ExpenseFormView remembering the date', () => {
 
     await first.wrapper.find('input[placeholder="Groceries"]').setValue('Groceries')
     await first.wrapper.find('input[inputmode="decimal"]').setValue('60')
-    await first.wrapper.find('[data-testid="paid-by"]').setValue(bob)
+    await chooseOption(first.wrapper, 'paid-by', bob)
     await settle()
     await first.wrapper.find('form').trigger('submit')
     await waitFor(() => (localStorage.getItem('split-everything.last-expense-payer') ?? '').includes(bob))
 
     const { wrapper } = await mountView()
 
-    expect((wrapper.find('[data-testid="paid-by"]').element as HTMLSelectElement).value).toBe(bob)
+    expect(chosenValue(wrapper, 'paid-by')).toBe(bob)
   })
 
   it('remembers the date an expense was added on', async () => {
@@ -1206,8 +1203,9 @@ describe('ExpenseFormView moving an expense to another group', () => {
     await wrapper.find('[data-testid="move-open"]').trigger('click')
     await settle()
 
-    const options = wrapper.findAll('[data-testid="move-target"] option')
-    expect(options.map((option) => option.text())).toEqual(['Choose a group', 'Ski trip'])
+    expect(wrapper.find('[data-testid="move-target"]').text()).toContain('Choose a group')
+    await openSelect(wrapper, 'move-target')
+    expect(optionsOf('move-target', wrapper).map((option) => option.text())).toEqual(['Ski trip'])
   })
 
   it('leaves out a group kept in another currency', async () => {
@@ -1222,7 +1220,7 @@ describe('ExpenseFormView moving an expense to another group', () => {
 
     await wrapper.find('[data-testid="move-open"]').trigger('click')
     await settle()
-    await wrapper.find('[data-testid="move-target"]').setValue(otherGroupId)
+    await chooseOption(wrapper, 'move-target', otherGroupId)
     await settle()
 
     const rows = wrapper.findAll('[data-testid="move-mapping"]')
@@ -1237,9 +1235,9 @@ describe('ExpenseFormView moving an expense to another group', () => {
 
     await wrapper.find('[data-testid="move-open"]').trigger('click')
     await settle()
-    await wrapper.find('[data-testid="move-target"]').setValue(otherGroupId)
+    await chooseOption(wrapper, 'move-target', otherGroupId)
     await settle()
-    await wrapper.find(`[data-testid="move-mapping-${bob}"]`).setValue(carol)
+    await chooseOption(wrapper, `move-mapping-${bob}`, carol)
     await settle()
 
     await wrapper.find('[data-testid="move-confirm"]').trigger('click')
@@ -1268,9 +1266,9 @@ describe('ExpenseFormView moving an expense to another group', () => {
 
     await wrapper.find('[data-testid="move-open"]').trigger('click')
     await settle()
-    await wrapper.find('[data-testid="move-target"]').setValue(otherGroupId)
+    await chooseOption(wrapper, 'move-target', otherGroupId)
     await settle()
-    await wrapper.find(`[data-testid="move-mapping-${bob}"]`).setValue(carol)
+    await chooseOption(wrapper, `move-mapping-${bob}`, carol)
     await settle()
     await wrapper.find('[data-testid="move-confirm"]').trigger('click')
     await settle()
@@ -1298,16 +1296,14 @@ describe('ExpenseFormView currency', () => {
   }
 
   async function pickCurrency(wrapper: Awaited<ReturnType<typeof mountView>>['wrapper'], code: string) {
-    await wrapper.find('[data-testid="currency"]').trigger('click')
-    await settle()
-    await wrapper.find(`[data-testid="currency-option"][data-currency="${code}"]`).trigger('click')
+    await chooseOption(wrapper, 'currency', code)
     await settle()
   }
 
   it('starts in the group currency, shown inside the amount field', async () => {
     const { wrapper } = await mountView()
 
-    expect(wrapper.find('[data-testid="currency"]').attributes('data-currency')).toBe('CAD')
+    expect(chosenValue(wrapper, 'currency')).toBe('CAD')
     expect(wrapper.find('[data-testid="conversion"]').exists()).toBe(false)
   })
 
@@ -1362,7 +1358,7 @@ describe('ExpenseFormView currency', () => {
 
     const { wrapper } = await mountView()
 
-    expect(wrapper.find('[data-testid="currency"]').attributes('data-currency')).toBe('EUR')
+    expect(chosenValue(wrapper, 'currency')).toBe('EUR')
   })
 
   it('finds a currency by its name', async () => {
@@ -1370,16 +1366,15 @@ describe('ExpenseFormView currency', () => {
 
     await wrapper.find('[data-testid="currency"]').trigger('click')
     await settle()
-    await wrapper.find('[data-testid="currency-search"]').setValue('yen')
+    await inBody('[data-testid="currency-search"]', wrapper).setValue('yen')
     await settle()
 
-    const first = wrapper.find('[data-testid="currency-option"]')
-    expect(first.attributes('data-currency')).toBe('JPY')
+    expect(optionsOf('currency', wrapper)[0].attributes('data-value')).toBe('JPY')
 
-    await wrapper.find('[data-testid="currency-search"]').trigger('keydown', { key: 'Enter' })
+    await inBody('[data-testid="currency-search"]', wrapper).trigger('keydown', { key: 'Enter' })
     await settle()
 
-    expect(wrapper.find('[data-testid="currency"]').attributes('data-currency')).toBe('JPY')
-    expect(wrapper.find('[data-testid="currency-search"]').exists()).toBe(false)
+    expect(chosenValue(wrapper, 'currency')).toBe('JPY')
+    expect(inBody('[data-testid="currency-search"]', wrapper).exists()).toBe(false)
   })
 })

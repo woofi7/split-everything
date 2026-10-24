@@ -3,6 +3,7 @@ import { RouterLinkStub } from '@vue/test-utils'
 import FileExpensesView from '@/views/FileExpensesView.vue'
 import {
   GROUP_ID,
+  chooseOption,
   fakeApi,
   mountView,
   saidOnScreen,
@@ -79,7 +80,7 @@ describe('filing expenses in bulk', () => {
       { id: 'b', description: 'Resto', categoryKey: 'dining' },
     ])
 
-    await wrapper.find('[data-testid="filing-filter"]').setValue('*')
+    await chooseOption(wrapper, 'filing-filter', '*')
     await settle()
 
     expect(rowsOn(wrapper)).toHaveLength(2)
@@ -92,7 +93,7 @@ describe('filing expenses in bulk', () => {
       { id: 'c', description: 'Bus' },
     ])
 
-    await wrapper.find('[data-testid="filing-filter"]').setValue('dining')
+    await chooseOption(wrapper, 'filing-filter', 'dining')
     await settle()
 
     expect(rowsOn(wrapper)).toHaveLength(2)
@@ -142,7 +143,7 @@ describe('filing expenses in bulk', () => {
 
       await wrapper.find('[data-testid="select-all"]').trigger('click')
       await settle()
-      await wrapper.find('[data-testid="filing-target"]').setValue('groceries')
+      await chooseOption(wrapper, 'filing-target', 'groceries')
       await wrapper.find('[data-testid="file-selected"]').trigger('click')
       await waitFor(() => saidOnScreen().length > 0)
 
@@ -156,7 +157,7 @@ describe('filing expenses in bulk', () => {
 
       await wrapper.find('input[type="checkbox"]').trigger('change')
       await settle()
-      await wrapper.find('[data-testid="filing-target"]').setValue('groceries')
+      await chooseOption(wrapper, 'filing-target', 'groceries')
       await wrapper.find('[data-testid="file-selected"]').trigger('click')
       await waitFor(() => rowsOn(wrapper).length === 0)
 
@@ -204,16 +205,16 @@ describe('filing expenses in bulk', () => {
         { id: 'b', description: 'Bus' },
       ])
 
-      await wrapper.find('[data-testid="filing-filter"]').setValue('*')
+      await chooseOption(wrapper, 'filing-filter', '*')
       await settle()
       await wrapper.find('[data-testid="select-all"]').trigger('click')
       await settle()
 
-      await wrapper.find('[data-testid="filing-filter"]').setValue('dining')
+      await chooseOption(wrapper, 'filing-filter', 'dining')
       await settle()
       expect(wrapper.find('[data-testid="selected-count"]').text()).toContain('1')
 
-      await wrapper.find('[data-testid="filing-target"]').setValue('groceries')
+      await chooseOption(wrapper, 'filing-target', 'groceries')
       await wrapper.find('[data-testid="file-selected"]').trigger('click')
       await waitFor(() => saidOnScreen().length > 0)
 
@@ -224,11 +225,11 @@ describe('filing expenses in bulk', () => {
     it('unfiles them again when nothing is chosen', async () => {
       const { wrapper } = await mountScreen([{ id: 'a', description: 'Metro', categoryKey: 'dining' }])
 
-      await wrapper.find('[data-testid="filing-filter"]').setValue('dining')
+      await chooseOption(wrapper, 'filing-filter', 'dining')
       await settle()
       await wrapper.find('input[type="checkbox"]').trigger('change')
       await settle()
-      await wrapper.find('[data-testid="filing-target"]').setValue('')
+      await chooseOption(wrapper, 'filing-target', '')
       await wrapper.find('[data-testid="file-selected"]').trigger('click')
       await waitFor(() => saidOnScreen().length > 0)
 
@@ -239,11 +240,11 @@ describe('filing expenses in bulk', () => {
     it('says when there was nothing to change', async () => {
       const { wrapper } = await mountScreen([{ id: 'a', description: 'Metro', categoryKey: 'dining' }])
 
-      await wrapper.find('[data-testid="filing-filter"]').setValue('dining')
+      await chooseOption(wrapper, 'filing-filter', 'dining')
       await settle()
       await wrapper.find('input[type="checkbox"]').trigger('change')
       await settle()
-      await wrapper.find('[data-testid="filing-target"]').setValue('dining')
+      await chooseOption(wrapper, 'filing-target', 'dining')
       await wrapper.find('[data-testid="file-selected"]').trigger('click')
       await waitFor(() => saidOnScreen().length > 0)
 
@@ -259,7 +260,7 @@ describe('filing expenses in bulk', () => {
 
       await wrapper.find('input[type="checkbox"]').trigger('change')
       await settle()
-      await wrapper.find('[data-testid="filing-target"]').setValue('groceries')
+      await chooseOption(wrapper, 'filing-target', 'groceries')
       await wrapper.find('[data-testid="file-selected"]').trigger('click')
       await waitFor(() => saidOnScreen().length > 0)
 

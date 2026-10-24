@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RouterLinkStub } from '@vue/test-utils'
 import NewGroupView from '@/views/NewGroupView.vue'
-import { fakeApi, mountView, settle, testGroup, textOf } from '../support/viewHarness'
+import {
+  fakeApi,
+  listOptions,
+  mountView,
+  settle,
+  testGroup,
+  textOf,
+} from '../support/viewHarness'
 
 const replace = vi.fn()
 
@@ -174,7 +181,7 @@ describe('NewGroupView', () => {
   it('offers the currencies a homelab is likely to need', async () => {
     const { wrapper } = await mountView(NewGroupView, { groups: [] })
 
-    const options = wrapper.find('select').findAll('option').map((option) => option.text())
+    const options = (await listOptions(wrapper, 'group-currency')).map((option) => option.value)
     expect(options).toContain('CAD')
     expect(options).toContain('EUR')
     expect(options).toContain('JPY')

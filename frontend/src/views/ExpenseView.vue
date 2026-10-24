@@ -9,7 +9,7 @@ import { useExpensesStore } from '@/stores/expenses'
 import { notify, report } from '@/ui/toasts'
 import { useAuthStore } from '@/stores/auth'
 import { memberColor } from '@/domain/memberColors'
-import { formatMoney } from '@/domain/money'
+import { formatMoney, formatRate } from '@/domain/money'
 import { categoryFor } from '@/domain/categories'
 import { resolveIcon } from '@/domain/icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -186,7 +186,7 @@ async function remove(): Promise<void> {
           class="mt-1 text-xs tabular-nums text-[var(--text-muted)]"
         >
           ≈ {{ formatMoney(expense.amountInBaseCurrency, group.baseCurrency) }}
-          · 1 {{ expense.currency }} = {{ expense.exchangeRate.toFixed(4) }} {{ group.baseCurrency }}
+          · {{ formatRate(expense.currency, group.baseCurrency, expense.exchangeRate) }}
           · {{ t('rate of {date}', { date: new Date(expense.spentAt).toLocaleDateString(intlLocale) }) }}
           <span v-if="expense.rateIsEstimate || expense.pending" class="text-accent">
             · {{ t('estimate, corrected when back online') }}

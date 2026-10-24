@@ -6,6 +6,7 @@ import {
   ALICE,
   GROUP_ID,
   fakeApi,
+  inBody,
   mountView,
   settle,
   testExpense,
@@ -64,7 +65,7 @@ describe('filing an expense', () => {
     await wrapper.find('input[placeholder="Groceries"]').setValue('Metro plus')
     await settle()
 
-    expect(wrapper.find('[data-testid="category"]').attributes('data-category')).toBe('groceries')
+    expect(wrapper.find('[data-testid="category"]').attributes('data-value')).toBe('groceries')
     expect(wrapper.find('[data-testid="category"]').text()).toContain('Groceries')
     expect(wrapper.find('[data-testid="category-guess"]').exists()).toBe(true)
   })
@@ -77,13 +78,13 @@ describe('filing an expense', () => {
 
     await wrapper.find('[data-testid="category"]').trigger('click')
     await settle()
-    await wrapper.find('[data-category="dining"][data-testid="category-option"]').trigger('click')
+    await inBody('[data-value="dining"][data-testid="category-option"]', wrapper).trigger('click')
     await settle()
 
     await wrapper.find('input[placeholder="Groceries"]').setValue('Metro plus express')
     await settle()
 
-    expect(wrapper.find('[data-testid="category"]').attributes('data-category')).toBe('dining')
+    expect(wrapper.find('[data-testid="category"]').attributes('data-value')).toBe('dining')
     expect(wrapper.find('[data-testid="category-guess"]').exists()).toBe(false)
   })
 

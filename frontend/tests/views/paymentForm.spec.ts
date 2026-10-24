@@ -6,6 +6,8 @@ import {
   ALICE,
   BOB,
   GROUP_ID,
+  chooseOption,
+  chosenValue,
   fakeApi,
   mountView,
   settle,
@@ -37,8 +39,8 @@ describe('recording a payment', () => {
   it('starts with the other person paying you, which is why the screen is open', async () => {
     const { wrapper } = await mountForm()
 
-    expect((wrapper.find('[data-testid="paid-from"]').element as HTMLSelectElement).value).toBe(BOB)
-    expect((wrapper.find('[data-testid="paid-to"]').element as HTMLSelectElement).value).toBe(ALICE)
+    expect(chosenValue(wrapper, 'paid-from')).toBe(BOB)
+    expect(chosenValue(wrapper, 'paid-to')).toBe(ALICE)
   })
 
   it('writes a settlement, and no expense at all', async () => {
@@ -121,7 +123,7 @@ describe('recording a payment', () => {
     const { wrapper, expensesStore } = await mountForm()
 
     await wrapper.find('[data-testid="amount"]').setValue('50')
-    await wrapper.find('[data-testid="paid-to"]').setValue(BOB)
+    await chooseOption(wrapper, 'paid-to', BOB)
     await wrapper.find('form').trigger('submit')
     await settle()
 
@@ -172,8 +174,8 @@ describe('recording a settlement', () => {
     const { wrapper } = await mountForm()
 
     expect(wrapper.find('[data-testid="record-settlement"]').attributes('aria-current')).toBe('page')
-    expect((wrapper.find('[data-testid="paid-from"]').element as HTMLSelectElement).value).toBe(ALICE)
-    expect((wrapper.find('[data-testid="paid-to"]').element as HTMLSelectElement).value).toBe(BOB)
+    expect(chosenValue(wrapper, 'paid-from')).toBe(ALICE)
+    expect(chosenValue(wrapper, 'paid-to')).toBe(BOB)
     expect((wrapper.find('[data-testid="amount"]').element as HTMLInputElement).value).toBe('30.00')
   })
 
@@ -200,8 +202,8 @@ describe('recording a settlement', () => {
     })
     await settle()
 
-    expect((wrapper.find('[data-testid="paid-from"]').element as HTMLSelectElement).value).toBe(ALICE)
-    expect((wrapper.find('[data-testid="paid-to"]').element as HTMLSelectElement).value).toBe(CAROL)
+    expect(chosenValue(wrapper, 'paid-from')).toBe(ALICE)
+    expect(chosenValue(wrapper, 'paid-to')).toBe(CAROL)
     expect((wrapper.find('[data-testid="amount"]').element as HTMLInputElement).value).toBe('60.00')
   })
 
@@ -210,8 +212,8 @@ describe('recording a settlement', () => {
     const { wrapper } = await mountForm()
     route.query = {}
 
-    expect((wrapper.find('[data-testid="paid-from"]').element as HTMLSelectElement).value).toBe(BOB)
-    expect((wrapper.find('[data-testid="paid-to"]').element as HTMLSelectElement).value).toBe(ALICE)
+    expect(chosenValue(wrapper, 'paid-from')).toBe(BOB)
+    expect(chosenValue(wrapper, 'paid-to')).toBe(ALICE)
   })
 
   it('writes an ordinary settlement when it stays in the group', async () => {

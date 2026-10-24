@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
+import SearchSelect from '@/components/ui/SearchSelect.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -741,31 +742,25 @@ async function unarchive(): Promise<void> {
         </p>
         <label class="flex flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Merge this person') }}</span>
-          <select
-            v-model="mergeSource"
-            data-testid="merge-source"
-            class="tap-target rounded-lg border bg-[var(--surface)] px-3"
-            style="border-color: var(--border)"
-          >
-            <option value="" disabled>{{ t('Choose who goes') }}</option>
-            <option v-for="person in mergeSources" :key="person.id" :value="person.id">
-              {{ labelFor(person) }}
-            </option>
-          </select>
+          <SearchSelect
+            :model-value="mergeSource || null"
+            :options="mergeSources.map((person) => ({ value: person.id, label: labelFor(person) }))"
+            :title="t('Merge this person')"
+            :placeholder="t('Choose who goes')"
+            testid="merge-source"
+            @update:model-value="mergeSource = $event ?? ''"
+          />
         </label>
         <label class="flex flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Into this person') }}</span>
-          <select
-            v-model="mergeTarget"
-            data-testid="merge-target"
-            class="tap-target rounded-lg border bg-[var(--surface)] px-3"
-            style="border-color: var(--border)"
-          >
-            <option value="" disabled>{{ t('Choose who stays') }}</option>
-            <option v-for="person in mergeTargets" :key="person.id" :value="person.id">
-              {{ labelFor(person) }}
-            </option>
-          </select>
+          <SearchSelect
+            :model-value="mergeTarget || null"
+            :options="mergeTargets.map((person) => ({ value: person.id, label: labelFor(person) }))"
+            :title="t('Into this person')"
+            :placeholder="t('Choose who stays')"
+            testid="merge-target"
+            @update:model-value="mergeTarget = $event ?? ''"
+          />
         </label>
         <p v-if="isMergeReady" class="text-xs text-owing">
           {{ nameOf(mergeSource) }} will be removed, and everything they paid, owe

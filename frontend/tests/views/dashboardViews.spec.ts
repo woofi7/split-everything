@@ -7,6 +7,7 @@ import {
   ALICE,
   BOB,
   GROUP_ID,
+  chooseOption,
   fakeApi,
   mountView,
   settle,
@@ -527,7 +528,7 @@ describe('StatsView', () => {
 
     const atGranularity = async (value: string, api = daily()) => {
       const mounted = await mountView(StatsView, { api })
-      await mounted.wrapper.findAll('select')[1].setValue(value)
+      await chooseOption(mounted.wrapper, 'stats-granularity', value)
       await settle()
       return mounted.wrapper
     }
@@ -650,8 +651,7 @@ describe('StatsView', () => {
     const { wrapper } = await mountView(StatsView, { api: client })
     client.get.mockClear()
 
-    const selects = wrapper.findAll('select')
-    await selects[1].setValue('week')
+    await chooseOption(wrapper, 'stats-granularity', 'week')
     await settle()
 
     expect(client.get).toHaveBeenCalledWith('/stats', expect.objectContaining({ granularity: 'week' }))
@@ -662,7 +662,7 @@ describe('StatsView', () => {
     const { wrapper } = await mountView(StatsView, { api: client })
     client.get.mockClear()
 
-    await wrapper.findAll('select')[0].setValue(testGroup().id)
+    await chooseOption(wrapper, 'stats-group', testGroup().id)
     await settle()
 
     expect(client.get).toHaveBeenCalledWith(
@@ -687,7 +687,7 @@ describe('StatsView', () => {
     const { wrapper } = await mountView(StatsView, { api: client })
     await settle()
 
-    await wrapper.find('select').setValue('')
+    await chooseOption(wrapper, 'stats-group', '')
     await settle()
 
     expect(client.get).toHaveBeenCalledWith(

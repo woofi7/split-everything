@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t, intlLocale } from '@/i18n'
+import SearchSelect from '@/components/ui/SearchSelect.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
@@ -278,35 +279,24 @@ async function cancel(): Promise<void> {
             />
           </div>
           <div class="mt-2 flex flex-wrap items-center gap-2">
-            <select
-              class="rounded-lg border bg-[var(--surface)] px-2 py-1 text-xs"
-              style="border-color: var(--border)"
-              :value="row.groupId ?? ''"
-              @change="assign(row.rowNumber, ($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">{{ t('Personal, not split') }}</option>
-              <option v-for="group in groups.visibleGroups" :key="group.id" :value="group.id">
-                Split in {{ group.name }}
-              </option>
-            </select>
-            <select
+            <SearchSelect
+              :model-value="row.groupId ?? ''"
+              :options="[{ value: '', label: t('Personal, not split') }, ...groups.visibleGroups.map((group) => ({ value: group.id, label: `Split in ${group.name}` }))]"
+              :title="t('Group')"
+              size="sm"
+              testid="row-group"
+              @update:model-value="assign(row.rowNumber, $event)"
+            />
+            <SearchSelect
               v-if="row.groupId && categoriesFor(row.groupId).length > 0"
-              data-testid="row-category"
+              :model-value="row.categoryKey ?? ''"
+              :options="[{ value: '', label: t('Not filed') }, ...categoriesFor(row.groupId).map((category) => ({ value: category.key, label: category.name }))]"
+              :title="t('Category')"
+              size="sm"
+              testid="row-category"
               :data-category="row.categoryKey ?? ''"
-              class="rounded-lg border bg-[var(--surface)] px-2 py-1 text-xs"
-              style="border-color: var(--border)"
-              :value="row.categoryKey ?? ''"
-              @change="setCategory(row.rowNumber, ($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">{{ t('Not filed') }}</option>
-              <option
-                v-for="category in categoriesFor(row.groupId)"
-                :key="category.key"
-                :value="category.key"
-              >
-                {{ category.name }}
-              </option>
-            </select>
+              @update:model-value="setCategory(row.rowNumber, $event)"
+            />
             <button
               type="button"
               class="btn btn-press btn-secondary min-h-0 px-2 py-1 text-xs"

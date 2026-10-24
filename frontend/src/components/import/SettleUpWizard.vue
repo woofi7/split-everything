@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { intlLocale, t } from '@/i18n'
+import SearchSelect from '@/components/ui/SearchSelect.vue'
 import { computed, ref } from 'vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -344,17 +345,13 @@ const dateOf = (value: string | null) =>
         <label class="flex items-center gap-2 text-sm">
           <input v-model="target" type="radio" value="existing" />{{ t('An existing group') }}
         </label>
-        <select
+        <SearchSelect
           v-if="target === 'existing'"
           v-model="existingGroupId"
-          data-testid="existing-group"
-          class="tap-target rounded-lg border bg-[var(--surface)] px-3 text-sm"
-          style="border-color: var(--border)"
-        >
-          <option v-for="group in groups.visibleGroups" :key="group.id" :value="group.id">
-            {{ group.name }}
-          </option>
-        </select>
+          :options="groups.visibleGroups.map((group) => ({ value: group.id, label: group.name }))"
+          :title="t('An existing group')"
+          testid="existing-group"
+        />
       </div>
       <div class="surface-card flex flex-col gap-3 p-4">
         <h2 class="text-sm font-medium text-[var(--text-muted)]">{{ t('People in the export') }}</h2>
@@ -367,32 +364,19 @@ const dateOf = (value: string | null) =>
           class="flex items-center justify-between gap-3"
         >
           <span class="truncate text-sm">{{ name }}</span>
-          <select
+          <SearchSelect
             v-model="nameMapping[name]"
-            class="tap-target max-w-[55%] rounded-lg border bg-[var(--surface)] px-2 text-xs"
-            style="border-color: var(--border)"
-            :aria-label="`Who is ${name}`"
-          >
-            <option :value="null">{{ t('Add as a new person') }}</option>
-            <optgroup v-if="members.length > 0" :label="t('Already in this group')">
-              <option
-                v-for="member in members"
-                :key="member.id"
-                :value="`member:${member.id}`"
-              >
-                {{ member.displayName }}
-              </option>
-            </optgroup>
-            <optgroup v-if="otherAccounts.length > 0" :label="t('Everyone here')">
-              <option
-                v-for="person in otherAccounts"
-                :key="person.id"
-                :value="`user:${person.id}`"
-              >
-                {{ accountLabel(person) }}
-              </option>
-            </optgroup>
-          </select>
+            class="max-w-[55%] min-w-0 flex-1"
+            size="sm"
+            :options="[
+              { value: null, label: t('Add as a new person') },
+              ...members.map((member) => ({ value: `member:${member.id}`, label: member.displayName, group: t('Already in this group') })),
+              ...otherAccounts.map((person) => ({ value: `user:${person.id}`, label: accountLabel(person), group: t('Everyone here') })),
+            ]"
+            :title="`Who is ${name}`"
+            :placeholder="t('Add as a new person')"
+            :testid="`name-mapping-${name}`"
+          />
         </div>
       </div>
       <template v-if="preview">
@@ -408,18 +392,13 @@ const dateOf = (value: string | null) =>
           </p>
           <label class="flex flex-col gap-1">
             <span class="text-xs text-[var(--text-muted)]">{{ t('Import all of these into') }}</span>
-            <select
-              :value="destination"
-              data-testid="destination"
-              class="tap-target rounded-lg border bg-[var(--surface)] px-3 text-sm"
-              style="border-color: var(--border)"
-              @change="chooseDestination(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="new">A new group: {{ newGroupName || 'unnamed' }}</option>
-              <option v-for="group in groups.visibleGroups" :key="group.id" :value="group.id">
-                {{ group.name }}
-              </option>
-            </select>
+            <SearchSelect
+              :model-value="destination"
+              :options="[{ value: 'new', label: `A new group: ${newGroupName || 'unnamed'}` }, ...groups.visibleGroups.map((group) => ({ value: group.id, label: group.name }))]"
+              :title="t('Import all of these into')"
+              testid="destination"
+              @update:model-value="chooseDestination($event)"
+            />
           </label>
         </div>
         <ul class="flex flex-col gap-2">

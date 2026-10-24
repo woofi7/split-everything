@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
+import SearchSelect from '@/components/ui/SearchSelect.vue'
 import { computed, onMounted, ref, useTemplateRef, watch } from 'vue'
 import AppShell from '@/components/layout/AppShell.vue'
 import GroupMark from '@/components/groups/GroupMark.vue'
@@ -361,27 +362,21 @@ async function refresh(): Promise<void> {
     <GroupSwipe />
     <PullToRefresh ref="pull" @refresh="refresh" />
     <div class="mb-4 flex gap-2">
-      <select
-        v-model="groupId"
-        class="tap-target flex-1 rounded-lg border bg-[var(--surface-raised)] px-3 text-sm"
-        style="border-color: var(--border)"
-        @change="load"
-      >
-        <option value="">{{ t('All groups') }}</option>
-        <option v-for="group in groups.visibleGroups" :key="group.id" :value="group.id">
-          {{ group.name }}
-        </option>
-      </select>
-      <select
-        v-model="granularity"
-        class="tap-target rounded-lg border bg-[var(--surface-raised)] px-3 text-sm"
-        style="border-color: var(--border)"
-        @change="load"
-      >
-        <option value="day">{{ t('Daily') }}</option>
-        <option value="week">{{ t('Weekly') }}</option>
-        <option value="month">{{ t('Monthly') }}</option>
-      </select>
+      <SearchSelect
+        :model-value="groupId"
+        class="min-w-0 flex-1"
+        :options="[{ value: '', label: t('All groups') }, ...groups.visibleGroups.map((group) => ({ value: group.id, label: group.name }))]"
+        :title="t('Group')"
+        testid="stats-group"
+        @update:model-value="groupId = $event; load()"
+      />
+      <SearchSelect
+        :model-value="granularity"
+        :options="[{ value: 'day', label: t('Daily') }, { value: 'week', label: t('Weekly') }, { value: 'month', label: t('Monthly') }]"
+        :title="t('Period')"
+        testid="stats-granularity"
+        @update:model-value="granularity = $event; load()"
+      />
     </div>
     <template v-if="dashboard">
       <h2 class="mb-2 text-sm font-medium text-[var(--text-muted)]">

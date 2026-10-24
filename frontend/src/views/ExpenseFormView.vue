@@ -6,13 +6,14 @@ import AppShell from '@/components/layout/AppShell.vue'
 import AddKindSwitch from '@/components/expenses/AddKindSwitch.vue'
 import CategoryPicker from '@/components/expenses/CategoryPicker.vue'
 import CurrencyPicker from '@/components/expenses/CurrencyPicker.vue'
+import SearchSelect from '@/components/ui/SearchSelect.vue'
 import MoneyAmount from '@/components/ui/MoneyAmount.vue'
 import { useGroupsStore } from '@/stores/groups'
 import { useExpensesStore } from '@/stores/expenses'
 import { useAuthStore } from '@/stores/auth'
 import { notify, report } from '@/ui/toasts'
 import { calculateSplit, splitValuesFor, type SplitType } from '@/domain/splitting'
-import { formatMoney, parseAmountInput, roundMoney } from '@/domain/money'
+import { formatMoney, formatRate, parseAmountInput, roundMoney } from '@/domain/money'
 import { memberColor, memberColors } from '@/domain/memberColors'
 import { lastExpenseDate, rememberExpenseDate, today } from '@/domain/lastExpenseDate'
 import { bucketOf } from '@/domain/buckets'
@@ -632,7 +633,7 @@ async function save(): Promise<void> {
         <template v-if="rate === null">{{ t('Looking up the rate...') }}</template>
         <template v-else>
           ≈ {{ formatMoney(convertedAmount ?? 0, baseCurrency) }}
-          · 1 {{ currency }} = {{ rate.rate.toFixed(4) }} {{ baseCurrency }}
+          · {{ formatRate(currency, baseCurrency, rate.rate) }}
           <span v-if="rate.isEstimate" class="text-accent">· {{ t('estimate, corrected when back online') }}</span>
         </template>
       </p>
@@ -651,17 +652,13 @@ async function save(): Promise<void> {
       <div class="grid gap-3" :class="isEditing ? 'grid-cols-1' : 'grid-cols-2'">
         <label v-if="!isEditing" class="flex min-w-0 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Group') }}</span>
-          <select
-            :value="groupId"
-            data-testid="group"
-            class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
-            style="border-color: var(--border)"
-            @change="selectGroup(($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="option in groups.visibleGroups" :key="option.id" :value="option.id">
-              {{ option.name }}
-            </option>
-          </select>
+          <SearchSelect
+            :model-value="groupId"
+            :options="groups.visibleGroups.map((option) => ({ value: option.id, label: option.name }))"
+            :title="t('Group')"
+            testid="group"
+            @update:model-value="selectGroup($event ?? '')"
+          />
         </label>
         <div v-if="categories.length > 0" class="flex min-w-0 flex-col gap-1">
           <span class="flex items-baseline justify-between gap-2 text-xs text-[var(--text-muted)]">
@@ -681,16 +678,12 @@ async function save(): Promise<void> {
         </div>
         <label v-if="!isShared" class="flex min-w-0 flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Who paid') }}</span>
-          <select
+          <SearchSelect
             v-model="paidByMemberId"
-            data-testid="paid-by"
-            class="tap-target w-full rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
-            style="border-color: var(--border)"
-          >
-            <option v-for="member in members" :key="member.id" :value="member.id">
-              {{ member.displayName }}
-            </option>
-          </select>
+            :options="members.map((member) => ({ value: member.id, label: member.displayName }))"
+            :title="t('Who paid')"
+            testid="paid-by"
+          />
         </label>
       </div>
       <div v-if="isShared" class="flex flex-col gap-2">
@@ -710,16 +703,13 @@ async function save(): Promise<void> {
           data-testid="payer-row"
           class="flex items-center gap-2"
         >
-          <select
+          <SearchSelect
             v-model="payer.memberId"
-            data-testid="payer-member"
-            class="tap-target min-w-0 flex-1 rounded-lg border bg-[var(--surface-raised)] px-2 text-sm"
-            style="border-color: var(--border)"
-          >
-            <option v-for="member in members" :key="member.id" :value="member.id">
-              {{ member.displayName }}
-            </option>
-          </select>
+            class="min-w-0 flex-1"
+            :options="members.map((member) => ({ value: member.id, label: member.displayName }))"
+            :title="t('Who paid')"
+            testid="payer-member"
+          />
           <input
             v-model="payer.amount"
             type="text"
@@ -855,18 +845,14 @@ async function save(): Promise<void> {
       <div v-else class="flex flex-col gap-3" data-testid="move-panel">
         <label class="flex flex-col gap-1">
           <span class="text-xs text-[var(--text-muted)]">{{ t('Which group') }}</span>
-          <select
-            :value="moveTargetId"
-            data-testid="move-target"
-            class="tap-target rounded-lg border bg-[var(--surface)] px-3 text-sm"
-            style="border-color: var(--border)"
-            @change="chooseMoveTarget(($event.target as HTMLSelectElement).value)"
-          >
-            <option value="" disabled>{{ t('Choose a group') }}</option>
-            <option v-for="option in moveTargets" :key="option.id" :value="option.id">
-              {{ option.name }}
-            </option>
-          </select>
+          <SearchSelect
+            :model-value="moveTargetId || null"
+            :options="moveTargets.map((option) => ({ value: option.id, label: option.name }))"
+            :title="t('Which group')"
+            :placeholder="t('Choose a group')"
+            testid="move-target"
+            @update:model-value="chooseMoveTarget($event ?? '')"
+          />
         </label>
         <div v-if="unmatchedMembers.length > 0" class="flex flex-col gap-2">
           <p class="text-xs text-[var(--text-muted)]">{{ t('These people are not in {group}. Say who they are there.', { group: moveTarget?.name ?? '' }) }}
@@ -878,18 +864,15 @@ async function save(): Promise<void> {
             data-testid="move-mapping"
           >
             <span class="min-w-0 flex-1 truncate text-sm">{{ person.name }}</span>
-            <select
-              v-model="moveMapping[person.id]"
-              :data-testid="`move-mapping-${person.id}`"
-              class="tap-target min-w-0 flex-1 rounded-lg border bg-[var(--surface)] px-2 text-sm"
-              style="border-color: var(--border)"
-              :aria-label="`Who ${person.name} is in ${moveTarget?.name ?? 'the other group'}`"
-            >
-              <option value="">{{ t('Choose someone') }}</option>
-              <option v-for="member in targetMembers" :key="member.id" :value="member.id">
-                {{ member.displayName }}
-              </option>
-            </select>
+            <SearchSelect
+              :model-value="moveMapping[person.id] || null"
+              class="min-w-0 flex-1"
+              :options="targetMembers.map((member) => ({ value: member.id, label: member.displayName }))"
+              :title="`Who ${person.name} is in ${moveTarget?.name ?? 'the other group'}`"
+              :placeholder="t('Choose someone')"
+              :testid="`move-mapping-${person.id}`"
+              @update:model-value="moveMapping[person.id] = $event ?? ''"
+            />
           </label>
         </div>
         <div class="flex gap-2">

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearToasts, toasts } from '@/ui/toasts'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount, flushPromises } from '@vue/test-utils'
+import { chooseOption, listOptions } from '../support/viewHarness'
 import SettleUpWizard from '@/components/import/SettleUpWizard.vue'
 import { setApiClient } from '@/api/provider'
 import type { ApiClient } from '@/api/client'
@@ -218,9 +219,8 @@ describe('SettleUpWizard', () => {
     await wrapper.find('input[value="existing"]').setValue()
     await flushPromises()
 
-    const select = wrapper.find('[data-testid="existing-group"]')
-    expect(select.exists()).toBe(true)
-    expect(select.text()).toContain('Ski trip')
+    expect(wrapper.find('[data-testid="existing-group"]').exists()).toBe(true)
+    expect((await listOptions(wrapper, 'existing-group')).map((option) => option.text)).toContain('Ski trip')
   })
 
   it('lists the people in the export so they can be mapped', async () => {
@@ -437,9 +437,9 @@ describe('SettleUpWizard', () => {
     await wrapper.find('input[value="existing"]').setValue()
     await flushPromises()
 
-    const select = wrapper.findAll('[data-testid="name-map"]')[0].find('select')
-    expect(select.text()).toContain('Nicolas')
-    expect(select.text()).toContain('Add as a new person')
+    const options = (await listOptions(wrapper, 'name-mapping-Emma')).map((option) => option.text).join(' ')
+    expect(options).toContain('Nicolas')
+    expect(options).toContain('Add as a new person')
   })
 
   it('sends a name mapped onto an existing member', async () => {
@@ -448,7 +448,7 @@ describe('SettleUpWizard', () => {
 
     await wrapper.find('input[value="existing"]').setValue()
     await flushPromises()
-    await wrapper.findAll('[data-testid="name-map"]')[0].find('select').setValue('member:m1')
+    await chooseOption(wrapper, 'name-mapping-Emma', 'member:m1')
     await wrapper.find('[data-testid="to-preview"]').trigger('click')
     await flushPromises()
 
@@ -463,7 +463,7 @@ describe('SettleUpWizard', () => {
     const wrapper = mountWizard()
     await choose(wrapper)
 
-    await wrapper.findAll('[data-testid="name-map"]')[0].find('select').setValue('user:user-7')
+    await chooseOption(wrapper, 'name-mapping-Emma', 'user:user-7')
     await wrapper.find('[data-testid="to-preview"]').trigger('click')
     await flushPromises()
 
@@ -490,10 +490,7 @@ describe('SettleUpWizard', () => {
     const wrapper = mountWizard()
     await choose(wrapper)
 
-    const options = wrapper
-      .findAll('[data-testid="name-map"]')[0]
-      .findAll('option')
-      .map((option) => option.text())
+    const options = (await listOptions(wrapper, 'name-mapping-Emma')).map((option) => option.text)
 
     expect(options).toContain('Nicolas (me@example.com) - you')
   })
@@ -520,10 +517,7 @@ describe('SettleUpWizard', () => {
     const wrapper = mountWizard()
     await choose(wrapper)
 
-    const options = wrapper
-      .findAll('[data-testid="name-map"]')[0]
-      .findAll('option')
-      .map((option) => option.text())
+    const options = (await listOptions(wrapper, 'name-mapping-Emma')).map((option) => option.text)
 
     expect(options[1]).toBe('Alice (alice@example.com) - you')
     expect(options[2]).toBe('Emma (emma@example.com)')
@@ -533,10 +527,7 @@ describe('SettleUpWizard', () => {
     const wrapper = mountWizard()
     await choose(wrapper)
 
-    const options = wrapper
-      .findAll('[data-testid="name-map"]')[0]
-      .findAll('option')
-      .map((option) => option.text())
+    const options = (await listOptions(wrapper, 'name-mapping-Emma')).map((option) => option.text)
 
     expect(options[0]).toBe('Add as a new person')
     expect(options.some((text) => text.includes('accounts@example.com'))).toBe(true)
@@ -634,9 +625,7 @@ describe('SettleUpWizard', () => {
       existingGroup('Roommates')
       const wrapper = await previewed()
 
-      const options = wrapper
-        .findAll('[data-testid="destination"] option')
-        .map((option) => option.text())
+      const options = (await listOptions(wrapper, 'destination')).map((option) => option.text)
 
       expect(options[0]).toContain('A new group')
       expect(options.some((text) => text.includes('Roommates'))).toBe(true)
@@ -645,7 +634,7 @@ describe('SettleUpWizard', () => {
     it('names the new group it would create', async () => {
       const wrapper = await previewed()
 
-      expect(wrapper.find('[data-testid="destination"] option').text())
+      expect(wrapper.find('[data-testid="destination"]').text())
         .toContain('World tour')
     })
 
@@ -653,7 +642,7 @@ describe('SettleUpWizard', () => {
       const group = existingGroup('Roommates')
       const wrapper = await previewed()
 
-      await wrapper.find('[data-testid="destination"]').setValue(group.id)
+      await chooseOption(wrapper, 'destination', group.id)
       await flushPromises()
       await wrapper.find('[data-testid="commit"]').trigger('click')
       await flushPromises()
@@ -665,9 +654,9 @@ describe('SettleUpWizard', () => {
       const group = existingGroup('Roommates')
       const wrapper = await previewed()
 
-      await wrapper.find('[data-testid="destination"]').setValue(group.id)
+      await chooseOption(wrapper, 'destination', group.id)
       await flushPromises()
-      await wrapper.find('[data-testid="destination"]').setValue('new')
+      await chooseOption(wrapper, 'destination', 'new')
       await flushPromises()
       await wrapper.find('[data-testid="commit"]').trigger('click')
       await flushPromises()
